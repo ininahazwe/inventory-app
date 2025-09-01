@@ -1,0 +1,240 @@
+:root{
+    --bg: #F7F3EE;
+    --card: #FFFFFF;
+    --ink: #3A1F1A;         /* texte principal */
+    --muted: #6c5f5a;       /* texte secondaire */
+    --line: #E8E0DB;        /* séparateurs */
+    --brand: #7B3F3F;       /* bordeaux */
+    --brand-2: #5f2f2f;
+    --radius-xl: 28px;      /* gros arrondis */
+}
+
+*{ box-sizing: border-box }
+html,body,#root{ height:100% }
+body{
+    margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    color:var(--ink); background:var(--bg);
+}
+
+/* Header */
+.app-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 16px 28px; border-bottom:1px solid var(--line); background:var(--bg);
+}
+.brand{
+    display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.3px;
+}
+.brand-dot{ width:26px; height:26px; border-radius:50%; background:var(--brand); }
+.app-nav{ display:flex; gap:20px; font-size:14px }
+.app-nav a{ text-decoration:none; color:var(--muted) }
+.app-nav a:hover{ color:var(--brand) }
+
+.pill{
+    border:0; cursor:pointer;
+    background:var(--brand); color:#fff;
+    padding:10px 16px; border-radius:999px;
+    transition: background .2s ease, transform .08s ease;
+}
+.pill:hover{ background:var(--brand-2) }
+.pill:active{ transform: translateY(1px) }
+
+/* Conteneur carte */
+.main-card{
+    max-width: 1200px; margin: 28px auto; padding: 22px;
+    background:var(--card); border-radius: var(--radius-xl);
+}
+
+/* Filtres */
+.filters{ display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin: 12px 0 18px }
+.input, .select, .autocomplete input{
+    width:100%; padding:10px 12px; border-radius: 14px;
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    outline:none;
+}
+.input:focus, .select:focus, .autocomplete input:focus{ border-color: var(--brand) }
+
+/* Table épurée */
+.table{ width:100%; border-collapse: collapse; font-size:14px }
+.table th{
+    text-align:left; font-size:12px; text-transform: uppercase; letter-spacing:.08em;
+    color:var(--brand); padding:8px 8px 10px; border-bottom:1px solid var(--line);
+}
+.table td{ padding:12px 8px; border-bottom:1px solid var(--line) }
+.table tr:hover{ background:#fbf8f6 }
+
+/* Lien “nom” */
+.asset-link{ color:var(--brand); text-decoration:none; font-weight:600 }
+.asset-link:hover{ text-decoration: underline }
+
+/* Cellule actions */
+.actions{ display:flex; gap:8px; justify-content:flex-end }
+
+/* Modal générique */
+.modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.35);
+    display:grid; place-items:center; z-index:1000;
+}
+.modal{
+    width:560px; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
+    padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+}
+.modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
+.modal-close{ background:transparent; border:0; font-size:22px; line-height:1; cursor:pointer; color:var(--muted) }
+
+/* ===== Cartouche principal (container) ===== */
+
+.shell{
+    max-width:1400px;
+    margin:28px auto;
+    padding:14px;
+}
+.shell-inner{
+    position:relative;
+    background:#fff;
+    border-radius:28px;
+    padding:22px;
+    overflow:hidden;
+    z-index:0; /* nouveau */
+}
+.shell-body{               /* nouveau */
+    position:relative;
+    z-index:2;               /* le contenu passe au-dessus des découpes */
+}
+
+.site-shell{
+    /*max-width:1200px;*/
+    /*margin:18px auto 0;*/
+    /*padding:0 14px;*/
+    /*background:var(--bg);*/
+    border-radius:28px;
+}
+.site-band{
+    position:relative;
+    height:78px; /* +2px */
+    background:#fff;
+    border-radius: 0 0 40px 40px;
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    align-items:center;
+    gap:16px;
+    padding:0 18px;
+    overflow:hidden;
+}
+
+/* colonnes */
+.site-left{ display:flex; align-items:center; gap:10px; }
+.site-center{ display:flex; justify-content:center; }
+.site-right{ display:flex; justify-content:flex-end; }
+
+/* logo pastille */
+.brand-dot{
+    width:60px; height:60px; border-radius:50%; background:var(--brand); display: flex; justify-content: center; align-items: center;
+    span{
+        font-weight: bold;
+        color:#FFFFFF;
+
+        img{
+            width: 60px;
+            filter: brightness(0) invert(1);
+        }
+    }
+}
+
+/* titre central */
+.site-title{
+    font-weight: 700;
+    letter-spacing: .18em;
+    color: var(--brand);
+}
+
+/* navigation pill (déjà dans ton thème) */
+.pill{
+    border:0; cursor:pointer;
+    background:var(--brand); color:#fff;
+    padding:10px 18px; border-radius: 999px;
+    transition: background .2s ease, transform .08s ease;
+    font-size: 0.8em;
+
+    &.red{
+        background: #3A1F1A;
+    }
+    &.green{
+        background: #213547;
+    }
+    &.green-light{
+        background: darkolivegreen;
+    }
+}
+.pill:hover{ background: var(--brand-2); }
+
+
+/* ===== Form inside modal ===== */
+.form-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 16px;
+}
+.form-grid .span-2{ grid-column: 1 / -1; }
+
+.label{ font-weight:600; margin-bottom:6px; display:block }
+.field,
+.autocomplete input{
+    width:100%; padding:10px 12px;
+    border:1px solid var(--line); border-radius:12px;
+    background:#fff; color:var(--ink); outline:none;
+}
+.field:focus, .autocomplete input:focus{ border-color: var(--brand) }
+
+/* actions modal */
+.modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
+.pill--muted{ background:#bbb; color:#fff }
+
+/* ===== Autocomplete ===== */
+.autocomplete .auto-list{
+    position:absolute; left:0; right:0; top: calc(100% + 6px);
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    max-height: 220px; overflow:auto; z-index: 30;
+}
+.autocomplete .auto-item{
+    padding:10px 12px; cursor:pointer;
+}
+.autocomplete .auto-item:hover{
+    background:#fbf8f6;
+}
+
+/* ===== Fiche matériel ===== */
+.close-x{
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 36px; height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--brand);
+    font-size: 24px; line-height: 1;
+    display: grid; place-items: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,.06);
+    transition: transform .08s ease, background .2s ease, color .2s ease;
+    z-index: 3;
+}
+.close-x:hover{ background: var(--brand); color: #fff; }
+.close-x:active{ transform: translateY(1px); }
+
+.asset-body{ display: grid; gap: 14px; }
+.asset-header{
+    display: flex; align-items: center; justify-content: space-between;
+    padding-right: 48px; /* pour ne pas chevaucher le X */
+}
+.asset-title{ margin: 0; letter-spacing: .2px; }
+
+/* (optionnel) petits chips de statut */
+.chip{
+    padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--line); color: var(--ink); background: #fff;
+}
+.chip--assigned{ color:#fff; background: var(--brand); border-color: var(--brand); }
+.chip--repair{ color:#fff; background:#b98b46; border-color:#b98b46; }
+.chip--in_stock{ background:#f4f1ee; }
+.chip--retired{ background:#eee; color:#888; }
