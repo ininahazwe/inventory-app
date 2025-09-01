@@ -45,7 +45,8 @@ body{
 }
 
 /* Filtres */
-.filters{ display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin: 12px 0 18px }
+.filters{ display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin: 12px 0 18px; background: #FFFFFF; padding: 10px 20px }
+
 .input, .select, .autocomplete input{
     width:100%; padding:10px 12px; border-radius: 14px;
     border:1px solid var(--line); background:#fff; color:var(--ink);
@@ -90,9 +91,9 @@ body{
 }
 .shell-inner{
     position:relative;
-    background:#fff;
+    //background:#fff;
+    padding: 22px;
     border-radius:28px;
-    padding:22px;
     overflow:hidden;
     z-index:0; /* nouveau */
 }

@@ -6,7 +6,7 @@ import AssignAsset from "./AssignAsset";
 import Modal from "../components/Modal";
 
 type Row = {
-    id: number; label: string; status: "En stock"|"assigned"|"repair"|"retired";
+    id: number; label: string; status: "in_stock"|"assigned"|"repair"|"retired";
     serial_no: string | null; category_name: string | null;
     assignee_name: string | null; assignee_email: string | null;
 };

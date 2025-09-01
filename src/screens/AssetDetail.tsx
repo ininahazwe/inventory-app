@@ -354,7 +354,6 @@ export default function AssetDetail() {
                                 {asset.status !== "assigned" ? (
                                     <>
                                         <button className="pill" onClick={openAssign}>Attribuer</button>
-                                        <a className="pill" href="/" style={{ textDecoration:"none" }}>Attribuer depuis la liste</a>
                                     </>
                                 ) : (
                                     <button className="pill" onClick={openReturn}>Marquer comme retourné</button>

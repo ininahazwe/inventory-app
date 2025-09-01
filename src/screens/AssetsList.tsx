@@ -8,7 +8,7 @@ type Asset = {
     label: string;
     category: string | null;
     serial_no: string | null;
-    status: "En stock" | "assigned" | "repair" | "retired";
+    status: "in_stock" | "assigned" | "repair" | "retired";
     purchased_at: string | null;
 };
 

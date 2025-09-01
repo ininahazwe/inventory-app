@@ -8,7 +8,7 @@ export function LifecycleActions({
                                      busy,
                                  }: {
     isAdmin: boolean;
-    status: "En stock" | "assigned" | "repair" | "retired";
+    status: "in_stock" | "assigned" | "repair" | "retired";
     sendToRepair: () => void | Promise<void>;
     exitRepair: () => void | Promise<void>;
     retireAsset: () => void | Promise<void>;
