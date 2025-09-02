@@ -5,6 +5,7 @@ import AuthGate from "./AuthGate";
 import "./styles/theme.css";
 import HomePage from "./pages/HomePage";
 import AssetDetailPage from "./pages/AssetDetailPage";
+import { ConfirmProvider } from "./components/ConfirmProvider"; 
 
 const router = createBrowserRouter([
     { path: "/", element: <HomePage /> },
@@ -12,9 +13,11 @@ const router = createBrowserRouter([
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-        <AuthGate>
-            <RouterProvider router={router} />
-        </AuthGate>
-    </React.StrictMode>
+  <React.StrictMode>
+    <AuthGate>
+      <ConfirmProvider>
+        <RouterProvider router={router} />
+      </ConfirmProvider>
+    </AuthGate>
+  </React.StrictMode>
 );

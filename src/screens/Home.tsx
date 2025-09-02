@@ -137,7 +137,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
     return (
         <div>
             {/* top row: titre + bouton nouveau */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, background: "white", padding: "12px" }}>
                 <h2 style={{ margin:0, letterSpacing:.2 }}>Inventaire</h2>
                 <button className="pill" onClick={onNew}>+ Nouveau matériel</button>
             </div>
@@ -157,7 +157,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             {/* tableau */}
             <table className="table">
                 <thead>
-                <tr>
+                <tr style={{ background:"#8D86C9" }}>
                     <th>Nom</th><th>Catégorie</th><th>Statut</th><th>Attribué à</th><th></th>
                 </tr>
                 </thead>

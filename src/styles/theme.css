@@ -1,11 +1,11 @@
 :root{
     --bg: #F7F3EE;
     --card: #FFFFFF;
-    --ink: #3A1F1A;         /* texte principal */
+    --ink: #242038;         /* texte principal */
     --muted: #6c5f5a;       /* texte secondaire */
-    --line: #E8E0DB;        /* séparateurs */
-    --brand: #7B3F3F;       /* bordeaux */
-    --brand-2: #5f2f2f;
+    --line: #9067C6;        /* séparateurs */
+    --brand: #242038;       /* bordeaux */
+    --brand-2: #242038;
     --radius-xl: 28px;      /* gros arrondis */
 }
 
@@ -13,8 +13,9 @@
 html,body,#root{ height:100% }
 body{
     margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-    color:var(--ink); background:var(--bg);
+    color:var(--ink); background:var(--card);
 }
+
 
 /* Header */
 .app-header{
@@ -45,7 +46,7 @@ body{
 }
 
 /* Filtres */
-.filters{ display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin: 12px 0 18px; background: #FFFFFF; padding: 10px 20px }
+.filters{ display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin: 12px 0 18px; background: none }
 
 .input, .select, .autocomplete input{
     width:100%; padding:10px 12px; border-radius: 14px;
@@ -58,7 +59,7 @@ body{
 .table{ width:100%; border-collapse: collapse; font-size:14px }
 .table th{
     text-align:left; font-size:12px; text-transform: uppercase; letter-spacing:.08em;
-    color:var(--brand); padding:8px 8px 10px; border-bottom:1px solid var(--line);
+    color:var(--card); padding:8px 8px 10px; border-bottom:1px solid var(--line);
 }
 .table td{ padding:12px 8px; border-bottom:1px solid var(--line) }
 .table tr:hover{ background:#fbf8f6 }
@@ -91,7 +92,7 @@ body{
 }
 .shell-inner{
     position:relative;
-    //background:#fff;
+
     padding: 22px;
     border-radius:28px;
     overflow:hidden;
@@ -100,6 +101,7 @@ body{
 .shell-body{               /* nouveau */
     position:relative;
     z-index:2;               /* le contenu passe au-dessus des découpes */
+    background: #f7f7f7;
 }
 
 .site-shell{
@@ -112,7 +114,7 @@ body{
 .site-band{
     position:relative;
     height:78px; /* +2px */
-    background:#fff;
+    background:#242038;
     border-radius: 0 0 40px 40px;
     display:grid;
     grid-template-columns:1fr auto 1fr;
@@ -157,13 +159,13 @@ body{
     font-size: 0.8em;
 
     &.red{
-        background: #3A1F1A;
+        background: #8D86C9;
     }
     &.green{
         background: #213547;
     }
     &.green-light{
-        background: darkolivegreen;
+        background: #9067C6;
     }
 }
 .pill:hover{ background: var(--brand-2); }
