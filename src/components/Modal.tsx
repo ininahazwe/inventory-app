@@ -23,7 +23,7 @@ export default function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Focus automatique quand le modal s’ouvre
+  // Focus automatique quand le modal s'ouvre
   useEffect(() => {
     if (open) {
       setTimeout(() => dialogRef.current?.focus(), 0);

@@ -6,7 +6,8 @@ import { supabase } from "../lib/supabaseClient";
 import Modal from "../components/Modal";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
-import { useConfirm } from "../components/ConfirmProvider"; // ⬅️ ajout
+import LifecycleModal from "../components/LifecycleModal";
+import { useConfirm } from "../components/ConfirmProvider";
 
 type Asset = {
   id: number;
@@ -42,6 +43,8 @@ type LifeEvent = {
   repair_cost?: number | null;
 };
 
+type LifecycleAction = "repair" | "exit_repair" | "retire";
+
 export default function AssetDetail() {
   const { id } = useParams();
   const assetId = Number(id);
@@ -53,11 +56,16 @@ export default function AssetDetail() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Hook de confirmation (modal thémé)
-  const confirm = useConfirm(); // ✅
+  // États pour les modals
+  const [lifecycleModalOpen, setLifecycleModalOpen] = useState(false);
+  const [currentLifecycleAction, setCurrentLifecycleAction] = useState<LifecycleAction | null>(null);
 
-  // ===== Animation fiche (balayage bas -> haut) =====
+  // Hook de confirmation
+  const confirm = useConfirm();
+
+  // Animation fiche (balayage bas -> haut)
   const sweep: Variants = {
     initial: { y: 40, opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
@@ -95,120 +103,127 @@ export default function AssetDetail() {
 
   const load = async () => {
     setErr(null);
-    // asset
-    const { data: a, error: ea } = await supabase.from("assets").select("*").eq("id", assetId).single();
-    if (ea) {
-      setErr(ea.message);
-      return;
+    try {
+      // asset
+      const { data: a, error: ea } = await supabase.from("assets").select("*").eq("id", assetId).single();
+      if (ea) {
+        setErr(ea.message);
+        return;
+      }
+      setAsset(a as Asset);
+
+      // last assignment
+      const { data: la } = await supabase
+        .from("v_asset_last_assignment")
+        .select("*")
+        .eq("asset_id", assetId)
+        .maybeSingle();
+      setLast((la ?? null) as any);
+
+      // timeline
+      const { data: tl } = await supabase
+        .from("v_asset_timeline")
+        .select("*")
+        .eq("asset_id", assetId)
+        .order("event_at", { ascending: false });
+      setTimeline((tl as LifeEvent[]) ?? []);
+    } catch (error: any) {
+      setErr(error.message || "Erreur lors du chargement");
     }
-    setAsset(a as Asset);
-
-    // last assignment
-    const { data: la } = await supabase
-      .from("v_asset_last_assignment")
-      .select("*")
-      .eq("asset_id", assetId)
-      .maybeSingle();
-    setLast((la ?? null) as any);
-
-    // timeline
-    const { data: tl } = await supabase
-      .from("v_asset_timeline")
-      .select("*")
-      .eq("asset_id", assetId)
-      .order("event_at", { ascending: false });
-    setTimeline((tl as LifeEvent[]) ?? []);
   };
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data: adminData } = await supabase.rpc("is_current_admin");
-      setIsAdmin(!!adminData);
-      await load();
-      setLoading(false);
+      try {
+        const { data: adminData } = await supabase.rpc("is_current_admin");
+        setIsAdmin(!!adminData);
+        await load();
+      } catch (error: any) {
+        setErr(error.message || "Erreur lors de l'initialisation");
+      } finally {
+        setLoading(false);
+      }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId]);
 
-  // ===== Actions admin (confirmées) =====
-  const sendToRepair = async () => {
-    const ok = await confirm({
-      title: "Mettre en réparation",
-      message: "Confirmer l’envoi de ce matériel en réparation ?",
-      confirmText: "Oui, envoyer",
-      cancelText: "Annuler",
-      tone: "warning",
-    });
-    if (!ok) return;
-
-    const notes = prompt("Notes (optionnel) :", "") || null;
-    const { error } = await supabase.rpc("send_to_repair", { p_asset_id: assetId, p_notes: notes });
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    await load();
+  // Ouverture des modals de cycle de vie
+  const openLifecycleModal = (action: LifecycleAction) => {
+    setCurrentLifecycleAction(action);
+    setLifecycleModalOpen(true);
   };
 
-  const exitRepair = async () => {
-    const ok = await confirm({
-      title: "Sortie de réparation",
-      message: "Confirmer la sortie de réparation ?",
-      confirmText: "Oui, terminer",
-      cancelText: "Annuler",
-      tone: "success",
-    });
-    if (!ok) return;
+  const closeLifecycleModal = () => {
+    setLifecycleModalOpen(false);
+    setCurrentLifecycleAction(null);
+  };
 
-    const raw = prompt("Coût de la réparation (optionnel)", "");
-    let cost: number | null = null;
-    if (raw && raw.trim() !== "") {
-      const parsed = Number(raw.replace(",", "."));
-      if (Number.isNaN(parsed) || parsed < 0) {
-        alert("Montant invalide.");
-        return;
+  // Gestionnaire pour les actions de cycle de vie
+  const handleLifecycleAction = async (data: { notes?: string; cost?: number }) => {
+    if (!currentLifecycleAction) return;
+
+    setBusy(true);
+    try {
+      let error;
+
+      switch (currentLifecycleAction) {
+        case "repair":
+          ({ error } = await supabase.rpc("send_to_repair", {
+            p_asset_id: assetId,
+            p_notes: data.notes || null,
+          }));
+          break;
+
+        case "exit_repair":
+          ({ error } = await supabase.rpc("exit_repair", {
+            p_asset_id: assetId,
+            p_notes: data.notes || null,
+            p_cost: data.cost || null,
+          }));
+          break;
+
+        case "retire":
+          ({ error } = await supabase.rpc("retire_asset", {
+            p_asset_id: assetId,
+            p_notes: data.notes || null,
+          }));
+          break;
       }
-      cost = Math.round(parsed * 100) / 100;
-    }
-    const notes = prompt("Notes (optionnel) :", "Repair completed") || null;
-    const { error } = await supabase.rpc("exit_repair", { p_asset_id: assetId, p_notes: notes, p_cost: cost });
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    await load();
-  };
 
-  const retireAsset = async () => {
-    const ok = await confirm({
-      title: "Retrait définitif",
-      message: "Confirmer le retrait définitif de ce matériel ? Cette action est irréversible.",
-      confirmText: "Retirer",
-      cancelText: "Annuler",
-      tone: "warning",
-    });
-    if (!ok) return;
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    const notes = prompt("Raison/notes (optionnel) :", "Retired from service") || null;
-    const { error } = await supabase.rpc("retire_asset", { p_asset_id: assetId, p_notes: notes });
-    if (error) {
-      alert(error.message);
-      return;
+      closeLifecycleModal();
+      await load();
+    } catch (error: any) {
+      console.error(`Erreur ${currentLifecycleAction}:`, error);
+      throw error; // Re-throw pour que le modal gère l'affichage de l'erreur
+    } finally {
+      setBusy(false);
     }
-    await load();
   };
 
   const returnAsset = async () => {
-    const { error } = await supabase.rpc("return_asset", { p_asset_id: assetId });
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      setBusy(true);
+      const { error } = await supabase.rpc("return_asset", { p_asset_id: assetId });
+
+      if (error) {
+        alert(`Erreur: ${error.message}`);
+        return;
+      }
+
+      await load();
+    } catch (error: any) {
+      console.error("Erreur returnAsset:", error);
+      alert(`Erreur: ${error.message || "Une erreur est survenue"}`);
+    } finally {
+      setBusy(false);
     }
-    await load();
   };
 
-  // ===== Modals =====
+  // Modals existants
   const [assignOpen, setAssignOpen] = useState(false);
   const openAssign = () => setAssignOpen(true);
   const closeAssign = () => setAssignOpen(false);
@@ -256,6 +271,7 @@ export default function AssetDetail() {
     if (error) return [];
     return (data ?? []).map((d: any) => d.name as string);
   }
+
   async function getOrCreateCategoryId(name: string): Promise<number | null> {
     const trimmed = name.trim();
     if (!trimmed) return null;
@@ -270,6 +286,7 @@ export default function AssetDetail() {
     }
     return created?.id ?? null;
   }
+
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!asset) return;
@@ -303,7 +320,7 @@ export default function AssetDetail() {
       setEditOpen(false);
       await load();
     } catch (e: any) {
-      setErrEdit(e.message || "Erreur lors de l’enregistrement.");
+      setErrEdit(e.message || "Erreur lors de l'enregistrement.");
     } finally {
       setSavingEdit(false);
     }
@@ -318,11 +335,13 @@ export default function AssetDetail() {
       </main>
     );
   }
+
   if (!asset) {
     return (
       <main className="shell">
         <div className="shell-inner">
           <p style={{ padding: 24 }}>Matériel introuvable</p>
+          {err && <p style={{ padding: 24, color: "crimson" }}>{err}</p>}
         </div>
       </main>
     );
@@ -334,6 +353,7 @@ export default function AssetDetail() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
+      style={{border: "1px solid #8D86C9"}}
     >
       <div className="shell-inner">
         {/* X retour */}
@@ -391,59 +411,94 @@ export default function AssetDetail() {
             </span>
           </div>
 
+  
           {/* Infos principales */}
-          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, margin: "20px 6px" }}>
-            <div>
+          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, margin: "20px 6px" }}>
+            <div className="presentation">
                 <Info label="Numéro de série" value={asset.serial_no || "—"} />
                 <Info label="Catégorie" value={asset.category_id ? String(asset.category_id) : "—"} />
-                <Info label="Date d’achat" value={asset.purchased_at || "—"} />
+                <Info label="Date d'achat" value={asset.purchased_at || "—"} />
                 <Info
-                label="Prix d’achat"
-                value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : "—"}
+                    label="Prix d'achat"
+                    value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : "—"}
                 />
                 <Info label="Fournisseur" value={asset.supplier || "—"} />
                 <Info
-                label="Fin de garantie"
-                value={
-                    asset.warranty_end
-                    ? `${asset.warranty_end}${
-                        typeof warrantyDaysLeft === "number"
-                            ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} j restants` : `${Math.abs(warrantyDaysLeft)} j dépassés`}`
-                            : ""
-                        }`
-                    : "—"
+                    label="Fin de garantie"
+                    value={
+                        asset.warranty_end
+                        ? `${asset.warranty_end}${
+                            typeof warrantyDaysLeft === "number"
+                                ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} j restants` : `${Math.abs(warrantyDaysLeft)} j dépassés`}`
+                                : ""
+                            }`
+                        : "—"
                 }
                 />
                 {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
             <div>
-                {/* QR code */}
-                <h3 style={{ margin: "8px 0" }}>QR Code</h3>
-                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                <img src={qrImg} alt="QR" width={180} height={180} />
-                <div>
-                    <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
-                    {/* Lien encodé : <code>{qrDataUrl}</code> */}
+                {/* QR code
+                <h3 style={{ margin: "8px 0" }}>QR Code</h3>*/}
+                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", flexDirection: "column" }}>
+                    <img src={qrImg} alt="QR" width={180} height={180} />
+                    <div>
+                        <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
+                        {/* Lien encodé : <code>{qrDataUrl}</code> */}
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                        <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
+                            Télécharger le QR
+                        </a>
+                        </div>
                     </div>
-                    <div style={{ marginTop: 8 }}>
-                    <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
-                        Télécharger le QR
-                    </a>
-                    </div>
-                </div>
                 </div>
             </div>
-            
+            <div>
+                {/* Attribution */}
+                {last?.assignment_id ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                <div>
+                  {last.status === "active" ? "Attribué à " : "Dernier attributaire"} : <strong>{last.assignee_name ?? "—"}</strong>
+                  {last.assignee_email ? ` (${last.assignee_email})` : ""}
+                </div>
+                <small style={{ color: "var(--muted)" }}>
+                  {last.assigned_at ? `depuis ${last.assigned_at}` : ""}
+                  {last.returned_at ? ` — retourné le ${last.returned_at}` : ""}
+                </small>
+              </div>
+            ) : (
+              <div>Aucune attribution</div>
+            )}
+
+
+            {isAdmin && (
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                {asset.status !== "assigned" ? (
+                  <>
+                    <button className="pill" onClick={openAssign} disabled={busy}>
+                      {busy ? "…" : "Attribuer"}
+                    </button>
+                  </>
+                ) : (
+                  <button className="pill" onClick={openReturn} disabled={busy}>
+                    {busy ? "…" : "Marquer comme retourné"}
+                  </button>
+                )}
+              </div>
+            )}
+            </div>
           </section>
 
 
           {/* Attribution */}
-          <section style={{ borderTop: "1px solid var(--line)",margin: "20px 6px" }}>
+          <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
             <h3 style={{ margin: "8px 0" }}>Attribution</h3>
             {last?.assignment_id ? (
               <div style={{ display: "grid", gap: 4 }}>
                 <div>
-                  {last.status === "active" ? "Attribué à" : "Dernier attributaire"} : <strong>{last.assignee_name ?? "—"}</strong>
+                  {last.status === "active" ? "Attribué à " : "Dernier attributaire"} :{" "}
+                  <strong>{last.assignee_name ?? "—"}</strong>
                   {last.assignee_email ? ` (${last.assignee_email})` : ""}
                 </div>
                 <small style={{ color: "var(--muted)" }}>
@@ -459,28 +514,50 @@ export default function AssetDetail() {
               <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                 {asset.status !== "assigned" ? (
                   <>
-                    <button className="pill" onClick={openAssign}>Attribuer</button>
+                    <button className="pill" onClick={openAssign} disabled={busy}>
+                      {busy ? "…" : "Attribuer"}
+                    </button>
                   </>
                 ) : (
-                  <button className="pill" onClick={openReturn}>Marquer comme retourné</button>
+                  <button className="pill" onClick={openReturn} disabled={busy}>
+                    {busy ? "…" : "Marquer comme retourné"}
+                  </button>
                 )}
               </div>
             )}
           </section>
 
-          {/* Cycle de vie */}
+          {/* Cycle de vie avec nouveaux modals */}
           {isAdmin && (
             <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
               <h3 style={{ margin: "8px 0" }}>Cycle de vie</h3>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {asset.status !== "repair" && (
-                  <button className="pill" onClick={sendToRepair}>Mettre en réparation</button>
+                  <button 
+                    className="pill" 
+                    onClick={() => openLifecycleModal("repair")} 
+                    disabled={busy}
+                  >
+                    {busy ? "…" : "Mettre en réparation"}
+                  </button>
                 )}
                 {asset.status === "repair" && (
-                  <button className="pill" onClick={exitRepair}>Sortie de réparation</button>
+                  <button 
+                    className="pill" 
+                    onClick={() => openLifecycleModal("exit_repair")} 
+                    disabled={busy}
+                  >
+                    {busy ? "…" : "Sortie de réparation"}
+                  </button>
                 )}
                 {asset.status !== "retired" && (
-                  <button className="pill" onClick={retireAsset}>Retirer définitivement</button>
+                  <button 
+                    className="pill" 
+                    onClick={() => openLifecycleModal("retire")} 
+                    disabled={busy}
+                  >
+                    {busy ? "…" : "Retirer définitivement"}
+                  </button>
                 )}
               </div>
             </section>
@@ -490,9 +567,9 @@ export default function AssetDetail() {
           <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
             <h3 style={{ margin: "8px 0" }}>Journal</h3>
             {timeline.length === 0 ? (
-              <p style={{ color: "var(--muted)" }}>Aucun évènement</p>
+              <p style={{ color: "var(--muted)" }}>Aucun événement</p>
             ) : (
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
+              <ul style={{ margin: 0, paddingLeft: 16 }} className="journal">
                 {timeline.map((ev) => (
                   <li key={ev.event_id}>
                     <code>{new Date(ev.event_at).toLocaleString()}</code> — <strong>{ev.event_type}</strong>
@@ -504,13 +581,28 @@ export default function AssetDetail() {
             )}
           </section>
 
+
           {/* Bouton Modifier */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            {isAdmin && <button className="pill" onClick={openEdit}>Modifier</button>}
+            {isAdmin && (
+              <button className="pill" onClick={openEdit} disabled={busy}>
+                {busy ? "…" : "Modifier"}
+              </button>
+            )}
           </div>
 
           {err && <p style={{ color: "crimson" }}>{err}</p>}
         </motion.div>
+
+        {/* === Modal Cycle de vie === */}
+        <LifecycleModal
+          open={lifecycleModalOpen}
+          onClose={closeLifecycleModal}
+          action={currentLifecycleAction}
+          assetLabel={asset.label}
+          onConfirm={handleLifecycleAction}
+          busy={busy}
+        />
 
         {/* === Modal Attribuer === */}
         <Modal open={assignOpen} onClose={closeAssign} title={`Attribuer : ${asset.label}`}>
@@ -527,7 +619,7 @@ export default function AssetDetail() {
         <Modal open={returnOpen} onClose={closeReturn} title={`Retourner : ${asset.label}`}>
           <p>Confirmer le retour de ce matériel au stock ?</p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="pill" style={{ background: "#bbb" }} onClick={closeReturn} type="button">
+            <button className="pill" style={{ background: "#bbb" }} onClick={closeReturn} type="button" disabled={busy}>
               Annuler
             </button>
             <button
@@ -537,8 +629,9 @@ export default function AssetDetail() {
                 closeReturn();
               }}
               type="button"
+              disabled={busy}
             >
-              Confirmer
+              {busy ? "…" : "Confirmer"}
             </button>
           </div>
         </Modal>
@@ -563,7 +656,7 @@ export default function AssetDetail() {
             </div>
 
             <div>
-              <label className="label">Prix d’achat</label>
+              <label className="label">Prix d'achat</label>
               <input
                 className="field"
                 type="text"
@@ -575,7 +668,7 @@ export default function AssetDetail() {
             </div>
 
             <div>
-              <label className="label">Date d’achat</label>
+              <label className="label">Date d'achat</label>
               <input className="field" type="date" value={edPurchasedAt} onChange={(e) => setEdPurchasedAt(e.target.value)} />
             </div>
 
@@ -597,7 +690,7 @@ export default function AssetDetail() {
             {errEdit && <p className="span-2" style={{ color: "crimson" }}>{errEdit}</p>}
 
             <div className="span-2 modal-actions">
-              <button type="button" className="pill pill--muted" onClick={() => setEditOpen(false)}>
+              <button type="button" className="pill pill--muted" onClick={() => setEditOpen(false)} disabled={savingEdit}>
                 Annuler
               </button>
               <button className="pill" disabled={savingEdit}>
