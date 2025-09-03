@@ -13,6 +13,7 @@ type Asset = {
   id: number;
   label: string;
   category_id: number | null;
+  category_name: string | null;
   serial_no: string | null;
   status: "in_stock" | "assigned" | "repair" | "retired";
   purchased_at: string | null;
@@ -413,7 +414,7 @@ export default function AssetDetail() {
 
   
           {/* Infos principales */}
-          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, margin: "20px 6px" }}>
+          <section className="infos">
             <div className="presentation">
                 <Info label="Numéro de série" value={asset.serial_no || "—"} />
                 <Info label="Catégorie" value={asset.category_id ? String(asset.category_id) : "—"} />
@@ -440,7 +441,7 @@ export default function AssetDetail() {
             <div>
                 {/* QR code
                 <h3 style={{ margin: "8px 0" }}>QR Code</h3>*/}
-                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", flexDirection: "column" }}>
+                <div className="qr-section">
                     <img src={qrImg} alt="QR" width={180} height={180} />
                     <div>
                         <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
@@ -707,8 +708,8 @@ export default function AssetDetail() {
 function Info({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className={className} style={{ display: "grid", gap: 4 }}>
-      <div style={{ fontWeight: 600 }}>{label}</div>
-      <div style={{ color: "var(--ink)" }}>{value}</div>
+      <span style={{ fontWeight: 600 }}>{label}</span>
+      <span style={{ color: "var(--ink)" }}>{value}</span>
     </div>
   );
 }

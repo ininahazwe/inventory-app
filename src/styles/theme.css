@@ -247,7 +247,12 @@ tbody {background: #f7f7f7}
     scroll-behavior: smooth;
     overflow-y: auto;
 }
-
+.infos{
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin: 20px 6px;
+}
 .presentation{
     display: grid; 
     grid-template-columns: repeat(2, 1fr);
@@ -258,4 +263,24 @@ tbody {background: #f7f7f7}
         background: rgba(202, 196, 206, 0.2);
         padding: 10px;
     }
+}
+
+.qr-section{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+@media only screen and (max-width: 600px) {
+  .presentation {
+     grid-template-columns: 1fr;
+  }
+  .infos{
+    grid-template-columns: 1fr;
+  }
+  .qr-section{
+    display: none;
+  }
 }
