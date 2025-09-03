@@ -132,6 +132,9 @@ tbody {background: #f7f7f7}
 /* logo pastille */
 .brand-dot{
     width:60px; height:60px; border-radius:50%; background:var(--brand); display: flex; justify-content: center; align-items: center;
+    &.auth{
+        background:none;
+    }
     span{
         font-weight: bold;
         color:#FFFFFF;

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./lib/supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
+import logo from "./assets/mfwa-logo.png";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]>(null);
@@ -103,12 +104,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                     style={{
                         background: "rgba(255, 255, 255, 0.95)",
                         backdropFilter: "blur(20px)",
-                        borderRadius: 24,
+                        //borderRadius: 24,
                         padding: "40px",
                         maxWidth: 420,
                         width: "100%",
-                        boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15), 0 8px 25px rgba(0, 0, 0, 0.1)",
-                        border: "1px solid rgba(255, 255, 255, 0.2)"
+                        //boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15), 0 8px 25px rgba(0, 0, 0, 0.1)",
+                        //border: "1px solid rgba(255, 255, 255, 0.2)"
                     }}
                 >
                     {/* En-tête avec logo/titre */}
@@ -135,7 +136,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                 boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)"
                             }}
                         >
-                            📦
+                            <div className="brand-dot auth">
+                                <span>
+                                    <img src={logo} alt="logo"/>
+                                </span>
+                            </div>
                         </motion.div>
                         <h1 style={{
                             margin: 0,
