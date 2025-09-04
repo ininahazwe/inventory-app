@@ -80,6 +80,8 @@ export default function AssigneesManager({ onClose }: { onClose?: () => void }) 
           value={q}
           onChange={(e)=>setQ(e.target.value)}
         />
+        <div style={{ flex:1 }} />
+        <button className="pill" onClick={() => onClose?.()}>Fermer</button>
       </div>
 
       <AssigneesTable

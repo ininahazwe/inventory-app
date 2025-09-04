@@ -64,7 +64,7 @@ export default function AssetDetail() {
   const [currentLifecycleAction, setCurrentLifecycleAction] = useState<LifecycleAction | null>(null);
 
   // Hook de confirmation
-  const confirm = useConfirm();
+  // const confirm = useConfirm();
 
   // Animation fiche (balayage bas -> haut)
   const sweep: Variants = {
@@ -258,11 +258,7 @@ export default function AssetDetail() {
     setEdSerial(asset.serial_no ?? "");
 
     // Nom de catégorie depuis ta vue overview (si dispo)
-    const { data: row } = await supabase
-      .from("v_asset_overview")
-      .select("category_name")
-      .eq("id", assetId)
-      .maybeSingle();
+  
     setEdCategoryName(asset.category_name ?? "");
 
     setEdPurchasedAt(asset.purchased_at ?? "");
