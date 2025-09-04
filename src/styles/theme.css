@@ -286,4 +286,7 @@ tbody {background: #f7f7f7}
   .qr-section{
     display: none;
   }
+  .shell-inner{
+    padding:  0px;
+  }
 }
