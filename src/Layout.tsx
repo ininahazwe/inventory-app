@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import "./styles/theme.css"; // <-- important
+import "./styles/login.css";
 import logo from "./assets/mfwa-logo.png"
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             <motion.main className="shell" /* ... */>
                 <div className="shell-inner">
+                    <div className="grid-bg" aria-hidden />
                     <div className="shell-body">{children}</div> {/* <-- nouveau wrapper */}
                 </div>
             </motion.main>

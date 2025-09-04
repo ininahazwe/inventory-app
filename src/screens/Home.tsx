@@ -36,16 +36,35 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
     const load = useMemo(() => async () => {
         // Construction de la requête avec filtres
-        let q = supabase.from("v_asset_overview").select("*", { count: 'exact' }).order("created_at", { ascending: false });
-        if (qLabel) q = q.ilike("label", `%${qLabel}%`);
+        let q = supabase
+            .from("v_asset_overview")
+            .select("*", { count: 'exact' })
+            .order("created_at", { ascending: false });
+
+        // Filtre catégorie (inchangé)
         if (qCategory) q = q.eq("category_name", qCategory);
 
-        // Ajouter la pagination
+        // Filtre recherche élargi (label, serial_no, assignee_name, assignee_email)
+        if (qLabel && qLabel.trim()) {
+            const esc = qLabel.trim().replace(/%/g, "\\%").replace(/_/g, "\\_");
+            q = q.or(
+                [
+                    `label.ilike.%${esc}%`,
+                    `serial_no.ilike.%${esc}%`,
+                    `assignee_name.ilike.%${esc}%`,
+                    `assignee_email.ilike.%${esc}%`,
+                ].join(",")
+            );
+        }
+
+        // Ajouter la pagination (inchangé)
         q = q.range(startIndex, startIndex + ITEMS_PER_PAGE - 1);
 
         const { data, count, error } = await q;
         if (error) {
             console.error("Erreur lors du chargement:", error);
+            setRows([]);
+            setTotalCount(0);
             return;
         }
 
@@ -109,9 +128,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         const maxVisible = 5;
 
         if (totalPages <= maxVisible) {
-            for (let i = 1; i <= totalPages; i++) {
-                pages.push(i);
-            }
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
         } else {
             const start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
             const end = Math.min(totalPages, start + maxVisible - 1);
@@ -120,31 +137,31 @@ export default function Home({ onNew }: { onNew: () => void }) {
                 pages.push(1);
                 if (start > 2) pages.push('...');
             }
-
-            for (let i = start; i <= end; i++) {
-                pages.push(i);
-            }
-
+            for (let i = start; i <= end; i++) pages.push(i);
             if (end < totalPages) {
                 if (end < totalPages - 1) pages.push('...');
                 pages.push(totalPages);
             }
         }
-
         return pages;
     };
 
     return (
         <div>
             {/* top row: titre + bouton nouveau */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, background: "white", padding: "12px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, padding: "12px" }}>
                 <h2 style={{ margin:0, letterSpacing:.2 }}>Inventaire</h2>
                 <button className="pill" onClick={onNew}>+ Nouveau matériel</button>
             </div>
 
             {/* filtres */}
             <div className="filters">
-                <input className="input" placeholder="Rechercher par nom…" value={qLabel} onChange={e=>setQLabel(e.target.value)} />
+                <input
+                    className="input"
+                    placeholder="Rechercher par libellé, n° série, nom ou email…"
+                    value={qLabel}
+                    onChange={e=>setQLabel(e.target.value)}
+                />
                 <Autocomplete
                     className="input"
                     value={qCategory}
