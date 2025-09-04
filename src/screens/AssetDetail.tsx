@@ -7,7 +7,6 @@ import Modal from "../components/Modal";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
-import { useConfirm } from "../components/ConfirmProvider";
 
 type Asset = {
   id: number;
