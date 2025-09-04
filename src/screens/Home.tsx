@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import Modal from "../components/Modal";
+import AssigneesManager from "../components/assignees/AssigneesManager";
 
 type Row = {
     id: number; label: string; status: "in_stock"|"assigned"|"repair"|"retired";
@@ -20,6 +21,8 @@ export default function Home({ onNew }: { onNew: () => void }) {
     const [qLabel, setQLabel] = useState("");
     const [qCategory, setQCategory] = useState("");
     const [isAdmin, setIsAdmin] = useState(false);
+
+    const [assigneesOpen, setAssigneesOpen] = useState(false);
 
     const [assignOpen, setAssignOpen] = useState(false);
     const [assignAssetId, setAssignAssetId] = useState<number | null>(null);
@@ -150,15 +153,17 @@ export default function Home({ onNew }: { onNew: () => void }) {
         <div>
             {/* top row: titre + bouton nouveau */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, padding: "12px" }}>
-                <h2 style={{ margin:0, letterSpacing:.2 }}>Inventaire</h2>
-                <button className="pill" onClick={onNew}>+ Nouveau matériel</button>
+            <h2 style={{ margin:0, letterSpacing:.2 }}>Inventory</h2>
+                <div style={{ display:"flex", gap:8 }}>
+                    <button className="pill" onClick={() => setAssigneesOpen(true)}>Manage assignees</button>
+                    <button className="pill" onClick={onNew}>+ New asset</button>
+                </div>
             </div>
-
             {/* filtres */}
             <div className="filters">
                 <input
                     className="input"
-                    placeholder="Rechercher par libellé, n° série, nom ou email…"
+                    placeholder="Search by label, serial number, name, or email…"
                     value={qLabel}
                     onChange={e=>setQLabel(e.target.value)}
                 />
@@ -167,7 +172,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
                     value={qCategory}
                     onChange={setQCategory}
                     fetchOptions={fetchCategoryOptions}
-                    placeholder="Catégorie…"
+                    placeholder="Category…"
                 />
             </div>
 
@@ -175,7 +180,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <table className="table">
                 <thead>
                 <tr style={{ background:"#8D86C9" }}>
-                    <th>Nom</th><th>Catégorie</th><th>Statut</th><th>Attribué à</th><th></th>
+                    <th>Name</th><th>Category</th><th>Status</th><th>Assigned to</th><th></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -199,9 +204,9 @@ export default function Home({ onNew }: { onNew: () => void }) {
                             {isAdmin && (
                                 <div className="actions">
                                     {r.status !== "assigned" ? (
-                                        <button className="pill green-light" onClick={() => openAssign(r.id, r.label)}>Attribuer</button>
+                                        <button className="pill green-light" onClick={() => openAssign(r.id, r.label)}>Assign</button>
                                     ) : (
-                                        <button className="pill" onClick={() => openReturn(r.id, r.label)}>Retourner</button>
+                                        <button className="pill" onClick={() => openReturn(r.id, r.label)}>Return</button>
                                     )}
                                 </div>
                             )}
@@ -209,7 +214,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
                     </tr>
                 ))}
                 {rows.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding:16, color:"var(--muted)" }}>Aucun résultat</td></tr>
+                    <tr><td colSpan={5} style={{ padding:16, color:"var(--muted)" }}>No result</td></tr>
                 )}
                 </tbody>
             </table>
@@ -265,7 +270,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
                             cursor: currentPage === totalPages ? "not-allowed" : "pointer"
                         }}
                     >
-                        Suivant →
+                        Next →
                     </button>
                     {/* Info de pagination */}
                     {totalCount > 0 && (
@@ -277,7 +282,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             )}
 
             {/* modal d'attribution */}
-            <Modal open={assignOpen} onClose={closeAssign} title={`Attribuer : ${assignAssetLabel}`}>
+            <Modal open={assignOpen} onClose={closeAssign} title={`Assign : ${assignAssetLabel}`}>
                 {assignAssetId != null && (
                     <AssignAsset assetId={assignAssetId} onDone={async ()=>{ closeAssign(); await load(); }} />
                 )}
@@ -285,11 +290,15 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
             {/* modal de confirmation retour */}
             <Modal open={returnOpen} onClose={closeReturn} title={`Retourner : ${returnAssetLabel}`}>
-                <p>Confirmer le retour de ce matériel au stock ?</p>
+                <p>Confirm return of this asset to stock ?</p>
                 <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-                    <button className="pill" style={{ background:"#bbb" }} onClick={closeReturn} type="button">Annuler</button>
-                    <button className="pill" onClick={confirmReturn} type="button">Confirmer</button>
+                    <button className="pill" style={{ background:"#bbb" }} onClick={closeReturn} type="button">Cancel</button>
+                    <button className="pill" onClick={confirmReturn} type="button">Confirm</button>
                 </div>
+            </Modal>
+
+            <Modal open={assigneesOpen} onClose={() => setAssigneesOpen(false)} title="Manage assignees">
+                <AssigneesManager onClose={() => setAssigneesOpen(false)} />
             </Modal>
         </div>
     );

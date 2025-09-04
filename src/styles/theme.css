@@ -79,7 +79,7 @@ tbody {background: #f7f7f7}
     display:grid; place-items:center; z-index:1000;
 }
 .modal{
-    width:560px; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
+    width:auto; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
     padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.2);
 }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
@@ -95,9 +95,7 @@ tbody {background: #f7f7f7}
 }
 .shell-inner{
     position:relative;
-
     padding: 22px;
-    border-radius:28px;
     overflow:hidden;
     z-index:0; /* nouveau */
 }

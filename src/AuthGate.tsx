@@ -52,26 +52,26 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <h1 className="hero-title">
-                            Get expert
+                            Gestion
                             <br />
-                            business advice
+                            du mobilier
                             <br />
-                            <span className="break">in real</span>
+                            <span className="break">En temps</span>
                             <span className="pulse-badge" aria-hidden />
-                            <span> time</span>
+                            <span> réel</span>
                         </h1>
 
                         <p className="hero-sub">
-                            Connect instantly with your workspace —
+                            Suivez vos équipements, optimisez leur utilisation
                             <br />
-                            secure Google sign-in, simple and fast.
+                            et simplifiez la gestion de votre inventaire.
                         </p>
 
-                        <button className="cta-ghost" type="button">
-                            See what we have
+                        {/*<button className="cta-ghost" type="button">
+                            Site principal
                         </button>
 
-                        <div className="kpis">
+                         <div className="kpis">
                             <div>
                                 <strong>$4.7M</strong>
                                 <span>revenue generated</span>
@@ -84,7 +84,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                 <strong>+320</strong>
                                 <span>active clients</span>
                             </div>
-                        </div>
+                        </div> */}
                     </section>
 
                     {/* Colonne droite - Auth Google */}

@@ -106,12 +106,20 @@ export default function AssetDetail() {
     setErr(null);
     try {
       // asset
-      const { data: a, error: ea } = await supabase.from("assets").select("*").eq("id", assetId).single();
-      if (ea) {
-        setErr(ea.message);
-        return;
-      }
-      setAsset(a as Asset);
+      const { data: a, error: ea } = await supabase
+        .from("assets")
+        .select("*, category:categories(name)")
+        .eq("id", assetId)
+        .single();
+
+      if (ea) { setErr(ea.message); return; }
+
+      // 'category' est l'objet joint; on l’aplatit dans category_name pour la fiche
+      const row: any = a;
+      setAsset({
+        ...(row as Asset),
+        category_name: row?.category?.name ?? null,
+      });
 
       // last assignment
       const { data: la } = await supabase
@@ -255,7 +263,7 @@ export default function AssetDetail() {
       .select("category_name")
       .eq("id", assetId)
       .maybeSingle();
-    setEdCategoryName((row as any)?.category_name ?? "");
+    setEdCategoryName(asset.category_name ?? "");
 
     setEdPurchasedAt(asset.purchased_at ?? "");
     setEdPrice(asset.purchase_price != null ? String(asset.purchase_price) : "");
@@ -283,7 +291,7 @@ export default function AssetDetail() {
     if (error) {
       const { data: retry } = await supabase.from("categories").select("id").eq("name", trimmed).maybeSingle();
       if (retry?.id) return retry.id as number;
-      throw new Error(error.message || "Impossible de créer la catégorie.");
+      throw new Error(error.message || "Impossible to create the category.");
     }
     return created?.id ?? null;
   }
@@ -354,7 +362,6 @@ export default function AssetDetail() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      style={{border: "1px solid #8D86C9"}}
     >
       <div className="shell-inner">
         {/* X retour */}
@@ -363,8 +370,8 @@ export default function AssetDetail() {
           onClick={() => navigate(-1)}
           style={{
             position: "absolute",
-            top: 12,
-            right: 12,
+            top: 0,
+            right: 0,
             width: 36,
             height: 36,
             borderRadius: 999,
@@ -416,16 +423,16 @@ export default function AssetDetail() {
           {/* Infos principales */}
           <section className="infos">
             <div className="presentation">
-                <Info label="Numéro de série" value={asset.serial_no || "—"} />
-                <Info label="Catégorie" value={asset.category_id ? String(asset.category_id) : "—"} />
-                <Info label="Date d'achat" value={asset.purchased_at || "—"} />
+                <Info label="Serial number" value={asset.serial_no || "—"} />
+                <Info label="Category" value={asset.category_name || "—"} />
+                <Info label="Purchase date" value={asset.purchased_at || "—"} />
                 <Info
-                    label="Prix d'achat"
+                    label="Purchase price"
                     value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : "—"}
                 />
-                <Info label="Fournisseur" value={asset.supplier || "—"} />
+                <Info label="Supplier" value={asset.supplier || "—"} />
                 <Info
-                    label="Fin de garantie"
+                    label="Warranty end"
                     value={
                         asset.warranty_end
                         ? `${asset.warranty_end}${
@@ -460,12 +467,12 @@ export default function AssetDetail() {
                 {last?.assignment_id ? (
               <div style={{ display: "grid", gap: 4 }}>
                 <div>
-                  {last.status === "active" ? "Attribué à " : "Dernier attributaire"} : <strong>{last.assignee_name ?? "—"}</strong>
+                  {last.status === "active" ? "Assigned to " : "Last assignee"} : <strong>{last.assignee_name ?? "—"}</strong>
                   {last.assignee_email ? ` (${last.assignee_email})` : ""}
                 </div>
                 <small style={{ color: "var(--muted)" }}>
-                  {last.assigned_at ? `depuis ${last.assigned_at}` : ""}
-                  {last.returned_at ? ` — retourné le ${last.returned_at}` : ""}
+                  {last.assigned_at ? `since ${last.assigned_at}` : ""}
+                  {last.returned_at ? ` — returned on ${last.returned_at}` : ""}
                 </small>
               </div>
             ) : (
@@ -491,47 +498,10 @@ export default function AssetDetail() {
             </div>
           </section>
 
-
-          {/* Attribution */}
-          <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
-            <h3 style={{ margin: "8px 0" }}>Attribution</h3>
-            {last?.assignment_id ? (
-              <div style={{ display: "grid", gap: 4 }}>
-                <div>
-                  {last.status === "active" ? "Attribué à " : "Dernier attributaire"} :{" "}
-                  <strong>{last.assignee_name ?? "—"}</strong>
-                  {last.assignee_email ? ` (${last.assignee_email})` : ""}
-                </div>
-                <small style={{ color: "var(--muted)" }}>
-                  {last.assigned_at ? `depuis ${last.assigned_at}` : ""}
-                  {last.returned_at ? ` — retourné le ${last.returned_at}` : ""}
-                </small>
-              </div>
-            ) : (
-              <div>Aucune attribution</div>
-            )}
-
-            {isAdmin && (
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {asset.status !== "assigned" ? (
-                  <>
-                    <button className="pill" onClick={openAssign} disabled={busy}>
-                      {busy ? "…" : "Attribuer"}
-                    </button>
-                  </>
-                ) : (
-                  <button className="pill" onClick={openReturn} disabled={busy}>
-                    {busy ? "…" : "Marquer comme retourné"}
-                  </button>
-                )}
-              </div>
-            )}
-          </section>
-
           {/* Cycle de vie avec nouveaux modals */}
           {isAdmin && (
             <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
-              <h3 style={{ margin: "8px 0" }}>Cycle de vie</h3>
+              <h3 style={{ margin: "8px 0" }}>Lifecycle</h3>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {asset.status !== "repair" && (
                   <button 
@@ -539,7 +509,7 @@ export default function AssetDetail() {
                     onClick={() => openLifecycleModal("repair")} 
                     disabled={busy}
                   >
-                    {busy ? "…" : "Mettre en réparation"}
+                    {busy ? "…" : "Send for repair"}
                   </button>
                 )}
                 {asset.status === "repair" && (
@@ -548,7 +518,7 @@ export default function AssetDetail() {
                     onClick={() => openLifecycleModal("exit_repair")} 
                     disabled={busy}
                   >
-                    {busy ? "…" : "Sortie de réparation"}
+                    {busy ? "…" : "Return from repair"}
                   </button>
                 )}
                 {asset.status !== "retired" && (
@@ -557,7 +527,7 @@ export default function AssetDetail() {
                     onClick={() => openLifecycleModal("retire")} 
                     disabled={busy}
                   >
-                    {busy ? "…" : "Retirer définitivement"}
+                    {busy ? "…" : "Retire permanently"}
                   </button>
                 )}
               </div>
@@ -566,9 +536,9 @@ export default function AssetDetail() {
 
           {/* Journal */}
           <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
-            <h3 style={{ margin: "8px 0" }}>Journal</h3>
+            <h3 style={{ margin: "8px 0" }}>Activity log</h3>
             {timeline.length === 0 ? (
-              <p style={{ color: "var(--muted)" }}>Aucun événement</p>
+              <p style={{ color: "var(--muted)" }}>No event</p>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 16 }} className="journal">
                 {timeline.map((ev) => (
@@ -641,7 +611,7 @@ export default function AssetDetail() {
         <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Modifier : ${asset.label}`}>
           <form onSubmit={saveEdit} className="form-grid">
             <div className="span-2">
-              <label className="label">Catégorie</label>
+              <label className="label">Category</label>
               <Autocomplete
                 className="field"
                 value={edCategoryName}
