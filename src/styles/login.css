@@ -152,12 +152,14 @@
 /* Carte d'auth */
 .auth-card {
     width: min(520px, 100%);
-    background: rgb(141, 134, 201);
+    background: #F3F3F3;
     border: 1px solid var(--line);
     border-radius: 16px;
     padding: 24px;
     box-shadow: 0 18px 50px rgba(0,0,0,.08);
     min-height: 50vh;
+    display: flex;
+    align-items: center;
 }
 .auth-card-head {
     display: flex; align-items: center; gap: 14px; margin-bottom: 6rem;
