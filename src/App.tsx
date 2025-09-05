@@ -10,7 +10,7 @@ export default function App() {
     return (
         <main>
             <Home onNew={() => setShowNew(true)} />
-            <Modal open={showNew} onClose={() => setShowNew(false)} title="Nouveau matériel">
+            <Modal open={showNew} onClose={() => setShowNew(false)} title="New asset">
                 <NewAsset
                     onCreated={() => {
                         setShowNew(false);

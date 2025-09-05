@@ -179,6 +179,7 @@ tbody {background: #f7f7f7}
     display:grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px 16px;
+    margin-top: 20px;
 }
 .form-grid .span-2{ grid-column: 1 / -1; }
 

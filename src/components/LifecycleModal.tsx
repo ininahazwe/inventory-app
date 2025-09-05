@@ -1,5 +1,5 @@
 // src/components/LifecycleModal.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal from "./Modal";
 
 type LifecycleAction = "repair" | "exit_repair" | "retire";
@@ -14,50 +14,64 @@ type LifecycleModalProps = {
 };
 
 export default function LifecycleModal({
-  open,
-  onClose,
-  action,
-  assetLabel,
-  onConfirm,
-  busy
-}: LifecycleModalProps) {
+                                         open,
+                                         onClose,
+                                         action,
+                                         assetLabel,
+                                         onConfirm,
+                                         busy
+                                       }: LifecycleModalProps) {
   const [notes, setNotes] = useState("");
   const [cost, setCost] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset form when modal opens/closes or action changes
+  useEffect(() => {
+    if (!open) {
+      setNotes("");
+      setCost("");
+      setError("");
+      setIsSubmitting(false);
+    }
+  }, [open, action]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isSubmitting || busy) return;
+
     setError("");
-    
-    let costValue: number | undefined;
-    if (action === "exit_repair" && cost.trim()) {
-      const parsed = Number(cost.replace(",", "."));
-      if (Number.isNaN(parsed) || parsed < 0) {
-        setError("Le coût doit être un nombre positif");
-        return;
-      }
-      costValue = Math.round(parsed * 100) / 100;
-    }
+    setIsSubmitting(true);
 
     try {
+      let costValue: number | undefined;
+      if (action === "exit_repair" && cost.trim()) {
+        const parsed = Number(cost.replace(",", "."));
+        if (Number.isNaN(parsed) || parsed < 0) {
+          setError("Le coût doit être un nombre positif");
+          return;
+        }
+        costValue = Math.round(parsed * 100) / 100;
+      }
+
       await onConfirm({
         notes: notes.trim() || undefined,
         cost: costValue
       });
-      // Reset form
-      setNotes("");
-      setCost("");
-      setError("");
+
+      // Le modal sera fermé par le parent après succès
+
     } catch (err: any) {
+      console.error("Erreur dans LifecycleModal:", err);
       setError(err.message || "Une erreur est survenue");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleClose = () => {
-    if (!busy) {
-      setNotes("");
-      setCost("");
-      setError("");
+    if (!busy && !isSubmitting) {
       onClose();
     }
   };
@@ -90,6 +104,8 @@ export default function LifecycleModal({
 
   const getDefaultNotes = () => {
     switch (action) {
+      case "repair":
+        return "Envoyé en réparation";
       case "exit_repair":
         return "Réparation terminée";
       case "retire":
@@ -100,6 +116,8 @@ export default function LifecycleModal({
   };
 
   const getConfirmButtonText = () => {
+    if (isSubmitting) return "...";
+
     switch (action) {
       case "repair":
         return "Envoyer en réparation";
@@ -113,15 +131,22 @@ export default function LifecycleModal({
   };
 
   const getConfirmButtonClass = () => {
-    return `pill ${action === "retire" ? "pill--danger" : ""}`;
+    let baseClass = "pill";
+    if (action === "retire") {
+      baseClass += " pill--danger";
+    }
+    return baseClass;
   };
 
+  // Ne pas rendre le modal si pas d'action
+  if (!action) return null;
+
   return (
-    <Modal 
-      open={open} 
-      onClose={handleClose} 
+    <Modal
+      open={open}
+      onClose={handleClose}
       title={getTitle()}
-      closeOnBackdrop={!busy}
+      closeOnBackdrop={!busy && !isSubmitting}
     >
       <form onSubmit={handleSubmit} className="form-grid">
         <div className="span-2">
@@ -140,7 +165,7 @@ export default function LifecycleModal({
               value={cost}
               onChange={(e) => setCost(e.target.value)}
               placeholder="0.00"
-              disabled={busy}
+              disabled={busy || isSubmitting}
             />
           </div>
         )}
@@ -153,31 +178,33 @@ export default function LifecycleModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder={getDefaultNotes()}
-            disabled={busy}
+            disabled={busy || isSubmitting}
           />
         </div>
 
         {error && (
           <div className="span-2">
-            <p style={{ color: "crimson", margin: "0" }}>{error}</p>
+            <p style={{ color: "crimson", margin: "0", padding: "8px", backgroundColor: "#fee", borderRadius: "4px" }}>
+              {error}
+            </p>
           </div>
         )}
 
         <div className="span-2 modal-actions">
-          <button 
-            type="button" 
-            className="pill pill--muted" 
+          <button
+            type="button"
+            className="pill pill--muted"
             onClick={handleClose}
-            disabled={busy}
+            disabled={busy || isSubmitting}
           >
             Annuler
           </button>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className={getConfirmButtonClass()}
-            disabled={busy}
+            disabled={busy || isSubmitting}
           >
-            {busy ? "…" : getConfirmButtonText()}
+            {getConfirmButtonText()}
           </button>
         </div>
       </form>

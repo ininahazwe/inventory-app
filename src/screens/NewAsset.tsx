@@ -37,7 +37,7 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
         if (error) {
             const { data: retry } = await supabase.from("categories").select("id").eq("name", trimmed).maybeSingle();
             if (retry?.id) return retry.id as number;
-            throw new Error(error.message || "Impossible de créer la catégorie (droits admin requis).");
+            throw new Error(error.message || "Impossible to create the cathegory (admin access required).");
         }
         return created?.id ?? null;
     }
@@ -92,12 +92,12 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
     return (
         <form onSubmit={handleSubmit} className="form-grid">
             <div className="span-2">
-                <label className="label">Libellé *</label>
+                <label className="label">Label *</label>
                 <input className="field" value={label} onChange={e=>setLabel(e.target.value)} required />
             </div>
 
             <div className="span-2">
-                <label className="label">Catégorie</label>
+                <label className="label">Category</label>
                 <Autocomplete
                     className="field"
                     value={categoryName}
@@ -108,25 +108,25 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
             </div>
 
             <div>
-                <label className="label">Numéro de série</label>
+                <label className="label">Serial number</label>
                 <input className="field" value={serial} onChange={e=>setSerial(e.target.value)} placeholder="SN…" />
             </div>
             <div>
-                <label className="label">Prix d’achat</label>
+                <label className="label">Purchase price</label>
                 <input className="field" type="number" step="0.01" min="0" value={purchasePrice} onChange={e=>setPurchasePrice(e.target.value)} placeholder="0.00" />
             </div>
 
             <div>
-                <label className="label">Date d’achat</label>
+                <label className="label">Purchase date</label>
                 <input className="field" type="date" value={purchasedAt} onChange={e=>setPurchasedAt(e.target.value)} />
             </div>
             <div>
-                <label className="label">Fin de garantie</label>
+                <label className="label">Warranty end</label>
                 <input className="field" type="date" value={warrantyEnd} onChange={e=>setWarrantyEnd(e.target.value)} />
             </div>
 
             <div className="span-2">
-                <label className="label">Fournisseur</label>
+                <label className="label">Supplier</label>
                 <input className="field" value={supplier} onChange={e=>setSupplier(e.target.value)} placeholder="Ex : ABC Ltd." />
             </div>
             <div className="span-2">

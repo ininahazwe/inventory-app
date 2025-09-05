@@ -63,9 +63,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                         </h1>*/}
 
                         <BlurIn>
-                            Gestion
+                            Furniture
                             <br />
-                            du mobilier
+                            Management
                         </BlurIn>
 
                         {/*<button className="cta-ghost" type="button">

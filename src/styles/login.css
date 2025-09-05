@@ -76,7 +76,7 @@
 .mini-topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     margin-bottom: 12px;
 }
 .brand { height: 28px; width: auto; object-fit: contain; }
@@ -190,5 +190,4 @@
     .right-col { order: 2; }
     .auth-card { transform: translateX(0px); }
     .hero-title { top: 60%; text-align: center; }
-    .mini-topbar { justify-content: center; }
 }

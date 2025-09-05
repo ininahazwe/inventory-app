@@ -35,7 +35,7 @@ export default function CategoryManager() {
     };
 
     const remove = async (id: number) => {
-        if (!confirm("Supprimer cette catégorie ?")) return;
+        if (!confirm("Delete this category ?")) return;
         const { error } = await supabase.from("categories").delete().eq("id", id);
         if (error) { setErr(error.message); return; }
         await load();
@@ -45,9 +45,9 @@ export default function CategoryManager() {
 
     return (
         <div style={{ padding: 24, maxWidth: 520 }}>
-            <h2>Catégories</h2>
+            <h2>Categories</h2>
             <form onSubmit={add} style={{ display: "flex", gap: 8, margin: "12px 0" }}>
-                <input placeholder="Nouvelle catégorie" value={name} onChange={e=>setName(e.target.value)} />
+                <input placeholder="New category" value={name} onChange={e=>setName(e.target.value)} />
                 <button>Ajouter</button>
             </form>
             {err && <p style={{ color: "crimson" }}>{err}</p>}

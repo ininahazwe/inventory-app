@@ -62,9 +62,6 @@ export default function AssetDetail() {
   const [lifecycleModalOpen, setLifecycleModalOpen] = useState(false);
   const [currentLifecycleAction, setCurrentLifecycleAction] = useState<LifecycleAction | null>(null);
 
-  // Hook de confirmation
-  // const confirm = useConfirm();
-
   // Animation fiche (balayage bas -> haut)
   const sweep: Variants = {
     initial: { y: 40, opacity: 0 },
@@ -113,7 +110,7 @@ export default function AssetDetail() {
 
       if (ea) { setErr(ea.message); return; }
 
-      // 'category' est l'objet joint; on l’aplatit dans category_name pour la fiche
+      // 'category' est l'objet joint; on l'aplatit dans category_name pour la fiche
       const row: any = a;
       setAsset({
         ...(row as Asset),
@@ -166,47 +163,56 @@ export default function AssetDetail() {
     setCurrentLifecycleAction(null);
   };
 
-  // Gestionnaire pour les actions de cycle de vie
+  // Gestionnaire pour les actions de cycle de vie - VERSION CORRIGÉE
   const handleLifecycleAction = async (data: { notes?: string; cost?: number }) => {
     if (!currentLifecycleAction) return;
 
     setBusy(true);
+    setErr(null); // Reset l'erreur globale
+
     try {
-      let error;
+      let result;
 
       switch (currentLifecycleAction) {
         case "repair":
-          ({ error } = await supabase.rpc("send_to_repair", {
+          result = await supabase.rpc("send_to_repair", {
             p_asset_id: assetId,
             p_notes: data.notes || null,
-          }));
+          });
           break;
 
         case "exit_repair":
-          ({ error } = await supabase.rpc("exit_repair", {
+          result = await supabase.rpc("exit_repair", {
             p_asset_id: assetId,
             p_notes: data.notes || null,
             p_cost: data.cost || null,
-          }));
+          });
           break;
 
         case "retire":
-          ({ error } = await supabase.rpc("retire_asset", {
+          result = await supabase.rpc("retire_asset", {
             p_asset_id: assetId,
             p_notes: data.notes || null,
-          }));
+          });
           break;
+
+        default:
+          throw new Error("Action non reconnue");
       }
 
-      if (error) {
-        throw new Error(error.message);
+      if (result?.error) {
+        console.error(`Erreur ${currentLifecycleAction}:`, result.error);
+        throw new Error(result.error.message || "Erreur lors de l'opération");
       }
 
+      // Succès : fermer le modal et recharger
       closeLifecycleModal();
       await load();
+
     } catch (error: any) {
       console.error(`Erreur ${currentLifecycleAction}:`, error);
-      throw error; // Re-throw pour que le modal gère l'affichage de l'erreur
+      // L'erreur sera affichée dans le modal via le throw
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -255,11 +261,7 @@ export default function AssetDetail() {
   const openEdit = async () => {
     if (!asset) return;
     setEdSerial(asset.serial_no ?? "");
-
-    // Nom de catégorie depuis ta vue overview (si dispo)
-  
     setEdCategoryName(asset.category_name ?? "");
-
     setEdPurchasedAt(asset.purchased_at ?? "");
     setEdPrice(asset.purchase_price != null ? String(asset.purchase_price) : "");
     setEdSupplier(asset.supplier ?? "");
@@ -302,10 +304,10 @@ export default function AssetDetail() {
         edPrice.trim() === ""
           ? null
           : Number.isNaN(Number(edPrice.replace(",", ".")))
-          ? (() => {
+            ? (() => {
               throw new Error("Prix invalide");
             })()
-          : Number((+edPrice.replace(",", ".")).toFixed(2));
+            : Number((+edPrice.replace(",", ".")).toFixed(2));
 
       const { error } = await supabase
         .from("assets")
@@ -357,8 +359,6 @@ export default function AssetDetail() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8 }}
-      key="modal"
-      whileTap={{ y: 1 }}
     >
       <div className="shell-inner">
         {/* X retour */}
@@ -406,123 +406,125 @@ export default function AssetDetail() {
                   asset.status === "assigned"
                     ? "var(--brand)"
                     : asset.status === "repair"
-                    ? "#b98b46"
-                    : asset.status === "retired"
-                    ? "#eee"
-                    : "#f4f1ee",
+                      ? "#b98b46"
+                      : asset.status === "retired"
+                        ? "#eee"
+                        : "#f4f1ee",
               }}
             >
               {asset.status}
             </span>
           </div>
 
-  
           {/* Infos principales */}
           <section className="infos">
             <div className="presentation">
-                <Info label="Serial number" value={asset.serial_no || "—"} />
-                <Info label="Category" value={asset.category_name || "—"} />
-                <Info label="Purchase date" value={asset.purchased_at || "—"} />
-                <Info
-                    label="Purchase price"
-                    value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : "—"}
-                />
-                <Info label="Supplier" value={asset.supplier || "—"} />
-                <Info
-                    label="Warranty end"
-                    value={
-                        asset.warranty_end
-                        ? `${asset.warranty_end}${
-                            typeof warrantyDaysLeft === "number"
-                                ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} j restants` : `${Math.abs(warrantyDaysLeft)} j dépassés`}`
-                                : ""
-                            }`
-                        : "—"
+              <Info label="Serial number" value={asset.serial_no || "—"} />
+              <Info label="Category" value={asset.category_name || "—"} />
+              <Info label="Purchase date" value={asset.purchased_at || "—"} />
+              <Info
+                label="Purchase price"
+                value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : "—"}
+              />
+              <Info label="Supplier" value={asset.supplier || "—"} />
+              <Info
+                label="Warranty end"
+                value={
+                  asset.warranty_end
+                    ? `${asset.warranty_end}${
+                      typeof warrantyDaysLeft === "number"
+                        ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} j restants` : `${Math.abs(warrantyDaysLeft)} j dépassés`}`
+                        : ""
+                    }`
+                    : "—"
                 }
-                />
-                {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
+              />
+              {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
             <div>
-                {/* QR code
-                <h3 style={{ margin: "8px 0" }}>QR Code</h3>*/}
-                <div className="qr-section">
-                    <img src={qrImg} alt="QR" width={180} height={180} />
-                    <div>
-                        <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
-                        {/* Lien encodé : <code>{qrDataUrl}</code> */}
-                        </div>
-                        <div style={{ marginTop: 8 }}>
-                        <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
-                            Télécharger le QR
-                        </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div>
-                {/* Attribution */}
-                {last?.assignment_id ? (
-              <div style={{ display: "grid", gap: 4 }}>
+              <div className="qr-section">
+                <img src={qrImg} alt="QR" width={180} height={180} />
                 <div>
-                  {last.status === "active" ? "Assigned to " : "Last assignee"} : <strong>{last.assignee_name ?? "—"}</strong>
-                  {last.assignee_email ? ` (${last.assignee_email})` : ""}
+                  <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
+                      Télécharger le QR
+                    </a>
+                  </div>
                 </div>
-                <small style={{ color: "var(--muted)" }}>
-                  {last.assigned_at ? `since ${last.assigned_at}` : ""}
-                  {last.returned_at ? ` — returned on ${last.returned_at}` : ""}
-                </small>
               </div>
-            ) : (
-              <div>Aucune attribution</div>
-            )}
+            </div>
+            <div>
+              {/* Attribution */}
+              {last?.assignment_id ? (
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div>
+                    {last.status === "active" ? "Assigned to " : "Last assignee"} : <strong>{last.assignee_name ?? "—"}</strong>
+                    {last.assignee_email ? ` (${last.assignee_email})` : ""}
+                  </div>
+                  <small style={{ color: "var(--muted)" }}>
+                    {last.assigned_at ? `since ${last.assigned_at}` : ""}
+                    {last.returned_at ? ` — returned on ${last.returned_at}` : ""}
+                  </small>
+                </div>
+              ) : (
+                <div>Aucune attribution</div>
+              )}
 
-
-            {isAdmin && (
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {asset.status !== "assigned" ? (
-                  <>
-                    <button className="pill" onClick={openAssign} disabled={busy}>
-                      {busy ? "…" : "Attribuer"}
+              {isAdmin && (
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  {asset.status !== "assigned" ? (
+                    <>
+                      <button className="pill" onClick={openAssign} disabled={busy}>
+                        {busy ? "…" : "Attribuer"}
+                      </button>
+                    </>
+                  ) : (
+                    <button className="pill" onClick={openReturn} disabled={busy}>
+                      {busy ? "…" : "Marquer comme retourné"}
                     </button>
-                  </>
-                ) : (
-                  <button className="pill" onClick={openReturn} disabled={busy}>
-                    {busy ? "…" : "Marquer comme retourné"}
-                  </button>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
-          {/* Cycle de vie avec nouveaux modals */}
+          {/* Cycle de vie avec nouveaux modals - VERSION CORRIGÉE */}
           {isAdmin && (
             <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
               <h3 style={{ margin: "8px 0" }}>Lifecycle</h3>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {asset.status !== "repair" && (
-                  <button 
-                    className="pill" 
-                    onClick={() => openLifecycleModal("repair")} 
+                {asset.status !== "repair" && asset.status !== "retired" && (
+                  <button
+                    className="pill"
+                    onClick={() => openLifecycleModal("repair")}
                     disabled={busy}
+                    style={{ cursor: busy ? "not-allowed" : "pointer" }}
                   >
                     {busy ? "…" : "Send for repair"}
                   </button>
                 )}
                 {asset.status === "repair" && (
-                  <button 
-                    className="pill" 
-                    onClick={() => openLifecycleModal("exit_repair")} 
+                  <button
+                    className="pill"
+                    onClick={() => openLifecycleModal("exit_repair")}
                     disabled={busy}
+                    style={{ cursor: busy ? "not-allowed" : "pointer" }}
                   >
                     {busy ? "…" : "Return from repair"}
                   </button>
                 )}
                 {asset.status !== "retired" && (
-                  <button 
-                    className="pill" 
-                    onClick={() => openLifecycleModal("retire")} 
+                  <button
+                    className="pill"
+                    onClick={() => openLifecycleModal("retire")}
                     disabled={busy}
+                    style={{
+                      cursor: busy ? "not-allowed" : "pointer",
+                      backgroundColor: "#dc3545",
+                      color: "white"
+                    }}
                   >
                     {busy ? "…" : "Retire permanently"}
                   </button>
@@ -548,7 +550,6 @@ export default function AssetDetail() {
               </ul>
             )}
           </section>
-
 
           {/* Bouton Modifier */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>

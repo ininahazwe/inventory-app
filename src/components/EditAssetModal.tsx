@@ -44,7 +44,7 @@ export function EditAssetModal({
         if (error) {
             const { data: retry } = await supabase.from("categories").select("id").eq("name", trimmed).maybeSingle();
             if (retry?.id) return retry.id as number;
-            throw new Error(error.message || "Impossible de créer la catégorie.");
+            throw new Error(error.message || "Impossible to create the category.");
         }
         return created?.id ?? null;
     }
@@ -94,7 +94,7 @@ export function EditAssetModal({
         <Modal open={open} onClose={onClose} title={`Modifier : ${asset?.label ?? "Matériel"}`}>
             <form onSubmit={onSubmit} className="form-grid">
                 <div className="span-2">
-                    <label className="label">Catégorie</label>
+                    <label className="label">Category</label>
                     <Autocomplete
                         className="field"
                         value={edCategoryName}
