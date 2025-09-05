@@ -76,12 +76,13 @@ export default function AssigneesManager({ onClose }: { onClose?: () => void }) 
       <div style={{ display:"flex", gap:8, marginBottom:12 }}>
         <input
           className="input"
-          placeholder="Rechercher nom ou email…"
+          style={{ marginTop:"12px"}}
+          placeholder="Search by name or email…"
           value={q}
           onChange={(e)=>setQ(e.target.value)}
         />
         <div style={{ flex:1 }} />
-        <button className="pill" onClick={() => onClose?.()}>Fermer</button>
+        <button className="pill" onClick={() => onClose?.()}>Close</button>
       </div>
 
       <AssigneesTable

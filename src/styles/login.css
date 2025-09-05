@@ -55,7 +55,7 @@
     margin: 0 auto;
     padding: 32px 20px 56px;
     display: grid;
-    grid-template-columns: 1.1fr 0.9fr;
+    grid-template-columns: 2fr 1fr;
     gap: 28px;
 }
 
@@ -186,6 +186,9 @@
         grid-template-columns: 1fr;
         max-width: 720px;
     }
-    .left-col { order: 2; }
-    .right-col { order: 1; }
+    .left-col { order: 1; height: 25vh;}
+    .right-col { order: 2; }
+    .auth-card { transform: translateX(0px); }
+    .hero-title { top: 60%; text-align: center; }
+    .mini-topbar { justify-content: center; }
 }

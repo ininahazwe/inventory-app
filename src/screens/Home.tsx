@@ -12,7 +12,7 @@ type Row = {
     assignee_name: string | null; assignee_email: string | null;
 };
 
-const ITEMS_PER_PAGE = 1;
+const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
     const [rows, setRows] = useState<Row[]>([]);
@@ -180,7 +180,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <table className="table">
                 <thead>
                 <tr style={{ background:"#8D86C9" }}>
-                    <th>Name</th><th>Category</th><th>Status</th><th>Assigned to</th><th></th>
+                    <th>Name</th><th>Category</th><th className="status">Status</th><th>Assigned to</th><th></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -191,7 +191,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
                             {r.serial_no && <div style={{ color:"var(--muted)", fontSize:12 }}>SN: {r.serial_no}</div>}
                         </td>
                         <td>{r.category_name ?? "—"}</td>
-                        <td style={{ textTransform:"capitalize" }}>{r.status}</td>
+                        <td style={{ textTransform:"capitalize" }} className="status">{r.status}</td>
                         <td>
                             {r.assignee_name ? (
                                 <>

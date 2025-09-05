@@ -50,7 +50,7 @@ export default function Modal({
       >
         <div className="modal-head">
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Fermer">
+          <button className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>

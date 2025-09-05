@@ -289,4 +289,16 @@ tbody {background: #f7f7f7}
   .shell-inner{
     padding:  0px;
   }
+  .filters{ grid-template-columns: 1fr 1fr;}
+
+  .pill{
+    padding:6px 12px;
+    font-size: 0.7em;
+  }
+
+  .table{
+    .email, .actives, .total, .status{
+      display: none;
+    }
+  }
 }

@@ -91,9 +91,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                     {/* Colonne droite - Auth Google */}
                     <section className="right-col">
                         <motion.div
-                            initial={{ opacity: 0, x: 0, scale: 0.98 }}
-                            animate={{ opacity: 1, x: 20, scale: 1 }}
-                            transition={{ duration: 0.5 }}
+                            initial={{ opacity: 0, x: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            transition={{ duration: 1.5 }}
                             className="auth-card"
                         >
                             <div className="auth-card-head">
