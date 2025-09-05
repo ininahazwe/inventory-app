@@ -13,9 +13,9 @@ export default function AssigneesTable({
       <thead>
         <tr style={{ background:"#8D86C9" }}>
           <th>Nom</th>
-          <th>Email</th>
-          <th>Actives</th>
-          <th>Total</th>
+          <th className="email">Email</th>
+          <th className="actives">Actives</th>
+          <th className="total">Total</th>
           <th>Dernière attribution</th>
           <th></th>
         </tr>
@@ -24,14 +24,14 @@ export default function AssigneesTable({
         {rows.map(a => (
           <tr key={a.key}>
             <td>{a.full_name ?? "—"}</td>
-            <td>{a.email ?? "—"}</td>
-            <td>{a.active_count}</td>
-            <td>{a.total_count}</td>
+            <td className="email">{a.email ?? "—"}</td>
+            <td className="actives">{a.active_count}</td>
+            <td className="total">{a.total_count}</td>
             <td>{a.last_assigned ? new Date(a.last_assigned).toLocaleString() : "—"}</td>
             <td style={{ width:200 }}>
               <div className="actions">
-                <button className="pill" onClick={()=>onEdit(a)}>Renommer/Fusionner</button>
-                <button className="pill" style={{ background:"#f3d0d0" }} onClick={()=>onDelete(a)}>Supprimer</button>
+                <button className="pill" onClick={()=>onEdit(a)}>Edit</button>
+                <button className="pill" style={{ background:"#f3d0d0" }} onClick={()=>onDelete(a)}>Delete</button>
               </div>
             </td>
           </tr>

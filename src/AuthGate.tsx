@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import logo from "./assets/mfwa-logo.png";
+import {BlurIn} from "./components/TextBlur.tsx";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<
@@ -51,7 +52,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                             <div className="lang-chip">En</div>
                         </div>
 
-                        <h1 className="hero-title">
+                        {/*<h1 className="hero-title">
                             Gestion
                             <br />
                             du mobilier
@@ -59,13 +60,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                             <span className="break">En temps</span>
                             <span className="pulse-badge" aria-hidden />
                             <span> réel</span>
-                        </h1>
+                        </h1>*/}
 
-                        <p className="hero-sub">
-                            Suivez vos équipements, optimisez leur utilisation
+                        <BlurIn>
+                            Gestion
                             <br />
-                            et simplifiez la gestion de votre inventaire.
-                        </p>
+                            du mobilier
+                        </BlurIn>
 
                         {/*<button className="cta-ghost" type="button">
                             Site principal
@@ -90,9 +91,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                     {/* Colonne droite - Auth Google */}
                     <section className="right-col">
                         <motion.div
-                            initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{ duration: 0.5 }}
+                            initial={{ opacity: 0, x: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            transition={{ duration: 1.5 }}
                             className="auth-card"
                         >
                             <div className="auth-card-head">
@@ -100,8 +101,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                     <img src={logo} alt="MFWA" />
                                 </div>
                                 <div className="head-text">
-                                    <h2>Sign in</h2>
-                                    <p>Continue with your Google account</p>
+
                                 </div>
                             </div>
 
@@ -159,7 +159,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                 }}
                             />
 
-                            <div className="auth-foot-note">Secure • Private • SSO</div>
+                            {/*<div className="auth-foot-note">Secure • Private • SSO</div>*/}
                         </motion.div>
                     </section>
                 </div>

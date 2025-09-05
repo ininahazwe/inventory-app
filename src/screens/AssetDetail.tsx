@@ -356,12 +356,14 @@ export default function AssetDetail() {
       className="shell"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.8 }}
+      key="modal"
+      whileTap={{ y: 1 }}
     >
       <div className="shell-inner">
         {/* X retour */}
         <button
-          aria-label="Fermer"
+          aria-label="Close"
           onClick={() => navigate(-1)}
           style={{
             position: "absolute",
