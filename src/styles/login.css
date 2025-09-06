@@ -60,12 +60,12 @@
 }
 
 .left-col {
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 28px;
-    position: relative;
-    /*box-shadow: 0 8px 24px rgba(0,0,0,.05);*/
+  /*background: var(--paper);
+  border: 1px solid var(--line);*/
+  border-radius: 16px;
+  padding: 28px;
+  position: relative;
+  /*box-shadow: 0 8px 24px rgba(0,0,0,.05);*/
 }
 .right-col {
     display: grid;
@@ -79,7 +79,7 @@
     justify-content: center;
     margin-bottom: 12px;
 }
-.brand { height: 28px; width: auto; object-fit: contain; }
+.brand { height: 60px; width: auto; object-fit: contain; }
 .lang-chip {
     font-size: 12px;
     padding: 6px 10px;
