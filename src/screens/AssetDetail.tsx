@@ -90,6 +90,24 @@ export default function AssetDetail() {
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataUrl)}`;
   }, [qrDataUrl]);
 
+  const downloadQR = async () => {
+    try {
+      const response = await fetch(qrImg);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `asset-${asset?.id}-qr.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur lors du téléchargement du QR:', error);
+      alert('Erreur lors du téléchargement du QR code');
+    }
+  };
+
   const warrantyDaysLeft = useMemo(() => {
     if (!asset?.warranty_end) return null;
     const end = new Date(asset.warranty_end + "T00:00:00");
@@ -448,9 +466,9 @@ export default function AssetDetail() {
                   <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
                   </div>
                   <div style={{ marginTop: 8 }}>
-                    <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
+                    <button onClick={downloadQR} className="pill" style={{ textDecoration: "none" }}>
                       Télécharger le QR
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>
