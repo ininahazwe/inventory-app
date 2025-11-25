@@ -25,8 +25,7 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
         <style>
           @page {
             size: 60mm 40mm;
-            margin: 0 !important;
-            padding: 0 !important;
+            margin: 0;
           }
           
           * {
@@ -38,37 +37,30 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
           html, body {
             width: 60mm;
             height: 40mm;
-            margin: 0 !important;
-            padding: 0 !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             background: #fff;
-            overflow: hidden;
           }
           
           .label {
-            position: absolute;
-            top: 3mm;
-            left: 30mm;  /* Décalage vers la droite - AJUSTE ICI */
-            width: 34mm;
-            height: 34mm;
+            width: 60mm;
+            height: 40mm;
+            display: flex;
+            justify-content: center;
+            align-items: center;
           }
           
           .label img {
-            width: 100%;
-            height: 100%;
+            width: 35mm;
+            height: 35mm;
             object-fit: contain;
           }
           
           @media print {
-            @page {
-              size: 60mm 40mm;
-              margin: 0 !important;
-            }
-            
             html, body {
               width: 60mm;
               height: 40mm;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
           }
         </style>
