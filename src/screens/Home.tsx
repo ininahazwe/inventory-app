@@ -23,6 +23,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [qLabel, setQLabel] = useState("");
   const [qCategory, setQCategory] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
 
@@ -86,6 +87,8 @@ export default function Home({ onNew }: { onNew: () => void }) {
       await load();
       const { data } = await supabase.rpc("is_current_admin");
       setIsAdmin(!!data);
+      const { data: superData } = await supabase.rpc("is_current_super_admin");
+      setIsSuperAdmin(!!superData);
     })();
   }, [load]);
 
@@ -161,7 +164,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, padding: "12px" }}>
         <h2 style={{ margin:0, letterSpacing:.2 }}>Inventory</h2>
         <div style={{ display:"flex", gap:8, flexWrap: "wrap" }}>
-          {isAdmin && (
+          {isSuperAdmin && (
             <button className="pill" onClick={() => setAllowedEmailsOpen(true)}>
               Allowed users
             </button>
