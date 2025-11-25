@@ -47,7 +47,7 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
           .label {
             position: absolute;
             top: 3mm;
-            left: 13mm;  /* Décalage vers la droite - AJUSTE ICI */
+            left: 30mm;  /* Décalage vers la droite - AJUSTE ICI */
             width: 34mm;
             height: 34mm;
           }
