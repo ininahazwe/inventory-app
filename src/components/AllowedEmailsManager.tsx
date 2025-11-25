@@ -7,6 +7,7 @@ type AllowedEmail = {
   email: string;
   added_at: string;
   notes: string | null;
+  protected: boolean;
 };
 
 export default function AllowedEmailsManager({ onClose }: { onClose?: () => void }) {
@@ -166,19 +167,37 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
             <tbody>
               {emails.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ fontWeight: 500 }}>{item.email}</td>
+                  <td style={{ fontWeight: 500 }}>
+                    {item.email}
+                    {item.protected && (
+                      <span style={{ 
+                        marginLeft: 8, 
+                        fontSize: 10, 
+                        background: "#e8f5e8", 
+                        color: "#2d5a2d",
+                        padding: "2px 6px",
+                        borderRadius: 4
+                      }}>
+                        protégé
+                      </span>
+                    )}
+                  </td>
                   <td style={{ color: "var(--muted)" }}>{item.notes || "—"}</td>
                   <td style={{ color: "var(--muted)", fontSize: 12 }}>
                     {new Date(item.added_at).toLocaleDateString()}
                   </td>
                   <td style={{ width: 80 }}>
-                    <button
-                      className="pill"
-                      style={{ background: "#f3d0d0", fontSize: 12, padding: "6px 10px" }}
-                      onClick={() => handleRemove(item.id, item.email)}
-                    >
-                      Retirer
-                    </button>
+                    {item.protected ? (
+                      <span style={{ color: "var(--muted)", fontSize: 11 }}>—</span>
+                    ) : (
+                      <button
+                        className="pill"
+                        style={{ background: "#f3d0d0", fontSize: 12, padding: "6px 10px" }}
+                        onClick={() => handleRemove(item.id, item.email)}
+                      >
+                        Retirer
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
