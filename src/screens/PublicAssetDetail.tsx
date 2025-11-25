@@ -1,5 +1,5 @@
 // src/screens/PublicAssetDetail.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "../lib/supabaseClient";
@@ -22,17 +22,17 @@ export default function PublicAssetDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
+  /* const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin; */
 
-  const qrDataUrl = useMemo(() => {
+  /* const qrDataUrl = useMemo(() => {
     if (!asset) return "";
     return `${siteUrl}/p/${asset.id}`;
-  }, [asset, siteUrl]);
+  }, [asset, siteUrl]); */
 
-  const qrImg = useMemo(() => {
+  /* const qrImg = useMemo(() => {
     if (!qrDataUrl) return "";
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrDataUrl)}`;
-  }, [qrDataUrl]);
+  }, [qrDataUrl]); */
 
   useEffect(() => {
     const load = async () => {
@@ -97,7 +97,7 @@ export default function PublicAssetDetail() {
       <div className="public-asset-shell">
         <div className="public-asset-card">
           <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-            Chargement…
+            Loading…
           </p>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function PublicAssetDetail() {
             }} 
             className="admin-link"
           >
-            Accès administrateur
+            Admin access
           </button>
         </div>
       </motion.div>
