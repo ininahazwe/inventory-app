@@ -17,68 +17,76 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
       return;
     }
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
+   printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
         <title>QR - ${assetLabel}</title>
         <style>
-          @page {
+        @page {
             size: 60mm 40mm;
             margin: 0;
-          }
-          
-          * {
+        }
+        
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-          }
-          
-          html, body {
+        }
+        
+        html, body {
             width: 60mm;
             height: 40mm;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            margin: 0;
+            padding: 0;
             background: #fff;
-          }
-          
-          .label {
+        }
+        
+        .label {
             width: 60mm;
             height: 40mm;
             display: flex;
             justify-content: center;
             align-items: center;
-          }
-          
-          .label img {
-            width: 35mm;
-            height: 35mm;
+            padding: 2mm;
+            margin-left: -5mm;
+        }
+        
+        .label img {
+            width: 34mm;
+            height: 34mm;
             object-fit: contain;
-          }
-          
-          @media print {
+            margin: 0 auto;
+        }
+        
+        @media print {
             html, body {
-              width: 60mm;
-              height: 40mm;
+            width: 60mm;
+            height: 40mm;
+            margin: 0 !important;
+            padding: 0 !important;
             }
-          }
+            
+            .label {
+            margin: 0 auto;
+            }
+        }
         </style>
-      </head>
-      <body>
+    </head>
+    <body>
         <div class="label">
-          <img src="${qrImg}" alt="QR Code" />
+        <img src="${qrImg}" alt="QR Code" />
         </div>
         <script>
-          window.onload = function() {
+        window.onload = function() {
             setTimeout(function() {
-              window.print();
-              window.onafterprint = function() { window.close(); };
+            window.print();
+            window.onafterprint = function() { window.close(); };
             }, 500);
-          };
+        };
         </script>
-      </body>
-      </html>
+    </body>
+    </html>
     `);
     
     printWindow.document.close();
