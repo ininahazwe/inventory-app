@@ -320,7 +320,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
       </Modal>
 
       {/* Modal gestion des emails autorisés */}
-      <Modal open={allowedEmailsOpen} onClose={() => setAllowedEmailsOpen(false)} title="Utilisateurs autorisés">
+      <Modal open={allowedEmailsOpen} onClose={() => setAllowedEmailsOpen(false)} title="Authorized users">
         <AllowedEmailsManager onClose={() => setAllowedEmailsOpen(false)} />
       </Modal>
 

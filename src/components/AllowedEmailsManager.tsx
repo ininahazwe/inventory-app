@@ -26,7 +26,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
       if (error) throw error;
       setEmails((data as AllowedEmail[]) ?? []);
     } catch (e: any) {
-      setError(e.message || "Erreur de chargement");
+      setError(e.message || "Loading error");
     } finally {
       setLoading(false);
     }
@@ -41,12 +41,12 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
     const email = newEmail.trim().toLowerCase();
     
     if (!email) {
-      setError("L'email est requis");
+      setError("Email is required");
       return;
     }
     
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Format d'email invalide");
+      setError("Invalid email format");
       return;
     }
 
@@ -65,9 +65,9 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
       await load();
     } catch (e: any) {
       if (e.message?.includes("duplicate")) {
-        setError("Cet email est déjà dans la liste");
+        setError("This email address is already in the list.");
       } else {
-        setError(e.message || "Erreur lors de l'ajout");
+        setError(e.message || "Error adding");
       }
     } finally {
       setAdding(false);
@@ -75,7 +75,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
   };
 
   const handleRemove = async (id: number, email: string) => {
-    if (!confirm(`Retirer ${email} de la liste des autorisés ?\n\nCet utilisateur ne pourra plus se connecter.`)) {
+    if (!confirm(`Remove ${email} from authorized list ?\n\nThis user will no longer be able to log in.`)) {
       return;
     }
 
@@ -93,11 +93,11 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ color: "var(--muted)", fontSize: 13 }}>
-          Seuls les emails listés ici peuvent se connecter.
+            Only email addresses listed here can log in
         </div>
         {onClose && (
           <button className="pill" onClick={onClose}>
-            Fermer
+            Close
           </button>
         )}
       </div>
@@ -117,14 +117,14 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
             <input
               className="input"
               type="text"
-              placeholder="Notes (optionnel)"
+              placeholder="Notes (optional)"
               value={newNotes}
               onChange={(e) => setNewNotes(e.target.value)}
               disabled={adding}
               style={{ flex: 1 }}
             />
             <button className="pill green-light" type="submit" disabled={adding}>
-              {adding ? "…" : "+ Ajouter"}
+              {adding ? "…" : "+ Add"}
             </button>
           </div>
         </div>
@@ -147,11 +147,11 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
       {/* Liste des emails */}
       {loading ? (
         <div style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>
-          Chargement...
+          Loading...
         </div>
       ) : emails.length === 0 ? (
         <div style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>
-          Aucun email autorisé. Ajoutez-en un pour commencer.
+          No email addresses allowed. Add one to get started.
         </div>
       ) : (
         <div style={{ maxHeight: 400, overflowY: "auto" }}>
@@ -160,7 +160,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
               <tr style={{ background: "#8D86C9" }}>
                 <th>Email</th>
                 <th>Notes</th>
-                <th>Ajouté le</th>
+                <th>Added</th>
                 <th></th>
               </tr>
             </thead>
@@ -178,7 +178,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
                         padding: "2px 6px",
                         borderRadius: 4
                       }}>
-                        protégé
+                        protected
                       </span>
                     )}
                   </td>
@@ -195,7 +195,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
                         style={{ background: "#f3d0d0", fontSize: 12, padding: "6px 10px" }}
                         onClick={() => handleRemove(item.id, item.email)}
                       >
-                        Retirer
+                        Remove
                       </button>
                     )}
                   </td>
@@ -215,9 +215,7 @@ export default function AllowedEmailsManager({ onClose }: { onClose?: () => void
         fontSize: 12,
         color: "var(--muted)"
       }}>
-        <strong>Note :</strong> Retirer un email empêche les nouvelles connexions, 
-        mais ne déconnecte pas les sessions actives. Pour forcer une déconnexion, 
-        supprimez l'utilisateur depuis le dashboard Supabase.
+        <strong>Note :</strong> Removing an email address prevents new logins,but does not disconnect active sessions. To force a logout, delete the user from the Supabase dashboard.
       </div>
     </div>
   );
