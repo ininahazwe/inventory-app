@@ -18,6 +18,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
     });
     
+    
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
         setSession(s);
         setIsLoading(false);
