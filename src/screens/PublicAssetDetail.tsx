@@ -125,9 +125,9 @@ export default function PublicAssetDetail() {
         transition={{ duration: 0.5 }}
       >
         {/* QR Code */}
-        <div className="public-qr-section">
+        {/* <div className="public-qr-section">
           <img src={qrImg} alt="QR Code" width={120} height={120} />
-        </div>
+        </div> */}
 
         {/* Header */}
         <div className="public-header">
@@ -158,7 +158,15 @@ export default function PublicAssetDetail() {
 
         {/* Footer */}
         <div className="public-footer">
-          <p>Scannez ce QR code pour accéder à cette fiche</p>
+          <button 
+            onClick={() => {
+              sessionStorage.setItem("redirectAfterLogin", `/asset/${asset.id}`);
+              window.location.href = `/asset/${asset.id}`;
+            }} 
+            className="admin-link"
+          >
+            Accès administrateur
+          </button>
         </div>
       </motion.div>
 
@@ -244,6 +252,23 @@ export default function PublicAssetDetail() {
           margin: 0;
           font-size: 12px;
           color: #6c5f5a;
+        }
+
+        .admin-link {
+          font-size: 12px;
+          color: #999;
+          text-decoration: none;
+          padding: 8px 16px;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+          display: inline-block;
+        }
+
+        .admin-link:hover {
+          color: #666;
+          border-color: #ccc;
+          background: #f9f9f9;
         }
       `}</style>
     </div>

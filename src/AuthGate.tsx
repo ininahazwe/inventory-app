@@ -13,17 +13,27 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data }) => {
-            setSession(data.session);
-            setIsLoading(false);
-        });
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-            setSession(s);
-            setIsLoading(false);
-        });
-        return () => sub.subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data }) => {
+        setSession(data.session);
+        setIsLoading(false);
+    });
+    
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+        setSession(s);
+        setIsLoading(false);
+        
+        // Redirection après login
+        if (s) {
+        const redirect = sessionStorage.getItem("redirectAfterLogin");
+        if (redirect) {
+            sessionStorage.removeItem("redirectAfterLogin");
+            window.location.href = redirect;
+        }
+        }
+    });
+    
+    return () => sub.subscription.unsubscribe();
     }, []);
-
     // Loader
     if (isLoading) {
         return (
