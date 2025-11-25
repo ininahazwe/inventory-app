@@ -466,7 +466,7 @@ export default function AssetDetail() {
                 <div>
                   <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
                   </div>
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button onClick={downloadQR} className="pill" style={{ textDecoration: "none" }}>
                       Download the QR
                     </button>
