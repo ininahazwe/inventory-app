@@ -17,76 +17,76 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
       return;
     }
 
-   printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
         <title>QR - ${assetLabel}</title>
         <style>
-        @page {
+          @page {
             size: 60mm 40mm;
-            margin: 0;
-        }
-        
-        * {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
-        
-        html, body {
-            width: 60mm;
-            height: 40mm;
-            margin: 0;
-            padding: 0;
-            background: #fff;
-        }
-        
-        .label {
-            width: 60mm;
-            height: 40mm;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 2mm;
-            margin-left: 30mm;
-        }
-        
-        .label img {
-            width: 34mm;
-            height: 34mm;
-            object-fit: contain;
-            margin: 0 auto;
-        }
-        
-        @media print {
-            html, body {
+          }
+          
+          html, body {
             width: 60mm;
             height: 40mm;
             margin: 0 !important;
             padding: 0 !important;
+            background: #fff;
+            overflow: hidden;
+          }
+          
+          .label {
+            position: absolute;
+            top: 3mm;
+            left: 13mm;  /* Décalage vers la droite - AJUSTE ICI */
+            width: 34mm;
+            height: 34mm;
+          }
+          
+          .label img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+          
+          @media print {
+            @page {
+              size: 60mm 40mm;
+              margin: 0 !important;
             }
             
-            .label {
-            margin: 0 auto;
+            html, body {
+              width: 60mm;
+              height: 40mm;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
-        }
+          }
         </style>
-    </head>
-    <body>
+      </head>
+      <body>
         <div class="label">
-        <img src="${qrImg}" alt="QR Code" />
+          <img src="${qrImg}" alt="QR Code" />
         </div>
         <script>
-        window.onload = function() {
+          window.onload = function() {
             setTimeout(function() {
-            window.print();
-            window.onafterprint = function() { window.close(); };
+              window.print();
+              window.onafterprint = function() { window.close(); };
             }, 500);
-        };
+          };
         </script>
-    </body>
-    </html>
+      </body>
+      </html>
     `);
     
     printWindow.document.close();
