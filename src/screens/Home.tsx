@@ -5,6 +5,7 @@ import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import Modal from "../components/Modal";
 import AssigneesManager from "../components/assignees/AssigneesManager";
+import AllowedEmailsManager from "../components/AllowedEmailsManager";
 import InventoryStats from "../components/InventoryStats";
 
 type Row = {
@@ -26,6 +27,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
 
   const [assigneesOpen, setAssigneesOpen] = useState(false);
+  const [allowedEmailsOpen, setAllowedEmailsOpen] = useState(false);
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignAssetId, setAssignAssetId] = useState<number | null>(null);
@@ -158,7 +160,12 @@ export default function Home({ onNew }: { onNew: () => void }) {
       {/* top row: titre + bouton nouveau */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12, padding: "12px" }}>
         <h2 style={{ margin:0, letterSpacing:.2 }}>Inventory</h2>
-        <div style={{ display:"flex", gap:8 }}>
+        <div style={{ display:"flex", gap:8, flexWrap: "wrap" }}>
+          {isAdmin && (
+            <button className="pill" onClick={() => setAllowedEmailsOpen(true)}>
+              Allowed users
+            </button>
+          )}
           <button className="pill" onClick={() => setAssigneesOpen(true)}>Manage assignees</button>
           <button className="pill" onClick={onNew}>+ New asset</button>
         </div>
@@ -307,6 +314,11 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
       <Modal open={assigneesOpen} onClose={() => setAssigneesOpen(false)} title="Manage assignees">
         <AssigneesManager onClose={() => setAssigneesOpen(false)} />
+      </Modal>
+
+      {/* Modal gestion des emails autorisés */}
+      <Modal open={allowedEmailsOpen} onClose={() => setAllowedEmailsOpen(false)} title="Utilisateurs autorisés">
+        <AllowedEmailsManager onClose={() => setAllowedEmailsOpen(false)} />
       </Modal>
 
       <InventoryStats
