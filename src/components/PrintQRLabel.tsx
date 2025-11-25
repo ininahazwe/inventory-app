@@ -49,7 +49,7 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
             justify-content: center;
             align-items: center;
             padding: 2mm;
-            margin-left: -5mm;
+            margin-left: 30mm;
         }
         
         .label img {
