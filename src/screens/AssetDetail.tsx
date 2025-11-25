@@ -7,6 +7,7 @@ import Modal from "../components/Modal";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
+import PrintQRLabel from "../components/PrintQRLabel";
 
 type Asset = {
   id: number;
@@ -463,12 +464,11 @@ export default function AssetDetail() {
               <div className="qr-section">
                 <img src={qrImg} alt="QR" width={180} height={180} />
                 <div>
-                  <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={downloadQR} className="pill" style={{ textDecoration: "none" }}>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
                       Télécharger le QR
-                    </button>
+                    </a>
+                    <PrintQRLabel assetId={asset.id} assetLabel={asset.label} />
                   </div>
                 </div>
               </div>
