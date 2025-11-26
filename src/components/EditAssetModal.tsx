@@ -61,7 +61,7 @@ export function EditAssetModal({
                     ? null
                     : Number.isNaN(Number(edPrice.replace(",", ".")))
                         ? (() => {
-                            throw new Error("Prix invalide");
+                            throw new Error("Invalid price");
                         })()
                         : Number((+edPrice.replace(",", ".")).toFixed(2));
 
@@ -84,14 +84,14 @@ export function EditAssetModal({
             onClose();
             await onSaved();
         } catch (err: any) {
-            setErrMsg(err.message || "Erreur d'enregistrement");
+            setErrMsg(err.message || "Saving error");
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <Modal open={open} onClose={onClose} title={`Modifier : ${asset?.label ?? "Matériel"}`}>
+        <Modal open={open} onClose={onClose} title={`Edit : ${asset?.label ?? "Asset"}`}>
             <form onSubmit={onSubmit} className="form-grid">
                 <div className="span-2">
                     <label className="label">Category</label>
@@ -100,27 +100,27 @@ export function EditAssetModal({
                         value={edCategoryName}
                         onChange={setEdCategoryName}
                         fetchOptions={fetchCategoryOptions}
-                        placeholder="Rechercher/ajouter…"
+                        placeholder="Search/add…"
                     />
                 </div>
                 <div>
-                    <label className="label">Numéro de série</label>
+                    <label className="label">Serial number</label>
                     <input className="field" value={edSerial} onChange={(e) => setEdSerial(e.target.value)} placeholder="SN…" />
                 </div>
                 <div>
-                    <label className="label">Prix d'achat</label>
+                    <label className="label">Purchase price</label>
                     <input className="field" type="text" inputMode="decimal" value={edPrice} onChange={(e) => setEdPrice(e.target.value)} placeholder="0.00" />
                 </div>
                 <div>
-                    <label className="label">Date d'achat</label>
+                    <label className="label">Purchase date</label>
                     <input className="field" type="date" value={edPurchasedAt} onChange={(e) => setEdPurchasedAt(e.target.value)} />
                 </div>
                 <div>
-                    <label className="label">Fin de garantie</label>
+                    <label className="label">End of warranty</label>
                     <input className="field" type="date" value={edWarrantyEnd} onChange={(e) => setEdWarrantyEnd(e.target.value)} />
                 </div>
                 <div className="span-2">
-                    <label className="label">Fournisseur</label>
+                    <label className="label">Supplier</label>
                     <input className="field" value={edSupplier} onChange={(e) => setEdSupplier(e.target.value)} placeholder="Ex : ABC Ltd." />
                 </div>
                 <div className="span-2">
@@ -131,7 +131,7 @@ export function EditAssetModal({
                     <p className="span-2" style={{ color: "crimson" }}>{errMsg}</p>
                 )}
                 <div className="span-2 modal-actions">
-                    <button type="button" className="pill pill--muted" onClick={onClose}>Annuler</button>
+                    <button type="button" className="pill pill--muted" onClick={onClose}>Cancel</button>
                     <button className="pill" disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
                 </div>
             </form>
