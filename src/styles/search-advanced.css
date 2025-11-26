@@ -1,0 +1,166 @@
+/* ===== Recherche avancée - Styles additionnels ===== */
+
+/* Select amélioré */
+.select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236c5f5a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+.select:focus {
+    border-color: var(--brand);
+}
+
+.select:hover {
+    border-color: var(--brand);
+}
+
+/* En-têtes de tableau triables */
+.table th[style*="cursor: pointer"]:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.table th {
+    transition: background 0.15s ease;
+}
+
+/* Indicateurs de tri */
+.sort-indicator {
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+/* Filtres avancés - espacement */
+.filters-advanced {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 12px 0 18px;
+}
+
+/* Date range picker */
+.date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-range input[type="date"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.date-range .separator {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+/* Bouton clear filters */
+.btn-clear-filters {
+    background: #f3d0d0;
+    color: var(--ink);
+    border: none;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s ease;
+}
+
+.btn-clear-filters:hover {
+    background: #eab8b8;
+}
+
+/* Toggle recherche avancée */
+.btn-toggle-advanced {
+    background: #f4f1ee;
+    color: var(--ink);
+    transition: all 0.2s ease;
+}
+
+.btn-toggle-advanced.active {
+    background: var(--brand);
+    color: #fff;
+}
+
+/* Responsive pour les nouveaux filtres */
+@media only screen and (max-width: 900px) {
+    .filters {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media only screen and (max-width: 600px) {
+    .filters {
+        grid-template-columns: 1fr;
+    }
+    
+    .date-range {
+        flex-wrap: wrap;
+    }
+    
+    .date-range input[type="date"] {
+        width: 100%;
+    }
+}
+
+/* Animation pour les changements de mode */
+.filters-container {
+    transition: all 0.3s ease;
+}
+
+/* Badge compteur de filtres actifs */
+.filter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+/* Styles pour les chips de statut dans le tableau */
+.status-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.status-chip.in_stock {
+    background: #e8f5e8;
+    color: #2d5a2d;
+}
+
+.status-chip.assigned {
+    background: #e8f0ff;
+    color: var(--brand);
+}
+
+.status-chip.repair {
+    background: #fff3cd;
+    color: #b98b46;
+}
+
+.status-chip.retired {
+    background: #eee;
+    color: #888;
+}

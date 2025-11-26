@@ -164,7 +164,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                 localization={{
                                     variables: {
                                         sign_in: {
-                                            social_provider_text: "Continuer avec {{provider}}",
+                                            social_provider_text: "Continue with {{provider}}",
                                         },
                                     },
                                 }}
