@@ -4,12 +4,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./lib/supabaseClient";
 import logo from "./assets/mfwa-logo.png";
 import { BlurIn } from "./components/TextBlur.tsx";
-import EmailWhitelistCheck from "./components/EmailWhitelistCheck"; // NOUVEAU
+import EmailWhitelistCheck from "./components/EmailWhitelistCheck";
+
+type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-    const [session, setSession] = useState
-        Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]
-    >(null);
+    const [session, setSession] = useState<Session>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -68,7 +68,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                                 </div>
                             </div>
 
-                            {/* REMPLACER Auth UI par notre composant */}
                             <EmailWhitelistCheck />
                         </motion.div>
                     </section>
