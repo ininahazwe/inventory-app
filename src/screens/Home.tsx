@@ -298,7 +298,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
     if (deleteAssetId == null) return;
     setDeleting(true);
     try {
-      const { data, error } = await supabase.rpc("delete_asset", { p_asset_id: deleteAssetId });
+      const { error } = await supabase.rpc("delete_asset", { p_asset_id: deleteAssetId });
       
       if (error) {
         // Afficher un message plus détaillé selon l'erreur
