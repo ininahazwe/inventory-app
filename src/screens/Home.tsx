@@ -86,6 +86,12 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [returnAssetId, setReturnAssetId] = useState<number | null>(null);
   const [returnAssetLabel, setReturnAssetLabel] = useState<string>("");
 
+  // Modal de suppression
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteAssetId, setDeleteAssetId] = useState<number | null>(null);
+  const [deleteAssetLabel, setDeleteAssetLabel] = useState<string>("");
+  const [deleting, setDeleting] = useState(false);
+
   // Export Excel
   const [exporting, setExporting] = useState(false);
 
@@ -273,6 +279,45 @@ export default function Home({ onNew }: { onNew: () => void }) {
       closeReturn();
       await load();
     } else alert(error.message);
+  };
+
+  // Fonctions pour la suppression
+  const openDelete = (id: number, label: string) => {
+    setDeleteAssetId(id);
+    setDeleteAssetLabel(label);
+    setDeleteOpen(true);
+  };
+
+  const closeDelete = () => {
+    setDeleteOpen(false);
+    setDeleteAssetId(null);
+    setDeleteAssetLabel("");
+  };
+
+  const confirmDelete = async () => {
+    if (deleteAssetId == null) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.rpc("delete_asset", { p_asset_id: deleteAssetId });
+      
+      if (error) {
+        // Afficher un message plus détaillé selon l'erreur
+        if (error.message.includes("active assignments")) {
+          alert("Cannot delete this asset: it has active assignments. Please return it first.");
+        } else {
+          alert(`Error: ${error.message}`);
+        }
+        return;
+      }
+
+      closeDelete();
+      await load();
+      setStatsRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      alert(`Error: ${err.message || "An error occurred"}`);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Gestion du tri
@@ -697,9 +742,18 @@ export default function Home({ onNew }: { onNew: () => void }) {
                 {isAdmin && (
                   <div className="actions">
                     {r.status !== "assigned" ? (
-                      <button className="pill green-light" onClick={() => openAssign(r.id, r.label)}>
-                        Assign
-                      </button>
+                      <>
+                        <button className="pill green-light" onClick={() => openAssign(r.id, r.label)}>
+                          Assign
+                        </button>
+                        <button 
+                          className="pill" 
+                          onClick={() => openDelete(r.id, r.label)}
+                          style={{ background: "#dc3545", color: "#fff" }}
+                        >
+                          Delete
+                        </button>
+                      </>
                     ) : (
                       <button className="pill" onClick={() => openReturn(r.id, r.label)}>
                         Return
@@ -811,6 +865,43 @@ export default function Home({ onNew }: { onNew: () => void }) {
           </button>
           <button className="pill" onClick={confirmReturn} type="button">
             Confirm
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal de confirmation de suppression */}
+      <Modal open={deleteOpen} onClose={closeDelete} title={`Delete asset : ${deleteAssetLabel}`}>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ color: "#dc3545", fontWeight: 600, marginBottom: 8 }}>
+            ⚠️ Warning: This action cannot be undone
+          </p>
+          <p>
+            This will permanently retire this asset from the inventory. 
+            The asset will be marked as "retired" and will no longer appear in the main list.
+          </p>
+          <p style={{ fontSize: 14, color: "var(--muted)" }}>
+            Note: Assets with active assignments cannot be deleted. 
+            Please return the asset first.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button 
+            className="pill" 
+            style={{ background: "#bbb" }} 
+            onClick={closeDelete} 
+            type="button"
+            disabled={deleting}
+          >
+            Cancel
+          </button>
+          <button 
+            className="pill" 
+            onClick={confirmDelete} 
+            type="button"
+            disabled={deleting}
+            style={{ background: "#dc3545", color: "#fff" }}
+          >
+            {deleting ? "Deleting..." : "Delete permanently"}
           </button>
         </div>
       </Modal>
