@@ -8,6 +8,7 @@ import Modal from "../components/Modal";
 import AssigneesManager from "../components/assignees/AssigneesManager";
 import AllowedEmailsManager from "../components/AllowedEmailsManager";
 import InventoryStats from "../components/InventoryStats";
+import { usePermissions } from "../hooks/usePermissions";
 
 type Row = {
   id: number;
@@ -68,7 +69,9 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  
+  // Hook pour vérifier les permissions
+  const permissions = usePermissions();
 
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
 
@@ -201,8 +204,6 @@ export default function Home({ onNew }: { onNew: () => void }) {
       await load();
       const { data } = await supabase.rpc("is_current_admin");
       setIsAdmin(!!data);
-      const { data: superData } = await supabase.rpc("is_current_super_admin");
-      setIsSuperAdmin(!!superData);
     })();
   }, [load]);
 
@@ -474,7 +475,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
       >
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {isSuperAdmin && (
+          {permissions.canManageUsers && (
             <button className="pill" onClick={() => setAllowedEmailsOpen(true)}>
               Allowed users
             </button>
