@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, type Variants } from "framer-motion";
 import { supabase } from "../lib/supabaseClient";
+import { usePermissions } from "../hooks/usePermissions";
 import Modal from "../components/Modal";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
-import PrintQRLabel from "../components/PrintQRLabel";
 
 type Asset = {
   id: number;
@@ -50,11 +50,11 @@ export default function AssetDetail() {
   const { id } = useParams();
   const assetId = Number(id);
   const navigate = useNavigate();
+  const { isAdmin } = usePermissions();
 
   const [asset, setAsset] = useState<Asset | null>(null);
   const [last, setLast] = useState<LastAssignment | null>(null);
   const [timeline, setTimeline] = useState<LifeEvent[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,8 +62,23 @@ export default function AssetDetail() {
   // États pour les modals
   const [lifecycleModalOpen, setLifecycleModalOpen] = useState(false);
   const [currentLifecycleAction, setCurrentLifecycleAction] = useState<LifecycleAction | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  // Animation fiche (balayage bas -> haut)
+  // États pour édition
+  const [edSerial, setEdSerial] = useState("");
+  const [edCategoryName, setEdCategoryName] = useState("");
+  const [edPurchasedAt, setEdPurchasedAt] = useState("");
+  const [edPrice, setEdPrice] = useState<string>("");
+  const [edSupplier, setEdSupplier] = useState("");
+  const [edWarrantyEnd, setEdWarrantyEnd] = useState("");
+  const [edNotes, setEdNotes] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [errEdit, setErrEdit] = useState<string | null>(null);
+
+  // Animation fiche
   const sweep: Variants = {
     initial: { y: 40, opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
@@ -91,24 +106,6 @@ export default function AssetDetail() {
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataUrl)}`;
   }, [qrDataUrl]);
 
-  const downloadQR = async () => {
-    try {
-      const response = await fetch(qrImg);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `asset-${asset?.id}-qr.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Erreur lors du téléchargement du QR:', error);
-      alert('Erreur lors du téléchargement du QR code');
-    }
-  };
-
   const warrantyDaysLeft = useMemo(() => {
     if (!asset?.warranty_end) return null;
     const end = new Date(asset.warranty_end + "T00:00:00");
@@ -117,7 +114,7 @@ export default function AssetDetail() {
     return Math.floor(ms / (1000 * 60 * 60 * 24));
   }, [asset?.warranty_end]);
 
-  const load = async () => {
+  const load = async (): Promise<void> => {
     setErr(null);
     try {
       // asset
@@ -127,12 +124,20 @@ export default function AssetDetail() {
         .eq("id", assetId)
         .single();
 
-      if (ea) { setErr(ea.message); return; }
+      if (ea) {
+        setErr(ea.message);
+        return;
+      }
 
-      // 'category' est l'objet joint; on l'aplatit dans category_name pour la fiche
-      const row: any = a;
+      type AssetWithCategory = Asset & {
+        category?: {
+          name: string;
+        };
+      };
+
+      const row = a as AssetWithCategory;
       setAsset({
-        ...(row as Asset),
+        ...row,
         category_name: row?.category?.name ?? null,
       });
 
@@ -142,7 +147,7 @@ export default function AssetDetail() {
         .select("*")
         .eq("asset_id", assetId)
         .maybeSingle();
-      setLast((la ?? null) as any);
+      setLast((la as LastAssignment) ?? null);
 
       // timeline
       const { data: tl } = await supabase
@@ -151,27 +156,27 @@ export default function AssetDetail() {
         .eq("asset_id", assetId)
         .order("event_at", { ascending: false });
       setTimeline((tl as LifeEvent[]) ?? []);
-    } catch (error: any) {
-      setErr(error.message || "Erreur lors du chargement");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error loading asset";
+      setErr(errorMessage);
     }
   };
 
   useEffect(() => {
-    (async () => {
+    (async (): Promise<void> => {
       setLoading(true);
       try {
-        const { data: adminData } = await supabase.rpc("is_current_admin");
-        setIsAdmin(!!adminData);
         await load();
-      } catch (error: any) {
-        setErr(error.message || "Erreur lors de l'initialisation");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Initialization error";
+        setErr(errorMessage);
       } finally {
         setLoading(false);
       }
     })();
   }, [assetId]);
 
-  // Ouverture des modals de cycle de vie
+  // Lifecycle modal handlers
   const openLifecycleModal = (action: LifecycleAction) => {
     setCurrentLifecycleAction(action);
     setLifecycleModalOpen(true);
@@ -182,12 +187,11 @@ export default function AssetDetail() {
     setCurrentLifecycleAction(null);
   };
 
-  // Gestionnaire pour les actions de cycle de vie - VERSION CORRIGÉE
-  const handleLifecycleAction = async (data: { notes?: string; cost?: number }) => {
+  const handleLifecycleAction = async (data: { notes?: string; cost?: number }): Promise<void> => {
     if (!currentLifecycleAction) return;
 
     setBusy(true);
-    setErr(null); // Reset l'erreur globale
+    setErr(null);
 
     try {
       let result;
@@ -216,68 +220,72 @@ export default function AssetDetail() {
           break;
 
         default:
-          throw new Error("Action non reconnue");
+          throw new Error("Unknown action");
       }
 
       if (result?.error) {
-        console.error(`Erreur ${currentLifecycleAction}:`, result.error);
-        throw new Error(result.error.message || "Erreur lors de l'opération");
+        console.error(`Error ${currentLifecycleAction}:`, result.error);
+        throw new Error(result.error.message || "Operation failed");
       }
 
-      // Succès : fermer le modal et recharger
       closeLifecycleModal();
       await load();
-
-    } catch (error: any) {
-      console.error(`Erreur ${currentLifecycleAction}:`, error);
-      // L'erreur sera affichée dans le modal via le throw
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error ${currentLifecycleAction}:`, errorMessage);
       throw error;
     } finally {
       setBusy(false);
     }
   };
 
-  const returnAsset = async () => {
+  // Return asset
+  const returnAsset = async (): Promise<void> => {
     try {
       setBusy(true);
       const { error } = await supabase.rpc("return_asset", { p_asset_id: assetId });
 
       if (error) {
-        alert(`Erreur: ${error.message}`);
+        setErr(`Error: ${error.message}`);
         return;
       }
 
       await load();
-    } catch (error: any) {
-      console.error("Erreur returnAsset:", error);
-      alert(`Erreur: ${error.message || "Une erreur est survenue"}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An error occurred";
+      console.error("Error returning asset:", errorMessage);
+      setErr(errorMessage);
     } finally {
       setBusy(false);
     }
   };
 
-  // Modals existants
-  const [assignOpen, setAssignOpen] = useState(false);
-  const openAssign = () => setAssignOpen(true);
-  const closeAssign = () => setAssignOpen(false);
+  // Delete asset
+  const deleteAsset = async (): Promise<void> => {
+    try {
+      setBusy(true);
+      setErr(null);
 
-  const [returnOpen, setReturnOpen] = useState(false);
-  const openReturn = () => setReturnOpen(true);
-  const closeReturn = () => setReturnOpen(false);
+      const { error } = await supabase.from("assets").delete().eq("id", assetId);
 
-  // Modal "Modifier"
-  const [editOpen, setEditOpen] = useState(false);
-  const [edSerial, setEdSerial] = useState("");
-  const [edCategoryName, setEdCategoryName] = useState("");
-  const [edPurchasedAt, setEdPurchasedAt] = useState("");
-  const [edPrice, setEdPrice] = useState<string>("");
-  const [edSupplier, setEdSupplier] = useState("");
-  const [edWarrantyEnd, setEdWarrantyEnd] = useState("");
-  const [edNotes, setEdNotes] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [errEdit, setErrEdit] = useState<string | null>(null);
+      if (error) {
+        setErr(`Error: ${error.message}`);
+        return;
+      }
 
-  const openEdit = async () => {
+      setDeleteConfirmOpen(false);
+      navigate("/");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An error occurred";
+      console.error("Error deleting asset:", errorMessage);
+      setErr(errorMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Edit asset
+  const openEdit = async (): Promise<void> => {
     if (!asset) return;
     setEdSerial(asset.serial_no ?? "");
     setEdCategoryName(asset.category_name ?? "");
@@ -290,11 +298,11 @@ export default function AssetDetail() {
     setEditOpen(true);
   };
 
-  async function fetchCategoryOptions(q: string) {
+  async function fetchCategoryOptions(q: string): Promise<string[]> {
     const base = supabase.from("categories").select("name").order("name").limit(10);
     const { data, error } = q ? await base.ilike("name", `%${q}%`) : await base;
     if (error) return [];
-    return (data ?? []).map((d: any) => d.name as string);
+    return (data ?? []).map((d: { name: string }): string => d.name);
   }
 
   async function getOrCreateCategoryId(name: string): Promise<number | null> {
@@ -307,7 +315,7 @@ export default function AssetDetail() {
     if (error) {
       const { data: retry } = await supabase.from("categories").select("id").eq("name", trimmed).maybeSingle();
       if (retry?.id) return retry.id as number;
-      throw new Error(error.message || "Impossible to create the category.");
+      throw new Error(error.message || "Unable to create category");
     }
     return created?.id ?? null;
   }
@@ -324,7 +332,7 @@ export default function AssetDetail() {
           ? null
           : Number.isNaN(Number(edPrice.replace(",", ".")))
             ? (() => {
-              throw new Error("Prix invalide");
+              throw new Error("Invalid price");
             })()
             : Number((+edPrice.replace(",", ".")).toFixed(2));
 
@@ -344,8 +352,9 @@ export default function AssetDetail() {
       if (error) throw new Error(error.message);
       setEditOpen(false);
       await load();
-    } catch (e: any) {
-      setErrEdit(e.message || "Erreur lors de l'enregistrement.");
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : "Error saving changes";
+      setErrEdit(errorMessage);
     } finally {
       setSavingEdit(false);
     }
@@ -355,7 +364,7 @@ export default function AssetDetail() {
     return (
       <main className="shell">
         <div className="shell-inner">
-          <p style={{ padding: 24 }}>Chargement…</p>
+          <p style={{ padding: 24 }}>Loading…</p>
         </div>
       </main>
     );
@@ -365,7 +374,7 @@ export default function AssetDetail() {
     return (
       <main className="shell">
         <div className="shell-inner">
-          <p style={{ padding: 24 }}>Matériel introuvable</p>
+          <p style={{ padding: 24 }}>Asset not found</p>
           {err && <p style={{ padding: 24, color: "crimson" }}>{err}</p>}
         </div>
       </main>
@@ -380,7 +389,7 @@ export default function AssetDetail() {
       transition={{ duration: 0.8 }}
     >
       <div className="shell-inner">
-        {/* X retour */}
+        {/* Close button */}
         <button
           aria-label="Close"
           onClick={() => navigate(-1)}
@@ -408,9 +417,9 @@ export default function AssetDetail() {
           ×
         </button>
 
-        {/* Corps animé */}
+        {/* Animated body */}
         <motion.div className="shell-body" variants={sweep} initial="initial" animate="animate" exit="exit">
-          {/* En-tête */}
+          {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingRight: 48 }}>
             <h2 style={{ margin: 0 }}>{asset.label}</h2>
             <span
@@ -435,7 +444,7 @@ export default function AssetDetail() {
             </span>
           </div>
 
-          {/* Infos principales */}
+          {/* Info section */}
           <section className="infos">
             <div className="presentation">
               <Info label="Serial number" value={asset.serial_no || "—"} />
@@ -452,7 +461,7 @@ export default function AssetDetail() {
                   asset.warranty_end
                     ? `${asset.warranty_end}${
                       typeof warrantyDaysLeft === "number"
-                        ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} j restants` : `${Math.abs(warrantyDaysLeft)} j dépassés`}`
+                        ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} days left` : `${Math.abs(warrantyDaysLeft)} days overdue`}`
                         : ""
                     }`
                     : "—"
@@ -460,23 +469,23 @@ export default function AssetDetail() {
               />
               {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
+
+            {/* QR Code Section */}
             <div>
               <div className="qr-section">
                 <img src={qrImg} alt="QR" width={180} height={180} />
                 <div>
-                  <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button onClick={downloadQR} className="pill" style={{ textDecoration: "none" }}>
-                      Download the QR
-                    </button>
-                    <PrintQRLabel assetId={asset.id} assetLabel={asset.label} />
+                  <div style={{ marginTop: 8 }}>
+                    <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
+                      Download QR
+                    </a>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Assignment Section */}
             <div>
-              {/* Attribution */}
               {last?.assignment_id ? (
                 <div style={{ display: "grid", gap: 4 }}>
                   <div>
@@ -489,33 +498,30 @@ export default function AssetDetail() {
                   </small>
                 </div>
               ) : (
-                <div>Aucune attribution</div>
+                <div>No assignments</div>
               )}
 
-              {isAdmin && (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  {asset.status !== "assigned" ? (
-                    <>
-                      <button className="pill" onClick={openAssign} disabled={busy}>
-                        {busy ? "…" : "Attribuer"}
-                      </button>
-                    </>
-                  ) : (
-                    <button className="pill" onClick={openReturn} disabled={busy}>
-                      {busy ? "…" : "Marquer comme retourné"}
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                {asset.status !== "assigned" ? (
+                  <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>
+                    {busy ? "…" : "Assign"}
+                  </button>
+                ) : (
+                  <button className="pill" onClick={() => setReturnOpen(true)} disabled={busy}>
+                    {busy ? "…" : "Mark as Returned"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
 
-          {/* Cycle de vie avec nouveaux modals - VERSION CORRIGÉE */}
-          {isAdmin && (
+          {/* Lifecycle Section */}
+          {asset.status !== "retired" && (
             <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
               <h3 style={{ margin: "8px 0" }}>Lifecycle</h3>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {asset.status !== "repair" && asset.status !== "retired" && (
+                {asset.status !== "repair" && (
                   <button
                     className="pill"
                     onClick={() => openLifecycleModal("repair")}
@@ -535,7 +541,7 @@ export default function AssetDetail() {
                     {busy ? "…" : "Return from repair"}
                   </button>
                 )}
-                {asset.status !== "retired" && (
+
                   <button
                     className="pill"
                     onClick={() => openLifecycleModal("retire")}
@@ -543,47 +549,61 @@ export default function AssetDetail() {
                     style={{
                       cursor: busy ? "not-allowed" : "pointer",
                       backgroundColor: "#dc3545",
-                      color: "white"
+                      color: "white",
                     }}
                   >
                     {busy ? "…" : "Retire permanently"}
                   </button>
-                )}
+
               </div>
             </section>
           )}
 
-          {/* Journal */}
+          {/* Activity Log Section */}
           <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
             <h3 style={{ margin: "8px 0" }}>Activity log</h3>
             {timeline.length === 0 ? (
-              <p style={{ color: "var(--muted)" }}>No event</p>
+              <p style={{ color: "var(--muted)" }}>No events</p>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 16 }} className="journal">
                 {timeline.map((ev) => (
                   <li key={ev.event_id}>
                     <code>{new Date(ev.event_at).toLocaleString()}</code> — <strong>{ev.event_type}</strong>
                     {ev.notes ? ` — ${ev.notes}` : ""}
-                    {ev.event_type === "maintenance" && ev.repair_cost != null ? ` — coût: ${ev.repair_cost.toFixed(2)}` : ""}
+                    {ev.event_type === "maintenance" && ev.repair_cost != null ? ` — cost: ${ev.repair_cost.toFixed(2)}` : ""}
                   </li>
                 ))}
               </ul>
             )}
           </section>
 
-          {/* Bouton Modifier */}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+          {/* Action buttons */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button className="pill" onClick={openEdit} disabled={busy}>
+              {busy ? "…" : "Edit"}
+            </button>
             {isAdmin && (
-              <button className="pill" onClick={openEdit} disabled={busy}>
-                {busy ? "…" : "Modifier"}
+              <button
+                className="pill"
+                style={{
+                  background: "#dc3545",
+                  color: "white",
+                  cursor: busy ? "not-allowed" : "pointer",
+                }}
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={busy}
+              >
+                {busy ? "…" : "Delete"}
               </button>
             )}
           </div>
 
-          {err && <p style={{ color: "crimson" }}>{err}</p>}
+          {err && <p style={{ color: "crimson", marginTop: 16 }}>{err}</p>}
         </motion.div>
 
-        {/* === Modal Cycle de vie === */}
+        {/* Modals */}
+
+        {/* Lifecycle Modal */}
         <LifecycleModal
           open={lifecycleModalOpen}
           onClose={closeLifecycleModal}
@@ -593,40 +613,68 @@ export default function AssetDetail() {
           busy={busy}
         />
 
-        {/* === Modal Attribuer === */}
-        <Modal open={assignOpen} onClose={closeAssign} title={`Attribuer : ${asset.label}`}>
+        {/* Assign Modal */}
+        <Modal open={assignOpen} onClose={() => setAssignOpen(false)} title={`Assign: ${asset.label}`}>
           <AssignAsset
             assetId={asset.id}
             onDone={async () => {
-              closeAssign();
+              setAssignOpen(false);
               await load();
             }}
           />
         </Modal>
 
-        {/* === Modal Retourner (confirmation) === */}
-        <Modal open={returnOpen} onClose={closeReturn} title={`Retourner : ${asset.label}`}>
-          <p>Confirmer le retour de ce matériel au stock ?</p>
+        {/* Return Confirmation Modal */}
+        <Modal open={returnOpen} onClose={() => setReturnOpen(false)} title={`Return: ${asset.label}`}>
+          <p>Confirm return of this asset to stock?</p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="pill" style={{ background: "#bbb" }} onClick={closeReturn} type="button" disabled={busy}>
-              Annuler
+            <button className="pill" style={{ background: "#bbb" }} onClick={() => setReturnOpen(false)} type="button" disabled={busy}>
+              Cancel
             </button>
             <button
               className="pill"
               onClick={async () => {
                 await returnAsset();
-                closeReturn();
+                setReturnOpen(false);
               }}
               type="button"
               disabled={busy}
             >
-              {busy ? "…" : "Confirmer"}
+              {busy ? "…" : "Confirm"}
             </button>
           </div>
         </Modal>
 
-        {/* === Modal Modifier === */}
-        <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Modifier : ${asset.label}`}>
+        {/* Delete Confirmation Modal */}
+        <Modal
+          open={deleteConfirmOpen}
+          onClose={() => setDeleteConfirmOpen(false)}
+          title={`Delete: ${asset.label}`}
+        >
+          <div style={{ paddingBottom: 16 }}>
+            <p style={{ color: "#c00", fontWeight: 600, marginBottom: 12 }}>
+              ⚠️ This action cannot be undone.
+            </p>
+            <p>Are you sure you want to permanently delete this asset?</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="pill" style={{ background: "#bbb" }} onClick={() => setDeleteConfirmOpen(false)} type="button" disabled={busy}>
+              Cancel
+            </button>
+            <button
+              className="pill"
+              style={{ background: "#dc3545", color: "white" }}
+              onClick={() => deleteAsset()}
+              type="button"
+              disabled={busy}
+            >
+              {busy ? "…" : "Delete Permanently"}
+            </button>
+          </div>
+        </Modal>
+
+        {/* Edit Modal */}
+        <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Edit: ${asset.label}`}>
           <form onSubmit={saveEdit} className="form-grid">
             <div className="span-2">
               <label className="label">Category</label>
@@ -635,17 +683,17 @@ export default function AssetDetail() {
                 value={edCategoryName}
                 onChange={setEdCategoryName}
                 fetchOptions={fetchCategoryOptions}
-                placeholder="Rechercher/ajouter…"
+                placeholder="Search/add…"
               />
             </div>
 
             <div>
-              <label className="label">Numéro de série</label>
+              <label className="label">Serial Number</label>
               <input className="field" value={edSerial} onChange={(e) => setEdSerial(e.target.value)} placeholder="SN…" />
             </div>
 
             <div>
-              <label className="label">Prix d'achat</label>
+              <label className="label">Purchase Price</label>
               <input
                 className="field"
                 type="text"
@@ -657,18 +705,18 @@ export default function AssetDetail() {
             </div>
 
             <div>
-              <label className="label">Date d'achat</label>
+              <label className="label">Purchase Date</label>
               <input className="field" type="date" value={edPurchasedAt} onChange={(e) => setEdPurchasedAt(e.target.value)} />
             </div>
 
             <div>
-              <label className="label">Fin de garantie</label>
+              <label className="label">Warranty End</label>
               <input className="field" type="date" value={edWarrantyEnd} onChange={(e) => setEdWarrantyEnd(e.target.value)} />
             </div>
 
             <div className="span-2">
-              <label className="label">Fournisseur</label>
-              <input className="field" value={edSupplier} onChange={(e) => setEdSupplier(e.target.value)} placeholder="Ex : ABC Ltd." />
+              <label className="label">Supplier</label>
+              <input className="field" value={edSupplier} onChange={(e) => setEdSupplier(e.target.value)} placeholder="Ex: ABC Ltd." />
             </div>
 
             <div className="span-2">
@@ -680,10 +728,10 @@ export default function AssetDetail() {
 
             <div className="span-2 modal-actions">
               <button type="button" className="pill pill--muted" onClick={() => setEditOpen(false)} disabled={savingEdit}>
-                Annuler
+                Cancel
               </button>
               <button className="pill" disabled={savingEdit}>
-                {savingEdit ? "Enregistrement…" : "Enregistrer"}
+                {savingEdit ? "Saving…" : "Save"}
               </button>
             </div>
           </form>
@@ -693,7 +741,7 @@ export default function AssetDetail() {
   );
 }
 
-function Info({ label, value, className }: { label: string; value: string; className?: string }) {
+function Info({ label, value, className }: { label: string; value: string; className?: string }): React.ReactElement {
   return (
     <div className={className} style={{ display: "grid", gap: 4 }}>
       <span style={{ fontWeight: 600 }}>{label}</span>
