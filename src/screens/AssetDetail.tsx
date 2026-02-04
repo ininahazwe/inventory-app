@@ -9,6 +9,7 @@ import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
 import AuditLog from "../components/AuditLog";
+import PublicAssetCard from "./PublicAssetCard";
 
 type Asset = {
   id: number;
@@ -53,6 +54,10 @@ export default function AssetDetail() {
   const navigate = useNavigate();
   const { isAdmin } = usePermissions();
 
+  // États pour détecter l'authentification
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
   const [asset, setAsset] = useState<Asset | null>(null);
   const [last, setLast] = useState<LastAssignment | null>(null);
   const [timeline, setTimeline] = useState<LifeEvent[]>([]);
@@ -95,6 +100,34 @@ export default function AssetDetail() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [navigate]);
+
+  // Vérifier l'authentification au montage
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        setIsAuthenticated(!!sessionData?.session);
+      } catch (error) {
+        console.error("Error checking auth:", error);
+        setIsAuthenticated(false);
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    checkAuth();
+
+    // S'abonner aux changements d'authentification
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setIsAuthenticated(!!session);
+      }
+    );
+
+    return () => {
+      subscription?.subscription.unsubscribe();
+    };
+  }, []);
 
   const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
   const qrDataUrl = useMemo(() => {
@@ -368,6 +401,23 @@ export default function AssetDetail() {
       setSavingEdit(false);
     }
   };
+
+
+  // Si on est en train de vérifier l'auth
+  if (!authChecked) {
+    return (
+      <main className="shell">
+        <div className="shell-inner">
+          <p style={{ padding: 24 }}>Vérification…</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Si pas authentifié, afficher la version publique
+  if (!isAuthenticated) {
+    return <PublicAssetCard />;
+  }
 
   if (loading) {
     return (

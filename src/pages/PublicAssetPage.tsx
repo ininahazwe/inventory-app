@@ -1,7 +1,7 @@
 // src/pages/PublicAssetPage.tsx
-import PublicAssetDetail from "../screens/PublicAssetDetail";
+import PublicAssetCard from "../screens/PublicAssetCard.tsx";
 import "../styles/theme.css";
 
 export default function PublicAssetPage() {
-  return <PublicAssetDetail />;
+  return <PublicAssetCard />;
 }
