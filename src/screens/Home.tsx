@@ -9,6 +9,7 @@ import Modal from "../components/Modal";
 import AssigneesManager from "../components/assignees/AssigneesManager";
 import UserManagementPanel from "../components/UserManagementPanel";
 import InventoryStats from "../components/InventoryStats";
+import AuditDashboard from "../components/AuditDashboard";
 
 type Row = {
   id: number;
@@ -34,6 +35,8 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
   const [assigneesOpen, setAssigneesOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
+
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignAssetId, setAssignAssetId] = useState<number | null>(null);
@@ -191,9 +194,14 @@ export default function Home({ onNew }: { onNew: () => void }) {
             Manage assignees
           </button>
           {isSuperAdmin && (
-            <button className="pill" onClick={() => setUserManagementOpen(true)}>
-              👥 User Management
-            </button>
+            <>
+              <button className="pill" onClick={() => setUserManagementOpen(true)}>
+                👥 User Management
+              </button>
+              <button className="pill" onClick={() => setAuditOpen(true)}>
+                📋 Audit Log
+              </button>
+            </>
           )}
           <button className="pill" onClick={onNew}>
             + New asset
@@ -378,9 +386,15 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
       {/* User Management Modal (Super Admin Only) */}
       {isSuperAdmin && (
-        <Modal open={userManagementOpen} onClose={() => setUserManagementOpen(false)} title="User Management">
-          <UserManagementPanel onClose={() => setUserManagementOpen(false)} />
-        </Modal>
+        <>
+          <Modal open={userManagementOpen} onClose={() => setUserManagementOpen(false)} title="User Management">
+            <UserManagementPanel onClose={() => setUserManagementOpen(false)} />
+          </Modal>
+
+          <Modal open={auditOpen} onClose={() => setAuditOpen(false)} title="📋 Audit Log">
+            <AuditDashboard />
+          </Modal>
+        </>
       )}
 
       {/* Stats */}

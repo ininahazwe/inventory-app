@@ -8,6 +8,7 @@ import Modal from "../components/Modal";
 import Autocomplete from "../components/Autocomplete";
 import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
+import AuditLog from "../components/AuditLog";
 
 type Asset = {
   id: number;
@@ -68,6 +69,7 @@ export default function AssetDetail() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // États pour édition
+  const [edLabel, setEdLabel] = useState("");  // ← NOUVEAU
   const [edSerial, setEdSerial] = useState("");
   const [edCategoryName, setEdCategoryName] = useState("");
   const [edPurchasedAt, setEdPurchasedAt] = useState("");
@@ -287,6 +289,7 @@ export default function AssetDetail() {
   // Edit asset
   const openEdit = async (): Promise<void> => {
     if (!asset) return;
+    setEdLabel(asset.label);
     setEdSerial(asset.serial_no ?? "");
     setEdCategoryName(asset.category_name ?? "");
     setEdPurchasedAt(asset.purchased_at ?? "");
@@ -326,6 +329,11 @@ export default function AssetDetail() {
     setSavingEdit(true);
     setErrEdit(null);
     try {
+      if (!edLabel.trim()) {
+        setErrEdit("Label is required");
+        setSavingEdit(false);
+        return;
+      }
       const category_id = await getOrCreateCategoryId(edCategoryName);
       const priceNum =
         edPrice.trim() === ""
@@ -339,6 +347,7 @@ export default function AssetDetail() {
       const { error } = await supabase
         .from("assets")
         .update({
+          label: edLabel.trim(),
           serial_no: edSerial.trim() || null,
           category_id,
           purchased_at: edPurchasedAt || null,
@@ -677,6 +686,16 @@ export default function AssetDetail() {
         <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Edit: ${asset.label}`}>
           <form onSubmit={saveEdit} className="form-grid">
             <div className="span-2">
+              <label className="label">Label *</label>
+              <input
+                className="field"
+                value={edLabel}
+                onChange={(e) => setEdLabel(e.target.value)}
+                placeholder="Asset label…"
+                required
+              />
+            </div>
+            <div className="span-2">
               <label className="label">Category</label>
               <Autocomplete
                 className="field"
@@ -737,6 +756,11 @@ export default function AssetDetail() {
           </form>
         </Modal>
       </div>
+
+      <section style={{ borderTop: "1px solid var(--line)", margin: "20px 6px" }}>
+        <h3 style={{ margin: "8px 0" }}>📋 Complete Audit History</h3>
+        <AuditLog entityType="asset" entityId={asset.id.toString()} limit={20} />
+      </section>
     </motion.main>
   );
 }
