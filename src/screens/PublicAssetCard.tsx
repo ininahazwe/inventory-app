@@ -135,7 +135,7 @@ export default function PublicAssetCard() {
       <div className="public-asset-shell">
         <div className="public-asset-card">
           <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-            Chargement…
+            Loading…
           </p>
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function PublicAssetCard() {
       <div className="public-asset-shell">
         <div className="public-asset-card">
           <p style={{ textAlign: "center", padding: 40, color: "crimson" }}>
-            {error || "Asset introuvable"}
+            {error || "Asset not found"}
           </p>
         </div>
       </div>
@@ -182,10 +182,10 @@ export default function PublicAssetCard() {
 
           {/* Infos */}
           <div className="public-infos">
-            <InfoRow label="Catégorie" value={asset.category_name || "—"} />
-            <InfoRow label="Numéro de série" value={asset.serial_no || "—"} />
+            <InfoRow label="Category" value={asset.category_name || "—"} />
+            <InfoRow label="Serial number" value={asset.serial_no || "—"} />
             <InfoRow
-              label="Date de création"
+              label="Creation date"
               value={
                 asset.created_at
                   ? new Date(asset.created_at).toLocaleDateString()
@@ -193,7 +193,7 @@ export default function PublicAssetCard() {
               }
             />
             {asset.status === "assigned" && asset.assignee_name && (
-              <InfoRow label="Assigné à" value={asset.assignee_name} />
+              <InfoRow label="Assigned to" value={asset.assignee_name} />
             )}
           </div>
 
@@ -209,10 +209,10 @@ export default function PublicAssetCard() {
                 marginBottom: 12,
               }}
             >
-              {authLoading ? "…" : "Voir plus →"}
+              {authLoading ? "…" : "See more →"}
             </button>
             <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
-              Connectez-vous pour voir tous les détails
+              Login to access more infos
             </p>
           </div>
         </motion.div>
@@ -227,7 +227,7 @@ export default function PublicAssetCard() {
       >
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ color: "var(--muted)", marginBottom: 20 }}>
-            Connectez-vous pour accéder aux détails complets de cet équipement.
+            Login to access more infos.
           </p>
           <button
             onClick={handleGoogleAuth}
@@ -260,7 +260,7 @@ export default function PublicAssetCard() {
 
       <style>{`
         .public-asset-shell {
-          min-height: 100vh;
+          min-height: auto;
           background: #E5E2DA;
           display: flex;
           justify-content: center;

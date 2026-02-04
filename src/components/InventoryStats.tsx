@@ -51,7 +51,7 @@ export default function InventoryStats({
       // Calculer les compteurs par catégorie
       const categoryMap = new Map<string, number>();
       allAssets.forEach(asset => {
-        const category = asset.category_name || "Sans catégorie";
+        const category = asset.category_name || "No category";
         categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
       });
 
