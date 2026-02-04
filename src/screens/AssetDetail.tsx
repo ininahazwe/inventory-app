@@ -557,13 +557,8 @@ export default function AssetDetail() {
                                   @media print { body { padding: 0; } }
                                 </style>
                               </head>
-                              <body>
-                                <h2>${asset.label}</h2>
-                                <p>ID: ${asset.id}</p>
-                                <img src="${qrImg}" alt="QR Code" />
-                                <p style="margin-top: 30px; font-size: 12px; color: #999;">
-                                  Printed on ${new Date().toLocaleDateString('en-US')}
-                                </p>
+                              <body>                         
+                                <img src="${qrImg}" alt="QR Code" />                            
                               </body>
                             </html>
                           `);
