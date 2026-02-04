@@ -1,17 +1,24 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import AuthGate from "./AuthGate";
 import "./styles/theme.css";
 import HomePage from "./pages/HomePage";
 import AssetDetailPage from "./pages/AssetDetailPage";
-import PublicAssetPage from "./pages/PublicAssetPage";
-import { ConfirmProvider } from "./components/ConfirmProvider"; 
+import AuthGateWrapper from "./AuthGateWrapper";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 
+// ✅ Une SEULE route pour /asset/:id
+// AssetDetail.tsx gère la logique:
+// - Si pas auth → affiche PublicAssetCard
+// - Si auth → affiche AssetDetail complet
 const router = createBrowserRouter([
-    { path: "/", element: <AuthGate><HomePage /></AuthGate> },
-    { path: "/asset/:id", element: <AuthGate><AssetDetailPage /></AuthGate> },
-    { path: "/p/:id", element: <PublicAssetPage /> },  // ← SANS AuthGate
+  {
+    element: <AuthGateWrapper />,
+    children: [
+      { path: "/", element: <HomePage /> },
+      { path: "/asset/:id", element: <AssetDetailPage /> }, // ← UNE SEULE route
+    ],
+  },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

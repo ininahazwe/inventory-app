@@ -1,19 +1,21 @@
-// src/AuthGate.tsx
-// ✅ CORRECTION: Sans useLocation() (qui cause l'erreur)
-
+import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "./lib/supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
-import logo from "./assets/mfwa-logo.png";
-import { BlurIn } from "./components/TextBlur.tsx";
+import logo from "../assets/mfwa-logo.png";
+import { BlurIn } from "./TextBlur.tsx";
 
-export default function AuthGate({ children }: { children: React.ReactNode }) {
+export default function RouteGuard({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const [session, setSession] = useState<
     Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]
   >(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ✅ Maintenant on peut utiliser useLocation() sans erreur
+  const isPublicRoute = location.pathname.match(/^\/asset\/\d+$/);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -40,16 +42,29 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // ✅ NOUVEAU: Si utilisateur n'est pas authentifié ET pas sur une route publique,
-  // afficher la page de connexion. Sinon, afficher le contenu (Router gère la logique)
+  // ✅ Si route publique, afficher le contenu directement (sans vérifier session)
+  if (isPublicRoute) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="app"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  // Si pas authentifié ET pas route publique → afficher page connexion
   if (!session) {
     return (
       <div className="auth-shell">
-        {/* Fond quadrillé + fondu vers le bas */}
         <div className="grid-bg" aria-hidden />
 
         <div className="login-wrap">
-          {/* Colonne gauche - Texte / Branding */}
           <section className="left-col">
             <div className="mini-topbar">
               <img src={logo} alt="MFWA" className="brand" />
@@ -63,7 +78,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </BlurIn>
           </section>
 
-          {/* Colonne droite - Auth Google */}
           <section className="right-col">
             <motion.div
               initial={{ opacity: 0, x: 0, scale: 0.5 }}
@@ -74,9 +88,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
               <div className="auth-card-head">
                 <div className="avatar">
                   <img src={logo} alt="MFWA" />
-                </div>
-                <div className="head-text">
-                  {/* Optional text */}
                 </div>
               </div>
 

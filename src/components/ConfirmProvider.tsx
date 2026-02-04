@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 export type ConfirmOptions = {
@@ -12,9 +12,9 @@ export type ConfirmOptions = {
 const ConfirmCtx = createContext<(o: ConfirmOptions) => Promise<boolean>>(() => Promise.resolve(false));
 
 
-export function useConfirm() {
-    return useContext(ConfirmCtx);
-}
+// export function useConfirm() {
+//     return useContext(ConfirmCtx);
+// }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     const [opts, setOpts] = useState<ConfirmOptions | null>(null);
