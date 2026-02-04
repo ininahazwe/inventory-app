@@ -105,13 +105,13 @@ export default function PublicAssetCard() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "in_stock":
-        return "En stock";
+        return "In stock";
       case "assigned":
-        return "Assigné";
+        return "Assigned";
       case "repair":
-        return "En réparation";
+        return "Under repair";
       case "retired":
-        return "Retiré";
+        return "Retired";
       default:
         return status;
     }

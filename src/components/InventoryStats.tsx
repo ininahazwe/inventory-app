@@ -147,7 +147,7 @@ export default function InventoryStats({
             borderRadius: 6,
             //border: "1px solid #c3d9ff"
           }}>
-            <div style={{ fontSize: 14, color: "#666", marginBottom: 2 }}>Assigné</div>
+            <div style={{ fontSize: 14, color: "#666", marginBottom: 2 }}>Assigned</div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--brand)" }}>
               {stats.assigned}
             </div>
