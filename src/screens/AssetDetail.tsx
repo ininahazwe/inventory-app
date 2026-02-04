@@ -92,10 +92,10 @@ export default function AssetDetail() {
     exit: { y: 20, opacity: 0, transition: { duration: 0.24, ease: "easeInOut" } },
   };
 
-  // ESC = retour
+  // ESC = go to home
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") navigate(-1);
+      if (e.key === "Escape") navigate("/");
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -451,7 +451,7 @@ export default function AssetDetail() {
         {/* Close button */}
         <button
           aria-label="Close"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/")}
           style={{
             position: "absolute",
             top: 0,
@@ -534,10 +534,49 @@ export default function AssetDetail() {
               <div className="qr-section">
                 <img src={qrImg} alt="QR" width={180} height={180} />
                 <div>
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                     <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: "none" }}>
                       Download QR
                     </a>
+                    <button
+                      type="button"
+                      className="pill"
+                      onClick={() => {
+                        const printWindow = window.open("", "_blank");
+                        if (printWindow) {
+                          printWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html>
+                              <head>
+                                <title>Print QR - ${asset.label}</title>
+                                <style>
+                                  body { margin: 0; padding: 20px; text-align: center; font-family: Arial, sans-serif; }
+                                  img { max-width: 400px; height: auto; margin: 20px 0; }
+                                  h2 { margin: 10px 0; font-size: 18px; }
+                                  p { color: #666; margin: 5px 0; font-size: 14px; }
+                                  @media print { body { padding: 0; } }
+                                </style>
+                              </head>
+                              <body>
+                                <h2>${asset.label}</h2>
+                                <p>ID: ${asset.id}</p>
+                                <img src="${qrImg}" alt="QR Code" />
+                                <p style="margin-top: 30px; font-size: 12px; color: #999;">
+                                  Printed on ${new Date().toLocaleDateString('en-US')}
+                                </p>
+                              </body>
+                            </html>
+                          `);
+                          printWindow.document.close();
+                          setTimeout(() => {
+                            printWindow.print();
+                          }, 250);
+                        }
+                      }}
+                      style={{ textDecoration: "none" }}
+                    >
+                      Print QR
+                    </button>
                   </div>
                 </div>
               </div>
@@ -601,18 +640,18 @@ export default function AssetDetail() {
                   </button>
                 )}
 
-                  <button
-                    className="pill"
-                    onClick={() => openLifecycleModal("retire")}
-                    disabled={busy}
-                    style={{
-                      cursor: busy ? "not-allowed" : "pointer",
-                      backgroundColor: "#dc3545",
-                      color: "white",
-                    }}
-                  >
-                    {busy ? "…" : "Retire permanently"}
-                  </button>
+                <button
+                  className="pill"
+                  onClick={() => openLifecycleModal("retire")}
+                  disabled={busy}
+                  style={{
+                    cursor: busy ? "not-allowed" : "pointer",
+                    backgroundColor: "#dc3545",
+                    color: "white",
+                  }}
+                >
+                  {busy ? "…" : "Retire permanently"}
+                </button>
 
               </div>
             </section>
