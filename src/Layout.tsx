@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import "./styles/theme.css"; // <-- important
 import "./styles/login.css";
-import logo from "./assets/mfwa-logo.png"
+import logo from "./assets/mfwa-logo.png";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<any>(null);
@@ -23,7 +23,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const login = async () => {
         await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo: `${window.location.origin}` }, // ajuste si tu as une route /auth/callback
+            options: { redirectTo: `${window.location.origin}` },
         });
     };
 
@@ -35,13 +35,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     return (
         <>
-
             <header className="site-shell">
                 <div className="site-band">
                     <div className="site-left">
                         <div className="brand-dot">
                             <span>
-                                <img src={logo} alt="logo"/>
+                                <img src={logo} alt="logo" onClick={() => navigate('/')}/>
                             </span>
                         </div>
                     </div>
@@ -52,7 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
                     <div className="site-right">
                         {user ? (
-                            <button className="pill red" onClick={logout}>Déconnexion</button>
+                            <button className="pill red" onClick={logout}>Log out</button>
                         ) : (
                             <button className="pill green" onClick={login}>Login</button>
                         )}

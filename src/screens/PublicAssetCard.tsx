@@ -1,6 +1,6 @@
 // src/screens/PublicAssetCard.tsx
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "../lib/supabaseClient";
 import Modal from "../components/Modal";
@@ -17,13 +17,12 @@ type PublicAsset = {
 
 export default function PublicAssetCard() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const assetId = Number(id);
 
   const [asset, setAsset] = useState<PublicAsset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // ✅ NOUVEAU: États pour l'authentification
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -62,16 +61,16 @@ export default function PublicAssetCard() {
     load();
   }, [assetId]);
 
-  // ✅ NOUVEAU: Gestionnaire pour le bouton "Do more"
-  const handleDoMore = async () => {
+  // Gestionnaire pour le bouton "Report an incident"
+  const handleReportIncident = async () => {
     try {
       setAuthLoading(true);
       // Vérifier si utilisateur est déjà authentifié
       const { data: sessionData } = await supabase.auth.getSession();
 
       if (sessionData?.session) {
-        // Déjà authentifié → recharger la page (affichera AssetDetail)
-        window.location.reload();
+        // Déjà authentifié → rediriger vers la page de signalement
+        navigate(`/asset/${assetId}/report-incident`);
         return;
       }
 
@@ -84,14 +83,14 @@ export default function PublicAssetCard() {
     }
   };
 
-  // ✅ NOUVEAU: Gestionnaire pour OAuth Google
+  // Gestionnaire pour OAuth Google
   const handleGoogleAuth = async () => {
     try {
       setAuthLoading(true);
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/asset/${assetId}`
+          redirectTo: `${window.location.origin}/asset/${assetId}/report-incident`
         },
       });
     } catch (error) {
@@ -135,7 +134,7 @@ export default function PublicAssetCard() {
       <div className="public-asset-shell">
         <div className="public-asset-card">
           <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-            Loading…
+            Chargement…
           </p>
         </div>
       </div>
@@ -197,10 +196,10 @@ export default function PublicAssetCard() {
             )}
           </div>
 
-          {/* Footer - Bouton "Do more" */}
+          {/* Footer - Bouton "Report an incident" */}
           <div className="public-footer">
             <button
-              onClick={handleDoMore}
+              onClick={handleReportIncident}
               disabled={authLoading}
               className="pill"
               style={{
@@ -209,10 +208,10 @@ export default function PublicAssetCard() {
                 marginBottom: 12,
               }}
             >
-              {authLoading ? "…" : "See more →"}
+              {authLoading ? "…" : "📋 Report an incident"}
             </button>
             <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
-              Login to access more infos
+              Login to report an incident
             </p>
           </div>
         </motion.div>
@@ -227,7 +226,7 @@ export default function PublicAssetCard() {
       >
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ color: "var(--muted)", marginBottom: 20 }}>
-            Login to access more infos.
+            Login to report an incident for this asset.
           </p>
           <button
             onClick={handleGoogleAuth}

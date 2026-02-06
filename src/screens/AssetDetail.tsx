@@ -10,6 +10,7 @@ import AssignAsset from "./AssignAsset";
 import LifecycleModal from "../components/LifecycleModal";
 import AuditLog from "../components/AuditLog";
 import PublicAssetCard from "./PublicAssetCard";
+import { IncidentForm } from "../components/IncidentForm";
 
 type Asset = {
   id: number;
@@ -91,6 +92,8 @@ export default function AssetDetail() {
     animate: { y: 0, opacity: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
     exit: { y: 20, opacity: 0, transition: { duration: 0.24, ease: "easeInOut" } },
   };
+
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
 
   // ESC = go to home
   useEffect(() => {
@@ -672,6 +675,13 @@ export default function AssetDetail() {
 
           {/* Action buttons */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button
+              className="pill"
+              onClick={() => setShowIncidentForm(true)}
+              style={{ background: '#b98b46' }} // Couleur distincte pour incident
+            >
+              📋 Report an incident
+            </button>
             <button className="pill" onClick={openEdit} disabled={busy}>
               {busy ? "…" : "Edit"}
             </button>
@@ -692,6 +702,23 @@ export default function AssetDetail() {
           </div>
 
           {err && <p style={{ color: "crimson", marginTop: 16 }}>{err}</p>}
+
+          <Modal
+            open={showIncidentForm}
+            onClose={() => setShowIncidentForm(false)}
+            title="Signaler un incident"
+          >
+            <IncidentForm
+              assetId={asset.id}
+              assetLabel={asset.label}
+              onCreated={(incidentId) => {
+                setShowIncidentForm(false);
+                // Optionnel : rediriger vers le détail de l'incident
+                navigate(`/incidents/${incidentId}`);
+              }}
+              onCancel={() => setShowIncidentForm(false)}
+            />
+          </Modal>
         </motion.div>
 
         {/* Modals */}

@@ -1,5 +1,4 @@
-// src/screens/Home.tsx
-import { useEffect, useMemo, useState } from "react";
+import {useEffect, useMemo, useState} from "react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../hooks/usePermissions";
 import { Link } from "react-router-dom";
@@ -10,6 +9,7 @@ import AssigneesManager from "../components/assignees/AssigneesManager";
 import UserManagementPanel from "../components/UserManagementPanel";
 import InventoryStats from "../components/InventoryStats";
 import AuditDashboard from "../components/AuditDashboard";
+import { useNavigate } from 'react-router-dom';
 
 type Row = {
   id: number;
@@ -24,6 +24,9 @@ type Row = {
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
+
+  const navigate = useNavigate();
+
   const { isSuperAdmin } = usePermissions();
   const [rows, setRows] = useState<Row[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -190,6 +193,13 @@ export default function Home({ onNew }: { onNew: () => void }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, padding: "12px" }}>
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: "flex", gap: 8 }}>
+
+          <button
+            className="pill"
+            onClick={() => navigate('/incidents')}
+          >
+            Incidents
+          </button>
           <button className="pill" onClick={() => setAssigneesOpen(true)}>
             Manage assignees
           </button>
