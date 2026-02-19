@@ -263,7 +263,7 @@ export const IncidentReport: React.FC = () => {
               type="text"
               id="location"
               name="location"
-              placeholder="Bureau, Magasin, etc."
+              placeholder="Office, Store, etc."
               value={formData.location}
               onChange={handleChange}
               className="field"

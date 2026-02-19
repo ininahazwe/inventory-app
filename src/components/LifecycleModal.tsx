@@ -79,11 +79,11 @@ export default function LifecycleModal({
   const getTitle = () => {
     switch (action) {
       case "repair":
-        return "Mettre en réparation";
+        return "Send for repair";
       case "exit_repair":
-        return "Sortie de réparation";
+        return "Repair completed";
       case "retire":
-        return "Retrait définitif";
+        return "Permanent removal";
       default:
         return "";
     }
@@ -92,11 +92,11 @@ export default function LifecycleModal({
   const getMessage = () => {
     switch (action) {
       case "repair":
-        return `Confirmer l'envoi de "${assetLabel}" en réparation ?`;
+        return `Confirm sending “${assetLabel}” for repair ?`;
       case "exit_repair":
-        return `Confirmer la sortie de réparation de "${assetLabel}" ?`;
+        return `Confirm repair completed for "${assetLabel}" ?`;
       case "retire":
-        return `Confirmer le retrait définitif de "${assetLabel}" ? Cette action est irréversible.`;
+        return `Confirm permanent removal of “${assetLabel}”? This action cannot be undone.`;
       default:
         return "";
     }
@@ -105,11 +105,11 @@ export default function LifecycleModal({
   const getDefaultNotes = () => {
     switch (action) {
       case "repair":
-        return "Envoyé en réparation";
+        return "Sent for repair";
       case "exit_repair":
-        return "Réparation terminée";
+        return "Repair completed";
       case "retire":
-        return "Retiré du service";
+        return "Withdrawn from service";
       default:
         return "";
     }
@@ -120,13 +120,13 @@ export default function LifecycleModal({
 
     switch (action) {
       case "repair":
-        return "Envoyer en réparation";
+        return "Send for repair";
       case "exit_repair":
-        return "Terminer la réparation";
+        return "Complete repair";
       case "retire":
-        return "Retirer définitivement";
+        return "Permanently remove";
       default:
-        return "Confirmer";
+        return "Confirm";
     }
   };
 
