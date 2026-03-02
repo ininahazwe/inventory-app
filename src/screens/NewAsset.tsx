@@ -14,6 +14,7 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
     const [supplier, setSupplier] = useState("");
     const [warrantyEnd, setWarrantyEnd] = useState(""); // yyyy-mm-dd
     const [notes, setNotes] = useState("");
+    const [funder, setFunder] = useState("");
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
@@ -61,6 +62,7 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
                     purchased_at: purchasedAt || null,
                     purchase_price: purchasePrice ? Number(purchasePrice) : null,
                     supplier: supplier.trim() || null,
+                    funder: funder || null,
                     warranty_end: warrantyEnd || null,
                     notes: notes.trim() || null,
                 })
@@ -79,7 +81,7 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
 
             // reset
             setLabel(""); setSerial(""); setCategoryName(""); setPurchasedAt("");
-            setPurchasePrice(""); setSupplier(""); setWarrantyEnd(""); setNotes("");
+            setPurchasePrice(""); setSupplier(""); setFunder(""); setWarrantyEnd(""); setNotes("");
 
             onCreated?.();
         } catch (e: any) {
@@ -123,6 +125,11 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
             <div>
                 <label className="label">Warranty end</label>
                 <input className="field" type="date" value={warrantyEnd} onChange={e=>setWarrantyEnd(e.target.value)} />
+            </div>
+
+            <div className="span-2">
+              <label className="label">Funder (optional)</label>
+              <input className="field" value={funder} onChange={e=>setFunder(e.target.value)} placeholder="Ex : EU" />
             </div>
 
             <div className="span-2">

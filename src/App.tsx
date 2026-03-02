@@ -14,7 +14,7 @@ export default function App() {
                 <NewAsset
                     onCreated={() => {
                         setShowNew(false);
-                        location.reload(); // simple; on peut remplacer par un refetch si tu préfères
+                        location.reload(); 
                     }}
                     onCancel={() => setShowNew(false)}
                 />

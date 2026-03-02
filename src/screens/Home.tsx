@@ -16,6 +16,7 @@ type Row = {
   label: string;
   status: "in_stock" | "assigned" | "repair" | "retired";
   serial_no: string | null;
+  funder: string | null;
   category_name: string | null;
   assignee_name: string | null;
   assignee_email: string | null;
@@ -72,6 +73,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         q = q.or(
           [
             `label.ilike.%${esc}%`,
+            `funder.ilike.%${esc}%`,
             `serial_no.ilike.%${esc}%`,
             `assignee_name.ilike.%${esc}%`,
             `assignee_email.ilike.%${esc}%`,
@@ -243,6 +245,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
           <th>Name</th>
           <th>Category</th>
           <th className="status">Status</th>
+          <th className="status">Funder</th>
           <th>Assigned to</th>
           <th></th>
         </tr>
@@ -259,6 +262,9 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <td>{r.category_name ?? "—"}</td>
             <td style={{ textTransform: "capitalize" }} className="status">
               {r.status}
+            </td>
+            <td style={{ textTransform: "capitalize" }} className="status">
+              {r.funder ?? "—"}
             </td>
             <td>
               {r.assignee_name ? (

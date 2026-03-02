@@ -22,6 +22,7 @@ type Asset = {
   purchased_at: string | null;
   purchase_price: number | null;
   supplier: string | null;
+  funder: string | null;
   warranty_end: string | null;
   qr_slug: string | null;
   notes: string | null;
@@ -81,6 +82,7 @@ export default function AssetDetail() {
   const [edPurchasedAt, setEdPurchasedAt] = useState("");
   const [edPrice, setEdPrice] = useState<string>("");
   const [edSupplier, setEdSupplier] = useState("");
+  const [edFunder, setEdFunder] = useState("");
   const [edWarrantyEnd, setEdWarrantyEnd] = useState("");
   const [edNotes, setEdNotes] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -331,6 +333,7 @@ export default function AssetDetail() {
     setEdPurchasedAt(asset.purchased_at ?? "");
     setEdPrice(asset.purchase_price != null ? String(asset.purchase_price) : "");
     setEdSupplier(asset.supplier ?? "");
+    setEdFunder(asset.funder ?? "");
     setEdWarrantyEnd(asset.warranty_end ?? "");
     setEdNotes(asset.notes ?? "");
     setErrEdit(null);
@@ -389,6 +392,7 @@ export default function AssetDetail() {
           purchased_at: edPurchasedAt || null,
           purchase_price: priceNum,
           supplier: edSupplier.trim() || null,
+          funder: edFunder.trim() || null,
           warranty_end: edWarrantyEnd || null,
           notes: edNotes.trim() || null,
         })
@@ -529,6 +533,7 @@ export default function AssetDetail() {
                     : "—"
                 }
               />
+              <Info label="Funder" value={asset.funder || "—"} />
               {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
 
@@ -844,9 +849,14 @@ export default function AssetDetail() {
               <input className="field" type="date" value={edWarrantyEnd} onChange={(e) => setEdWarrantyEnd(e.target.value)} />
             </div>
 
-            <div className="span-2">
+            <div>
               <label className="label">Supplier</label>
               <input className="field" value={edSupplier} onChange={(e) => setEdSupplier(e.target.value)} placeholder="Ex: ABC Ltd." />
+            </div>
+
+            <div>
+              <label className="label">Funder</label>
+              <input className="field" value={edFunder} onChange={(e) => setEdFunder(e.target.value)} placeholder="Ex: EU" />
             </div>
 
             <div className="span-2">

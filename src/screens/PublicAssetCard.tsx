@@ -10,6 +10,7 @@ type PublicAsset = {
   label: string;
   category_name: string | null;
   serial_no: string | null;
+  funder: string | null;
   status: "in_stock" | "assigned" | "repair" | "retired";
   created_at: string | null;
   assignee_name: string | null;
@@ -36,7 +37,7 @@ export default function PublicAssetCard() {
 
         const { data, error: fetchError, status } = await supabase
           .from("v_asset_overview")
-          .select("id, label, category_name, serial_no, status, assignee_name, created_at")
+          .select("id, label, category_name, serial_no, status, assignee_name, funder, created_at")
           .eq("id", assetId)
           .single();
 
@@ -194,6 +195,7 @@ export default function PublicAssetCard() {
             {asset.status === "assigned" && asset.assignee_name && (
               <InfoRow label="Assigned to" value={asset.assignee_name} />
             )}
+            <InfoRow label="Funder" value={asset.funder || "—"} />
           </div>
 
           {/* Footer - Bouton "Report an incident" */}
