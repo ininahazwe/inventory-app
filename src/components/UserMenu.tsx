@@ -1,10 +1,10 @@
 // src/components/UserMenu.tsx
-import { supabase } from "../lib/supabaseClient";
+import { auth } from '../lib/apiClient';
 
 export default function UserMenu() {
-    return (
-        <button onClick={() => supabase.auth.signOut()}>
-            Se déconnecter
-        </button>
-    );
+  return (
+    <button onClick={() => auth.signOut()}>
+      Se déconnecter
+    </button>
+  );
 }

@@ -1,49 +1,52 @@
 // src/hooks/usePermissions.ts
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { useEffect, useState } from 'react';
+import { auth, rpcMethods } from '../lib/apiClient';
 
-type Permissions = {
-  role: 'user' | 'admin' | 'super_admin';
-  isAdmin: boolean;      // admin ou super_admin
-  isSuperAdmin: boolean;
-  loading: boolean;
-};
+export interface UserInfo {
+  id: string;
+  email: string;
+  name: string;
+  picture: string;
+  role: string;
+}
 
-export function usePermissions(): Permissions {
-  const [perms, setPerms] = useState<Permissions>({
-    role: 'user',
-    isAdmin: false,
-    isSuperAdmin: false,
-    loading: true,
-  });
+export function usePermissions() {
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkPermissions = async () => {
       try {
-        const [
-          { data: roleData },
-          { data: isAdminData },
-          { data: isSuperAdminData },
-        ] = await Promise.all([
-          supabase.rpc('get_my_role'),
-          supabase.rpc('is_admin'),
-          supabase.rpc('is_super_admin'),
-        ]);
+        const { data, error } = await auth.getUser();
 
-        setPerms({
-          role: (roleData as any) ?? 'user',
-          isAdmin: !!isAdminData,
-          isSuperAdmin: !!isSuperAdminData,
-          loading: false,
-        });
-      } catch (error) {
-        console.error("Error checking permissions:", error);
-        setPerms((prev) => ({ ...prev, loading: false }));
+        if (!error && data) {
+          setUserInfo({
+            id: data.id,
+            email: data.email,
+            name: data.name,
+            picture: data.picture,
+            role: data.role,
+          });
+
+          // Check if admin
+          const { data: isAdminData } = await rpcMethods.is_admin(data.email);
+          setIsAdmin(isAdminData?.result ?? false);
+
+          // Check if super admin
+          const { data: isSuperAdminData } = await rpcMethods.is_super_admin(data.email);
+          setIsSuperAdmin(isSuperAdminData?.result ?? false);
+        }
+      } catch (err) {
+        console.error('Permission check error:', err);
+      } finally {
+        setLoading(false);
       }
     };
 
     checkPermissions();
   }, []);
 
-  return perms;
+  return { userInfo, isAdmin, isSuperAdmin, loading };
 }

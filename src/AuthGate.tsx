@@ -1,34 +1,25 @@
 // src/AuthGate.tsx
-// ✅ CORRECTION: Sans useLocation() (qui cause l'erreur)
-
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "./lib/supabaseClient";
-import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
+import { token, auth } from "./lib/apiClient";
 import logo from "./assets/mfwa-logo.png";
 import { BlurIn } from "./components/TextBlur.tsx";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<
-    Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]
-  >(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsLoading(false);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setIsLoading(false);
-    });
-    return () => sub.subscription.unsubscribe();
+    if (token.get()) {
+      auth.getUser().then(({ data, error }) => {
+        setAuthenticated(!error && !!data);
+      });
+    } else {
+      setAuthenticated(false);
+    }
   }, []);
 
   // Loader
-  if (isLoading) {
+  if (authenticated === null) {
     return (
       <div className="auth-shell loader-shell">
         <motion.div
@@ -40,16 +31,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // ✅ NOUVEAU: Si utilisateur n'est pas authentifié ET pas sur une route publique,
-  // afficher la page de connexion. Sinon, afficher le contenu (Router gère la logique)
-  if (!session) {
+  // Non authentifié → page connexion
+  if (!authenticated) {
     return (
       <div className="auth-shell">
-        {/* Fond quadrillé + fondu vers le bas */}
         <div className="grid-bg" aria-hidden />
 
         <div className="login-wrap">
-          {/* Colonne gauche - Texte / Branding */}
           <section className="left-col">
             <div className="mini-topbar">
               <img src={logo} alt="MFWA" className="brand" />
@@ -63,7 +51,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </BlurIn>
           </section>
 
-          {/* Colonne droite - Auth Google */}
           <section className="right-col">
             <motion.div
               initial={{ opacity: 0, x: 0, scale: 0.5 }}
@@ -75,64 +62,41 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 <div className="avatar">
                   <img src={logo} alt="MFWA" />
                 </div>
-                <div className="head-text">
-                  {/* Optional text */}
-                </div>
+                <div className="head-text" />
               </div>
 
-              <Auth
-                supabaseClient={supabase}
-                providers={["google"]}
-                onlyThirdPartyProviders
-                appearance={{
-                  theme: ThemeSupa,
-                  variables: {
-                    default: {
-                      colors: {
-                        brand: "#111111",
-                        brandAccent: "#000000",
-                        brandButtonText: "#ffffff",
-                        defaultButtonBackground: "#f3f3f2",
-                        defaultButtonBackgroundHover: "#e9e9e8",
-                        inputBackground: "#ffffff",
-                        inputBorder: "#e5e5e0",
-                        inputBorderHover: "#b3b3ae",
-                        inputBorderFocus: "#111111",
-                      },
-                      radii: {
-                        borderRadiusButton: "12px",
-                        inputBorderRadius: "12px",
-                      },
-                      space: {
-                        buttonPadding: "12px 16px",
-                        inputPadding: "12px 14px",
-                      },
-                      fonts: {
-                        bodyFontFamily:
-                          'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"',
-                        buttonFontFamily: "inherit",
-                        inputFontFamily: "inherit",
-                      },
-                    },
-                  },
-                  style: {
-                    button: {
-                      borderRadius: "12px",
-                      fontWeight: 600,
-                    },
-                    anchor: { fontWeight: 600 },
-                    input: { borderRadius: "12px", fontSize: "16px" },
-                    label: { fontWeight: 600, color: "#222" },
-                  },
+              <button
+                onClick={() => auth.signInWithGoogle('/')}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  border: "1px solid #e5e5e0",
+                  background: "#f3f3f2",
+                  color: "#1a1a1a",
+                  fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial',
+                  fontWeight: 600,
+                  fontSize: "15px",
+                  cursor: "pointer",
+                  transition: "background 0.15s ease",
                 }}
-                localization={{
-                  variables: {
-                    sign_in: {
-                      social_provider_text: "Continuer avec {{provider}}",
-                    },
-                  },
-                }}
-              />
+                onMouseEnter={e => (e.currentTarget.style.background = "#e9e9e8")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#f3f3f2")}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                  <g fill="none" fillRule="evenodd">
+                    <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                    <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                  </g>
+                </svg>
+                Continuer avec Google
+              </button>
             </motion.div>
           </section>
         </div>
@@ -140,7 +104,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // APP authentifiée
+  // Authentifié
   return (
     <AnimatePresence mode="wait">
       <motion.div

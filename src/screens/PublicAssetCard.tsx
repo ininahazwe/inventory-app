@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { supabase } from "../lib/supabaseClient";
+import { api, auth, token } from "../lib/apiClient";
 import Modal from "../components/Modal";
 
 type PublicAsset = {
@@ -21,61 +21,27 @@ export default function PublicAssetCard() {
   const navigate = useNavigate();
   const assetId = Number(id);
 
-  const [asset, setAsset] = useState<PublicAsset | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
+  const [asset, setAsset]                     = useState<PublicAsset | null>(null);
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState<string | null>(null);
+  const [authModalOpen, setAuthModalOpen]     = useState(false);
+  const [authLoading, setAuthLoading]         = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        console.log("Fetching asset ID:", assetId);
-
-        const { data, error: fetchError, status } = await supabase
-          .from("v_asset_overview")
-          .select("id, label, category_name, serial_no, status, assignee_name, funder, created_at")
-          .eq("id", assetId)
-          .single();
-
-        console.log("Response status:", status);
-        console.log("Response data:", data);
-        console.log("Response error:", fetchError);
-
-        if (fetchError) {
-          setError("Asset introuvable");
-          return;
-        }
-
-        setAsset(data as PublicAsset);
-      } catch (err: any) {
-        console.log("Catch error:", err);
-        setError(err.message || "Erreur de chargement");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
+    api.get<PublicAsset>(`/assets/${assetId}/overview`, false).then(({ data, error }) => {
+      if (error) setError("Asset introuvable");
+      else setAsset(data);
+      setLoading(false);
+    });
   }, [assetId]);
 
-  // Gestionnaire pour le bouton "Report an incident"
   const handleReportIncident = async () => {
     try {
       setAuthLoading(true);
-      // Vérifier si utilisateur est déjà authentifié
-      const { data: sessionData } = await supabase.auth.getSession();
-
-      if (sessionData?.session) {
-        // Déjà authentifié → rediriger vers la page de signalement
+      if (token.get()) {
         navigate(`/asset/${assetId}/report-incident`);
         return;
       }
-
-      // Sinon afficher le modal d'authentification
       setAuthModalOpen(true);
     } catch (error) {
       console.error("Error checking session:", error);
@@ -84,253 +50,88 @@ export default function PublicAssetCard() {
     }
   };
 
-  // Gestionnaire pour OAuth Google
-  const handleGoogleAuth = async () => {
-    try {
-      setAuthLoading(true);
-      await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/asset/${assetId}/report-incident`
-        },
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Erreur d'authentification";
-      setError(errorMessage);
-    } finally {
-      setAuthLoading(false);
-    }
+  const handleGoogleAuth = () => {
+    setAuthLoading(true);
+    auth.signInWithGoogle(`/asset/${assetId}/report-incident`);
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "in_stock":
-        return "In stock";
-      case "assigned":
-        return "Assigned";
-      case "repair":
-        return "Under repair";
-      case "retired":
-        return "Retired";
-      default:
-        return status;
-    }
-  };
+  const getStatusLabel = (status: string) => ({
+    in_stock: "In stock", assigned: "Assigned", repair: "Under repair", retired: "Retired",
+  }[status] || status);
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "assigned":
-        return { background: "var(--brand)", color: "#fff" };
-      case "repair":
-        return { background: "#b98b46", color: "#fff" };
-      case "retired":
-        return { background: "#eee", color: "#888" };
-      default:
-        return { background: "#f4f1ee", color: "var(--ink)" };
-    }
-  };
+  const getStatusStyle = (status: string) => ({
+    assigned: { background: "var(--brand)", color: "#fff" },
+    repair:   { background: "#b98b46",       color: "#fff" },
+    retired:  { background: "#eee",          color: "#888" },
+  }[status] || { background: "#f4f1ee", color: "var(--ink)" });
 
-  if (loading) {
-    return (
-      <div className="public-asset-shell">
-        <div className="public-asset-card">
-          <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-            Chargement…
-          </p>
-        </div>
+  if (loading) return (
+    <div className="public-asset-shell">
+      <div className="public-asset-card">
+        <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Chargement…</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (error || !asset) {
-    return (
-      <div className="public-asset-shell">
-        <div className="public-asset-card">
-          <p style={{ textAlign: "center", padding: 40, color: "crimson" }}>
-            {error || "Asset not found"}
-          </p>
-        </div>
+  if (error || !asset) return (
+    <div className="public-asset-shell">
+      <div className="public-asset-card">
+        <p style={{ textAlign: "center", padding: 40, color: "crimson" }}>{error || "Asset not found"}</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <>
       <div className="public-asset-shell">
-        <motion.div
-          className="public-asset-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Header */}
+        <motion.div className="public-asset-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <div className="public-header">
             <h1 className="public-title">{asset.label}</h1>
-            <span
-              className="public-status"
-              style={{
-                ...getStatusStyle(asset.status),
-                padding: "6px 12px",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
+            <span className="public-status" style={{ ...getStatusStyle(asset.status), padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
               {getStatusLabel(asset.status)}
             </span>
           </div>
 
-          {/* Infos */}
           <div className="public-infos">
-            <InfoRow label="Category" value={asset.category_name || "—"} />
+            <InfoRow label="Category"      value={asset.category_name || "—"} />
             <InfoRow label="Serial number" value={asset.serial_no || "—"} />
-            <InfoRow
-              label="Creation date"
-              value={
-                asset.created_at
-                  ? new Date(asset.created_at).toLocaleDateString()
-                  : "—"
-              }
-            />
-            {asset.status === "assigned" && asset.assignee_name && (
-              <InfoRow label="Assigned to" value={asset.assignee_name} />
-            )}
+            <InfoRow label="Creation date" value={asset.created_at ? new Date(asset.created_at).toLocaleDateString() : "—"} />
+            {asset.status === "assigned" && asset.assignee_name && <InfoRow label="Assigned to" value={asset.assignee_name} />}
             <InfoRow label="Funder" value={asset.funder || "—"} />
           </div>
 
-          {/* Footer - Bouton "Report an incident" */}
           <div className="public-footer">
-            <button
-              onClick={handleReportIncident}
-              disabled={authLoading}
-              className="pill"
-              style={{
-                width: "100%",
-                padding: "12px 20px",
-                marginBottom: 12,
-              }}
-            >
+            <button onClick={handleReportIncident} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", marginBottom: 12 }}>
               {authLoading ? "…" : "📋 Report an incident"}
             </button>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
-              Login to report an incident
-            </p>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>Login to report an incident</p>
           </div>
         </motion.div>
       </div>
 
-      {/* Modal d'authentification */}
-      <Modal
-        open={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        title="Se connecter"
-        closeOnBackdrop={!authLoading}
-      >
+      <Modal open={authModalOpen} onClose={() => setAuthModalOpen(false)} title="Se connecter" closeOnBackdrop={!authLoading}>
         <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <p style={{ color: "var(--muted)", marginBottom: 20 }}>
-            Login to report an incident for this asset.
-          </p>
-          <button
-            onClick={handleGoogleAuth}
-            disabled={authLoading}
-            className="pill"
-            style={{
-              width: "100%",
-              padding: "12px 20px",
-              background: "#1f2937",
-              color: "#fff",
-              marginBottom: 12,
-            }}
-          >
+          <p style={{ color: "var(--muted)", marginBottom: 20 }}>Login to report an incident for this asset.</p>
+          <button onClick={handleGoogleAuth} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", background: "#1f2937", color: "#fff", marginBottom: 12 }}>
             {authLoading ? "Connexion…" : "Continuer avec Google"}
           </button>
-          <button
-            onClick={() => setAuthModalOpen(false)}
-            disabled={authLoading}
-            className="pill"
-            style={{
-              width: "100%",
-              padding: "12px 20px",
-              background: "#bbb",
-            }}
-          >
+          <button onClick={() => setAuthModalOpen(false)} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", background: "#bbb" }}>
             Annuler
           </button>
         </div>
       </Modal>
 
       <style>{`
-        .public-asset-shell {
-          min-height: auto;
-          background: #E5E2DA;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 20px;
-          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-        }
-        
-        .public-asset-card {
-          background: #fff;
-          border-radius: 24px;
-          padding: 32px;
-          max-width: 400px;
-          width: 100%;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-        }
-        
-        .public-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-          gap: 12px;
-          flex-wrap: wrap;
-        }
-        
-        .public-title {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 700;
-          color: #242038;
-        }
-        
-        .public-infos {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          padding: 20px;
-          background: #f9f8f6;
-          border-radius: 16px;
-        }
-        
-        .public-info-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        
-        .public-info-label {
-          font-size: 14px;
-          color: #6c5f5a;
-        }
-        
-        .public-info-value {
-          font-size: 14px;
-          font-weight: 600;
-          color: #242038;
-        }
-        
-        .public-footer {
-          margin-top: 24px;
-          text-align: center;
-        }
-        
-        .public-footer p {
-          margin: 0;
-          font-size: 12px;
-          color: #6c5f5a;
-        }
+        .public-asset-shell { min-height: auto; background: #E5E2DA; display: flex; justify-content: center; align-items: center; padding: 20px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+        .public-asset-card { background: #fff; border-radius: 24px; padding: 32px; max-width: 400px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        .public-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap; }
+        .public-title { margin: 0; font-size: 24px; font-weight: 700; color: #242038; }
+        .public-infos { display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #f9f8f6; border-radius: 16px; }
+        .public-info-row { display: flex; justify-content: space-between; align-items: center; }
+        .public-info-label { font-size: 14px; color: #6c5f5a; }
+        .public-info-value { font-size: 14px; font-weight: 600; color: #242038; }
+        .public-footer { margin-top: 24px; text-align: center; }
+        .public-footer p { margin: 0; font-size: 12px; color: #6c5f5a; }
       `}</style>
     </>
   );
