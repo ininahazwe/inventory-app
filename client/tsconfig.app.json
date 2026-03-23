@@ -1,12 +1,11 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "outDir": "./client/dist",
+    "outDir": "./dist",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "skipLibCheck": true,
-    "jsx": "react"
+    "skipLibCheck": true
   },
-  "include": ["client/src"],
+  "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
