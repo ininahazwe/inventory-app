@@ -19,13 +19,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'a3c91f805485a745645f1cb0125ddcdc9b
 const JWT_EXPIRES_IN = '7d';
 
 const db = mysql.createPool({
-  host: process.env.DB_HOST || '92.205.29.244',
+  host: process.env.DB_HOST || '92.205.29.244',  // IP serveur cPanel
   user: process.env.DB_USER || 'techsupport',
   password: process.env.DB_PASSWORD || 'techsupport2026',
   database: process.env.DB_NAME || 'assetmngt',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelayMs: 0,
 });
 
 const dbPromise = db.promise();
@@ -414,11 +416,28 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
 // ROUTES: Incidents
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// affichage liste incidents
 app.get('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const [incidents] = await dbPromise.query(
-        'SELECT * FROM lifecycle_events WHERE event_type IN ("repair", "maintenance") ORDER BY created_at DESC'
-    );
+    const userEmail = req.user.email; // Récupère l'email en JavaScript
+
+    const [incidents] = await dbPromise.query(`
+      SELECT 
+        le.id,
+        le.asset_id,
+        a.label as asset_label,
+        le.event_type as incident_type,
+        'medium' as severity,
+        'open' as status,
+        ? as reported_by_email,
+        le.created_at,
+        le.notes
+      FROM lifecycle_events le
+      LEFT JOIN assets a ON le.asset_id = a.id
+      WHERE le.event_type IN ('repair', 'maintenance')
+      ORDER BY le.created_at DESC
+    `, [userEmail]);
+
     return res.json(incidents || []);
   } catch (err) {
     console.error('GET /api/incidents error:', err);
@@ -426,6 +445,39 @@ app.get('/api/incidents', verifyJWT, async (req, res) => {
   }
 });
 
+// affichage incident
+app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [incidents] = await dbPromise.query(`
+      SELECT 
+        le.id,
+        le.asset_id,
+        a.label as asset_label,
+        le.event_type as incident_type,
+        'medium' as severity,
+        'open' as status,
+        le.created_by as reported_by_email,
+        le.created_at,
+        le.notes
+      FROM lifecycle_events le
+      LEFT JOIN assets a ON le.asset_id = a.id
+      WHERE le.id = ? LIMIT 1
+    `, [id]);
+
+    if (!incidents || incidents.length === 0) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    return res.json(incidents[0]);
+  } catch (err) {
+    console.error('GET /api/incidents/:id error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// creation incident
 app.post('/api/incidents', verifyJWT, async (req, res) => {
   try {
     const { asset_id, event_type, notes } = req.body;
@@ -443,6 +495,45 @@ app.post('/api/incidents', verifyJWT, async (req, res) => {
     return res.status(201).json({ id: result.insertId });
   } catch (err) {
     console.error('POST /api/incidents error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// mise à jour statut
+app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    console.log(`PATCH /incidents/${id}/status -> status: ${status}`);
+
+    if (!status) {
+      return res.status(400).json({ error: 'status is required' });
+    }
+
+    const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
+
+    const [result] = await dbPromise.query(
+        `UPDATE lifecycle_events 
+       SET status = ?, resolved_at = ?
+       WHERE id = ?`,
+        [status, resolvedAt, id]
+    );
+
+    console.log(`Updated ${result.affectedRows} rows`);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('PATCH /api/incidents/:id/status error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

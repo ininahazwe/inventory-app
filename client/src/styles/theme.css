@@ -34,7 +34,7 @@ body{
 .pill{
     border:0; cursor:pointer;
     background:var(--brand); color:#fff;
-    padding:10px 16px; border-radius:999px;
+    padding:2px 16px; border-radius:999px;
     transition: background .2s ease, transform .08s ease;
 }
 .pill:hover{ background:var(--brand-2) }

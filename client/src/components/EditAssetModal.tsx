@@ -47,19 +47,19 @@ export function EditAssetModal({ open, onClose, asset, onSaved }: { open: boolea
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={`Modifier : ${asset?.label ?? 'Asset'}`}>
+    <Modal open={open} onClose={onClose} title={`Edit: ${asset?.label ?? 'Asset'}`}>
       <form onSubmit={onSubmit} className="form-grid">
-        <div className="span-2"><label className="label">Catégorie</label><Autocomplete className="field" value={edCategoryName} onChange={setEdCategoryName} fetchOptions={fetchCategoryOptions} placeholder="Chercher/ajouter…" /></div>
-        <div><label className="label">Numéro de série</label><input className="field" value={edSerial} onChange={e => setEdSerial(e.target.value)} placeholder="SN…" /></div>
-        <div><label className="label">Prix d'achat</label><input className="field" type="text" inputMode="decimal" value={edPrice} onChange={e => setEdPrice(e.target.value)} placeholder="0.00" /></div>
-        <div><label className="label">Date d'achat</label><input className="field" type="date" value={edPurchasedAt} onChange={e => setEdPurchasedAt(e.target.value)} /></div>
-        <div><label className="label">Fin de garantie</label><input className="field" type="date" value={edWarrantyEnd} onChange={e => setEdWarrantyEnd(e.target.value)} /></div>
-        <div className="span-2"><label className="label">Fournisseur</label><input className="field" value={edSupplier} onChange={e => setEdSupplier(e.target.value)} placeholder="Ex : ABC Ltd." /></div>
+        <div className="span-2"><label className="label">Category</label><Autocomplete className="field" value={edCategoryName} onChange={setEdCategoryName} fetchOptions={fetchCategoryOptions} placeholder="Search/add…" /></div>
+        <div><label className="label">Serial number</label><input className="field" value={edSerial} onChange={e => setEdSerial(e.target.value)} placeholder="SN…" /></div>
+        <div><label className="label">Purchase price</label><input className="field" type="text" inputMode="decimal" value={edPrice} onChange={e => setEdPrice(e.target.value)} placeholder="0.00" /></div>
+        <div><label className="label">Purchase date</label><input className="field" type="date" value={edPurchasedAt} onChange={e => setEdPurchasedAt(e.target.value)} /></div>
+        <div><label className="label">Warranty end</label><input className="field" type="date" value={edWarrantyEnd} onChange={e => setEdWarrantyEnd(e.target.value)} /></div>
+        <div className="span-2"><label className="label">Supplier</label><input className="field" value={edSupplier} onChange={e => setEdSupplier(e.target.value)} placeholder="e.g., ABC Ltd." /></div>
         <div className="span-2"><label className="label">Notes</label><textarea className="field" rows={3} value={edNotes} onChange={e => setEdNotes(e.target.value)} /></div>
         {errMsg && <p className="span-2" style={{ color: 'crimson' }}>{errMsg}</p>}
         <div className="span-2 modal-actions">
-          <button type="button" className="pill pill--muted" onClick={onClose}>Annuler</button>
-          <button className="pill" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+          <button type="button" className="pill pill--muted" onClick={onClose}>Cancel</button>
+          <button className="pill" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </form>
     </Modal>

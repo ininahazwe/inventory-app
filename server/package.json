@@ -1,7 +1,7 @@
 {
   "name": "inventaire-it-server",
   "version": "1.0.0",
-  "type": "module",
+  "type": "commonjs",
   "description": "Assets Management API - Node.js Express + MySQL",
   "main": "app.js",
   "scripts": {

@@ -52,7 +52,6 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
   return (
     <div style={{ minWidth: 600 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h3 style={{ margin: 0 }}>Utilisateurs</h3>
         {onClose && <button className="pill" onClick={onClose}>Fermer</button>}
       </div>
 
