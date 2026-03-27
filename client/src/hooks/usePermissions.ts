@@ -30,13 +30,19 @@ export function usePermissions() {
             role: data.role,
           });
 
-          // Check if admin
-          const { data: isAdminData } = await rpcMethods.is_admin(data.email);
-          setIsAdmin(isAdminData?.result ?? false);
-
-          // Check if super admin
+          // Check if super admin FIRST (since super_admin is the higher role)
           const { data: isSuperAdminData } = await rpcMethods.is_super_admin(data.email);
-          setIsSuperAdmin(isSuperAdminData?.result ?? false);
+          const superAdminStatus = isSuperAdminData?.result ?? false;
+          setIsSuperAdmin(superAdminStatus);
+
+          // If not super admin, check if admin
+          if (!superAdminStatus) {
+            const { data: isAdminData } = await rpcMethods.is_admin(data.email);
+            setIsAdmin(isAdminData?.result ?? false);
+          } else {
+            // Super admin is also admin
+            setIsAdmin(true);
+          }
         }
       } catch (err) {
         console.error('Permission check error:', err);

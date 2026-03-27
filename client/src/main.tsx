@@ -11,7 +11,8 @@ import IncidentReportPage from "./pages/IncidentReportPage.tsx";
 import IncidentsPage from "./pages/IncidentsPage.tsx";
 import IncidentDetailPage from "./pages/IncidentDetailPage.tsx";
 import {ConfirmProvider} from "./components/ConfirmProvider.tsx";
-
+import AuctionsPage from './pages/AuctionsPage';
+import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -22,6 +23,8 @@ const router = createBrowserRouter([
       { path: "/asset/:id/report-incident", element: <IncidentReportPage /> },
       { path: "/incidents", element: <IncidentsPage /> },
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
+      { path: "/auctions", element: <AuctionsPage  /> },
+      { path: "/auctions/create", element: <CreateAuctionPage /> },
     ],
   },
 ]);

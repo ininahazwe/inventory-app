@@ -9,6 +9,9 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
 
+// Import routes modulaires
+const setupAuctionsRoutes = require('./routes/auctions');
+
 const app = express();
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -66,6 +69,9 @@ const verifyJWT = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid token' });
   }
 };
+
+// Setup auctions routes (modulaire) - APRÈS verifyJWT
+setupAuctionsRoutes(app, dbPromise, verifyJWT);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTES: Auth
@@ -239,32 +245,25 @@ app.get('/api/assets', verifyJWT, async (req, res) => {
 app.get('/api/assets/:id', verifyJWT, async (req, res) => {
   try {
     const { id } = req.params;
-    const [rows] = await dbPromise.query(
-        `SELECT * FROM assets WHERE id = ? LIMIT 1`,
-        [id]
-    );
+    const [assets] = await dbPromise.query(`
+      SELECT
+        a.*,
+        c.name as category_name,
+        asn.id as assignment_id,
+        asn.assignee_name,
+        asn.assignee_email,
+        asn.assigned_at
+      FROM assets a
+             LEFT JOIN categories c ON a.category_id = c.id
+             LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
+      WHERE a.id = ?
+    `, [id]);
 
-    if (!rows || rows.length === 0) {
+    if (!assets || assets.length === 0) {
       return res.status(404).json({ error: 'Asset not found' });
     }
 
-    const asset = rows[0];
-
-    const [assignments] = await dbPromise.query(
-        'SELECT * FROM assignments WHERE asset_id = ? ORDER BY created_at DESC',
-        [id]
-    );
-
-    const [lifecycle] = await dbPromise.query(
-        'SELECT * FROM lifecycle_events WHERE asset_id = ? ORDER BY created_at DESC',
-        [id]
-    );
-
-    return res.json({
-      ...asset,
-      assignments: assignments || [],
-      lifecycle_events: lifecycle || [],
-    });
+    return res.json(assets[0]);
   } catch (err) {
     console.error('GET /api/assets/:id error:', err);
     return res.status(500).json({ error: err.message });
@@ -275,15 +274,10 @@ app.post('/api/assets', verifyJWT, async (req, res) => {
   try {
     const { label, serial_no, category_id, purchase_price, supplier, notes, funder } = req.body;
 
-    if (!label) {
-      return res.status(400).json({ error: 'label is required' });
-    }
-
-    const [result] = await dbPromise.query(
-        `INSERT INTO assets (label, serial_no, category_id, purchase_price, supplier, notes, funder, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'in_stock')`,
-        [label, serial_no || null, category_id || null, purchase_price || null, supplier || null, notes || null, funder || null]
-    );
+    const [result] = await dbPromise.query(`
+      INSERT INTO assets (label, serial_no, category_id, purchase_price, supplier, notes, funder, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'in_stock')
+    `, [label, serial_no || null, category_id || null, purchase_price || null, supplier || null, notes || null, funder || null]);
 
     return res.status(201).json({ id: result.insertId, label });
   } catch (err) {
@@ -295,26 +289,17 @@ app.post('/api/assets', verifyJWT, async (req, res) => {
 app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { label, serial_no, category_id, purchase_price, supplier, notes, funder } = req.body;
 
-    const allowedFields = ['label', 'serial_no', 'category_id', 'purchase_price', 'supplier', 'notes', 'funder', 'status', 'warranty_end'];
-    const setClause = Object.keys(updates)
-        .filter(key => allowedFields.includes(key))
-        .map(key => `${key} = ?`)
-        .join(', ');
+    const [result] = await dbPromise.query(`
+      UPDATE assets
+      SET label = ?, serial_no = ?, category_id = ?, purchase_price = ?, supplier = ?, notes = ?, funder = ?
+      WHERE id = ?
+    `, [label, serial_no || null, category_id || null, purchase_price || null, supplier || null, notes || null, funder || null, id]);
 
-    if (!setClause) {
-      return res.status(400).json({ error: 'No valid fields to update' });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Asset not found' });
     }
-
-    const values = Object.keys(updates)
-        .filter(key => allowedFields.includes(key))
-        .map(key => updates[key]);
-
-    await dbPromise.query(
-        `UPDATE assets SET ${setClause} WHERE id = ?`,
-        [...values, id]
-    );
 
     return res.json({ success: true });
   } catch (err) {
@@ -323,26 +308,29 @@ app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
   }
 });
 
-app.delete('/api/assets/:id', verifyJWT, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await dbPromise.query('DELETE FROM assets WHERE id = ?', [id]);
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('DELETE /api/assets/:id error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTES: Assignments & Assignees
+// ROUTES: Assignments
 // ═══════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/assignments', verifyJWT, async (req, res) => {
   try {
-    const [assignments] = await dbPromise.query(
-        'SELECT * FROM assignments ORDER BY created_at DESC'
-    );
+    const [assignments] = await dbPromise.query(`
+      SELECT
+        asn.id,
+        asn.asset_id,
+        asn.assignee_name,
+        asn.assignee_email,
+        asn.assigned_at,
+        asn.status,
+        a.label,
+        a.serial_no,
+        c.name as category_name
+      FROM assignments asn
+             LEFT JOIN assets a ON asn.asset_id = a.id
+             LEFT JOIN categories c ON a.category_id = c.id
+      ORDER BY asn.assigned_at DESC
+    `);
+
     return res.json(assignments || []);
   } catch (err) {
     console.error('GET /api/assignments error:', err);
@@ -350,59 +338,27 @@ app.get('/api/assignments', verifyJWT, async (req, res) => {
   }
 });
 
-app.get('/api/assignments/assignees', verifyJWT, async (req, res) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-    const pageNum = parseInt(page) || 1;
-    const pageSize = parseInt(limit) || 10;
-    const offset = (pageNum - 1) * pageSize;
-
-    const countQuery = `
-      SELECT COUNT(DISTINCT assignee_email) as count
-      FROM assignments
-      WHERE assignee_email IS NOT NULL
-    `;
-    const [countResult] = await dbPromise.query(countQuery);
-    const totalCount = countResult[0]?.count || 0;
-
-    // Fix: GROUP BY all non-aggregated columns
-    const dataQuery = `
-      SELECT
-        assignee_email,
-        MAX(assignee_name) as assignee_name,
-        COUNT(*) as asset_count
-      FROM assignments
-      WHERE assignee_email IS NOT NULL
-      GROUP BY assignee_email
-      ORDER BY assignee_name ASC
-        LIMIT ? OFFSET ?
-    `;
-    const [rows] = await dbPromise.query(dataQuery, [pageSize, offset]);
-
-    return res.json({
-      data: rows || [],
-      count: totalCount,
-    });
-  } catch (err) {
-    console.error('GET /api/assignments/assignees error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/assignments', verifyJWT, async (req, res) => {
   try {
-    const { asset_id, assignee_name, assignee_email, assigned_at } = req.body;
+    const { asset_id, assignee_name, assignee_email } = req.body;
 
-    if (!asset_id) {
-      return res.status(400).json({ error: 'asset_id is required' });
+    if (!asset_id || !assignee_name || !assignee_email) {
+      return res.status(400).json({ error: 'asset_id, assignee_name, assignee_email required' });
     }
 
-    const [result] = await dbPromise.query(
-        `INSERT INTO assignments (asset_id, assignee_name, assignee_email, assigned_at, status)
-         VALUES (?, ?, ?, ?, 'active')`,
-        [asset_id, assignee_name || null, assignee_email || null, assigned_at || new Date().toISOString().split('T')[0]]
+    // Close existing active assignments
+    await dbPromise.query(
+        'UPDATE assignments SET status = ?, returned_at = NOW() WHERE asset_id = ? AND status = ?',
+        ['returned', asset_id, 'active']
     );
 
+    // Create new assignment
+    const [result] = await dbPromise.query(`
+      INSERT INTO assignments (asset_id, assignee_name, assignee_email, status)
+      VALUES (?, ?, ?, 'active')
+    `, [asset_id, assignee_name, assignee_email]);
+
+    // Update asset status
     await dbPromise.query('UPDATE assets SET status = ? WHERE id = ?', ['assigned', asset_id]);
 
     return res.status(201).json({ id: result.insertId });
@@ -416,42 +372,10 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
 // ROUTES: Incidents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// affichage liste incidents
 app.get('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const userEmail = req.user.email; // Récupère l'email en JavaScript
-
     const [incidents] = await dbPromise.query(`
-      SELECT 
-        le.id,
-        le.asset_id,
-        a.label as asset_label,
-        le.event_type as incident_type,
-        'medium' as severity,
-        'open' as status,
-        ? as reported_by_email,
-        le.created_at,
-        le.notes
-      FROM lifecycle_events le
-      LEFT JOIN assets a ON le.asset_id = a.id
-      WHERE le.event_type IN ('repair', 'maintenance')
-      ORDER BY le.created_at DESC
-    `, [userEmail]);
-
-    return res.json(incidents || []);
-  } catch (err) {
-    console.error('GET /api/incidents error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// affichage incident
-app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const [incidents] = await dbPromise.query(`
-      SELECT 
+      SELECT
         le.id,
         le.asset_id,
         a.label as asset_label,
@@ -462,7 +386,33 @@ app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
         le.created_at,
         le.notes
       FROM lifecycle_events le
-      LEFT JOIN assets a ON le.asset_id = a.id
+             LEFT JOIN assets a ON le.asset_id = a.id
+      ORDER BY le.created_at DESC
+    `);
+
+    return res.json(incidents || []);
+  } catch (err) {
+    console.error('GET /api/incidents error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [incidents] = await dbPromise.query(`
+      SELECT
+        le.id,
+        le.asset_id,
+        a.label as asset_label,
+        le.event_type as incident_type,
+        'medium' as severity,
+        'open' as status,
+        le.created_by as reported_by_email,
+        le.created_at,
+        le.notes
+      FROM lifecycle_events le
+             LEFT JOIN assets a ON le.asset_id = a.id
       WHERE le.id = ? LIMIT 1
     `, [id]);
 
@@ -519,9 +469,9 @@ app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
     const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
 
     const [result] = await dbPromise.query(
-        `UPDATE lifecycle_events 
-       SET status = ?, resolved_at = ?
-       WHERE id = ?`,
+        `UPDATE lifecycle_events
+         SET status = ?, resolved_at = ?
+         WHERE id = ?`,
         [status, resolvedAt, id]
     );
 
