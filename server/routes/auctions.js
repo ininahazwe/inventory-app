@@ -1,4 +1,4 @@
-// routes-auctions.js
+// route/auctions.js
 module.exports = function(app, dbPromise, verifyJWT) {
 
     // GET: Lister toutes les enchères
@@ -84,10 +84,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
     // POST: Créer enchère (admin)
     app.post('/api/auctions', verifyJWT, async (req, res) => {
         const { asset_id, starting_price, duration_days } = req.body;
-        const user_id = req.user.id;
+        const user_email = req.user.email;  // Utilise EMAIL au lieu de ID
 
         try {
-            const [user] = await dbPromise.query('SELECT role FROM users WHERE id = ?', [user_id]);
+            // Vérifier que c'est un admin en utilisant EMAIL
+            const [user] = await dbPromise.query('SELECT role FROM users WHERE email = ?', [user_email]);
             if (!user.length || (user[0].role !== 'super_admin' && user[0].role !== 'admin')) {
                 return res.status(403).json({ error: 'Only admins can create auctions' });
             }
@@ -114,6 +115,10 @@ module.exports = function(app, dbPromise, verifyJWT) {
             const end_date = new Date();
             end_date.setDate(end_date.getDate() + (duration_days || 7));
 
+            // Récupérer le user_id (UUID) pour stocker dans created_by_uid
+            const [userRecord] = await dbPromise.query('SELECT id FROM users WHERE email = ?', [user_email]);
+            const user_id = userRecord[0]?.id;
+
             const [result] = await dbPromise.query(`
                 INSERT INTO auctions (asset_id, starting_price, duration_days, created_by_uid, end_date)
                 VALUES (?, ?, ?, ?, ?)
@@ -136,10 +141,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
     app.patch('/api/auctions/:auctionId/duration', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
         const { duration_days } = req.body;
-        const user_id = req.user.id;
+        const user_email = req.user.email;  // Utilise EMAIL
 
         try {
-            const [user] = await dbPromise.query('SELECT role FROM users WHERE id = ?', [user_id]);
+            // Vérifier admin par EMAIL
+            const [user] = await dbPromise.query('SELECT role FROM users WHERE email = ?', [user_email]);
             if (!user.length || (user[0].role !== 'super_admin' && user[0].role !== 'admin')) {
                 return res.status(403).json({ error: 'Only admins can modify auctions' });
             }
@@ -167,10 +173,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
     // POST: Annuler enchère (admin)
     app.post('/api/auctions/:auctionId/cancel', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
-        const user_id = req.user.id;
+        const user_email = req.user.email;  // Utilise EMAIL
 
         try {
-            const [user] = await dbPromise.query('SELECT role FROM users WHERE id = ?', [user_id]);
+            // Vérifier admin par EMAIL
+            const [user] = await dbPromise.query('SELECT role FROM users WHERE email = ?', [user_email]);
             if (!user.length || (user[0].role !== 'super_admin' && user[0].role !== 'admin')) {
                 return res.status(403).json({ error: 'Only admins can cancel auctions' });
             }
@@ -191,7 +198,7 @@ module.exports = function(app, dbPromise, verifyJWT) {
     app.post('/api/auctions/:auctionId/bid', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
         const { amount } = req.body;
-        const user_id = req.user.id;
+        const user_email = req.user.email;  // Utilise EMAIL
 
         try {
             const [auctions] = await dbPromise.query(
@@ -221,6 +228,14 @@ module.exports = function(app, dbPromise, verifyJWT) {
                     error: `Bid must be at least ${minBid}`,
                     minBid
                 });
+            }
+
+            // Récupérer le user_id (UUID) par EMAIL
+            const [userRecord] = await dbPromise.query('SELECT id FROM users WHERE email = ?', [user_email]);
+            const user_id = userRecord[0]?.id;
+
+            if (!user_id) {
+                return res.status(401).json({ error: 'User not found' });
             }
 
             const [existingBids] = await dbPromise.query(`
