@@ -13,6 +13,11 @@ interface Asset {
   category_name: string | null;
 }
 
+interface UploadedImage {
+  url: string;
+  public_id: string;
+}
+
 export default function CreateAuctionPage() {
   const navigate = useNavigate();
   const { isAdmin, loading: permissionsLoading } = usePermissions();
@@ -36,6 +41,11 @@ export default function CreateAuctionPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
+
+  // Images
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Charger les assets "in_stock"
   useEffect(() => {
@@ -65,6 +75,63 @@ export default function CreateAuctionPage() {
     }));
   };
 
+  // Upload image to Cloudinary
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+      if (!cloudName || !uploadPreset) {
+        setUploadError('Cloudinary config missing');
+        return;
+      }
+
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+
+        const data = await response.json();
+        setUploadedImages(prev => [
+          ...prev,
+          {
+            url: data.secure_url,
+            public_id: data.public_id,
+          },
+        ]);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      // Reset input
+      e.target.value = '';
+    }
+  };
+
+  // Remove image from preview
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -83,6 +150,7 @@ export default function CreateAuctionPage() {
           asset_id: parseInt(formData.asset_id),
           starting_price: parseFloat(formData.starting_price),
           duration_days: parseInt(formData.duration_days),
+          images: uploadedImages.map(img => img.url), // Send image URLs
         }
       );
 
@@ -271,6 +339,74 @@ export default function CreateAuctionPage() {
               <option value="21">21 days</option>
               <option value="30">30 days</option>
             </select>
+          </div>
+
+          {/* Image Upload */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
+              Images (optional)
+            </label>
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={handleImageUpload}
+              disabled={uploading}
+              className="input"
+              style={{ marginBottom: 8 }}
+            />
+            {uploading && <p style={{ fontSize: 12, color: 'var(--muted)' }}>Uploading...</p>}
+            {uploadError && <p style={{ fontSize: 12, color: '#c00' }}>{uploadError}</p>}
+
+            {/* Image Preview */}
+            {uploadedImages.length > 0 && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                gap: 12,
+                marginTop: 12,
+              }}>
+                {uploadedImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'relative',
+                      borderRadius: 4,
+                      overflow: 'hidden',
+                      border: '1px solid #ddd',
+                    }}
+                  >
+                    <img
+                      src={img.url}
+                      alt={`preview ${idx}`}
+                      style={{
+                        width: '100%',
+                        height: '100px',
+                        objectFit: 'cover',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 3,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Form Actions */}

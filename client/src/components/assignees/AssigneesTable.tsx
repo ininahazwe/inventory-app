@@ -20,8 +20,8 @@ export default function AssigneesTable({
       </tr>
       </thead>
       <tbody>
-      {rows.map(a => (
-        <tr key={a.assignee_email}>
+      {rows.map((a, idx) => (
+        <tr key={`${a.assignee_email}-${idx}`}>
           <td>{a.assignee_name ?? "—"}</td>
           <td className="email">{a.assignee_email ?? "—"}</td>
           <td className="actives">{a.asset_count}</td>

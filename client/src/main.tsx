@@ -13,6 +13,7 @@ import IncidentDetailPage from "./pages/IncidentDetailPage.tsx";
 import {ConfirmProvider} from "./components/ConfirmProvider.tsx";
 import AuctionsPage from './pages/AuctionsPage';
 import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
+import AuctionDetailPage from "./pages/Auctiondetailpage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ const router = createBrowserRouter([
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
       { path: "/auctions", element: <AuctionsPage  /> },
       { path: "/auctions/create", element: <CreateAuctionPage /> },
+      { path: "/auctions/:auctionId", element: <AuctionDetailPage /> },
     ],
   },
 ]);

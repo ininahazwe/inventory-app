@@ -79,7 +79,7 @@ tbody {background: #f7f7f7}
     display:grid; place-items:center; z-index:1000;
 }
 .modal{
-    width:auto; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
+    width:auto; min-width: 34vw; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
     padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.2);
 }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
@@ -160,6 +160,7 @@ tbody {background: #f7f7f7}
     padding:10px 18px; border-radius: 999px;
     transition: background .2s ease, transform .08s ease;
     font-size: 0.8em;
+    text-decoration: none;
 
     &.red{
         background: #8D86C9;

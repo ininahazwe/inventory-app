@@ -6,6 +6,7 @@ import { auth, token } from "./lib/apiClient";
 import "./styles/theme.css";
 import "./styles/login.css";
 import logo from "./assets/mfwa-logo.png";
+import { Link } from 'react-router-dom';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="site-right">
+            <Link to="/auctions" className="pill green">Auctions</Link>
             {email ? (
               <button className="pill red" onClick={logout}>Log out</button>
             ) : (

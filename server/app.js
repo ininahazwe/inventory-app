@@ -312,6 +312,37 @@ app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
 // ROUTES: Assignments
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// GET assignees list - DOIT ÊTRE AVANT /api/assignments/:id
+app.get('/api/assignments/assignees', verifyJWT, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || '1')));
+    const limit = Math.max(1, parseInt(String(req.query.limit || '10')));
+    const offset = (page - 1) * limit;
+
+    const [assignees] = await dbPromise.query(`
+      SELECT assignee_name, assignee_email, COUNT(*) as asset_count
+      FROM assignments
+      WHERE status = 'active'
+      GROUP BY assignee_email, assignee_name
+      ORDER BY assignee_name ASC
+        LIMIT ? OFFSET ?
+    `, [limit, offset]);
+
+    const [countResult] = await dbPromise.query(`
+      SELECT COUNT(DISTINCT assignee_email) as total
+      FROM assignments
+      WHERE status = 'active'
+    `);
+
+    return res.json({
+      data: assignees || [],
+      count: countResult[0]?.total || 0
+    });
+  } catch (err) {
+    console.error('GET /api/assignments/assignees error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 app.get('/api/assignments', verifyJWT, async (req, res) => {
   try {
     const [assignments] = await dbPromise.query(`
