@@ -7,10 +7,13 @@ import "./styles/theme.css";
 import "./styles/login.css";
 import logo from "./assets/mfwa-logo.png";
 import { Link } from 'react-router-dom';
+import { useToast } from './hooks/useToast';
+import ToastContainer from './components/ToastContainer';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { toasts, removeToast } = useToast();
 
   useEffect(() => {
     if (token.get()) {
@@ -29,6 +32,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <header className="site-shell">
         <div className="site-band">
           <div className="site-left">

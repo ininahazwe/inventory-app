@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, auth } from '../lib/apiClient';
+import { useToast } from '../hooks/useToast';
 import Layout from '../Layout';
 
 interface AuctionDetail {
@@ -33,9 +34,22 @@ interface AuctionDetailView {
   images: string[];
 }
 
+interface BidResponse {
+  success: boolean;
+  your_bid: number;
+  current_highest_bid: number;
+  message: string;
+  toast?: {
+    type: 'success' | 'error' | 'info' | 'warning';
+    title: string;
+    message: string;
+  };
+}
+
 export default function AuctionDetailPage() {
   const { auctionId } = useParams<{ auctionId: string }>();
   const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
 
   const [data, setData] = useState<AuctionDetailView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +92,7 @@ export default function AuctionDetailPage() {
     e.preventDefault();
 
     if (!isLoggedIn) {
-      alert('Please log in to place a bid');
+      showError('❌ Non authentifié', 'Veuillez vous connecter pour placer une enchère');
       return;
     }
 
@@ -91,6 +105,7 @@ export default function AuctionDetailPage() {
 
     if (amount < minBid) {
       setBidError(`Minimum bid is ${minBid}`);
+      showError('❌ Montant invalide', `L'enchère minimum est ${minBid}`);
       return;
     }
 
@@ -98,27 +113,42 @@ export default function AuctionDetailPage() {
       setBidLoading(true);
       setBidError(null);
 
-      const { data: result, error: err } = await api.post<{
-        success: boolean;
-        your_bid: number;
-        current_highest_bid: number;
-        message: string;
-      }>(`/auctions/${auctionId}/bid`, { amount });
+      const { data: result, error: err } = await api.post<BidResponse>(
+        `/auctions/${auctionId}/bid`,
+        { amount }
+      );
 
       if (err || !result) {
-        setBidError(err || 'Failed to place bid');
+        const errorMsg = err || 'Failed to place bid';
+        setBidError(errorMsg);
+        showError('❌ Erreur', errorMsg);
         return;
+      }
+
+      // ✅ Afficher le toast depuis la réponse du backend
+      if (result.toast) {
+        showSuccess(result.toast.title, result.toast.message);
+      } else {
+        // Fallback si pas de toast dans la réponse
+        showSuccess('✅ Enchère placée', `Votre enchère de ${amount} FCFA a été acceptée`);
       }
 
       // Refresh
       await loadAuctionDetail();
       setBidAmount('');
-      alert('✅ Bid placed successfully!');
     } catch (err) {
-      setBidError(err instanceof Error ? err.message : 'Failed to place bid');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to place bid';
+      setBidError(errorMsg);
+      showError('❌ Erreur', errorMsg);
     } finally {
       setBidLoading(false);
     }
+  };
+
+  const handleShareAuction = () => {
+    const url = `${window.location.origin}/auctions/${auctionId}`;
+    navigator.clipboard.writeText(url);
+    showSuccess('✅ Lien copié', 'Le lien de l\'enchère a été copié dans le presse-papiers');
   };
 
   const formatTime = (dateStr: string) => {
@@ -288,6 +318,28 @@ export default function AuctionDetailPage() {
           )}
         </div>
 
+        {/* Share Button */}
+        <div style={{ marginBottom: 24 }}>
+          <button
+            onClick={handleShareAuction}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: '#f0f0f0',
+              border: '1px solid #ddd',
+              borderRadius: 4,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#e0e0e0'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#f0f0f0'}
+          >
+            🔗 Share Auction Link
+          </button>
+        </div>
+
         {/* Price Box */}
         <div style={{
           background: '#f5f3ff',
@@ -373,17 +425,35 @@ export default function AuctionDetailPage() {
             </form>
           )
         ) : (
+          // Auction ended - show winner
           <div style={{
-            background: '#f5f5f5',
-            border: '1px solid #ddd',
+            background: auction.winner_email ? '#e8f5e9' : '#f5f5f5',
+            border: auction.winner_email ? '2px solid #4caf50' : '1px solid #ddd',
             borderRadius: 4,
             padding: 16,
             marginBottom: 24,
             textAlign: 'center',
           }}>
-            <p style={{ margin: 0, fontWeight: 500 }}>
-              {auction.winner_email ? `Won by: ${auction.winner_email}` : 'No bids placed'}
-            </p>
+            {auction.winner_email ? (
+              <>
+                <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
+                  🏆 AUCTION ENDED - WINNER
+                </p>
+                <p style={{ margin: '0 0 12px 0', fontWeight: 700, fontSize: 18, color: '#2e7d32' }}>
+                  {auction.winner_email}
+                </p>
+                <p style={{ margin: '0 0 12px 0', fontSize: 12, color: 'var(--muted)' }}>
+                  Winning bid: <strong style={{ color: '#8D86C9' }}>${auction.current_highest_bid}</strong>
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
+                  AUCTION ENDED
+                </p>
+                <p style={{ margin: 0, fontWeight: 500 }}>No bids were placed</p>
+              </>
+            )}
           </div>
         )}
 

@@ -1,4 +1,6 @@
-// route/auctions.js
+// routes/auctions.js
+const { sendOutbidNotification, sendWinnerNotification } = require('../emailService');
+
 module.exports = function(app, dbPromise, verifyJWT) {
 
     // GET: Lister toutes les enchères
@@ -35,8 +37,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
     });
 
     // GET: Détail enchère
-    // route/auctions.js - section GET /api/auctions/:auctionId À REMPLACER
-
     app.get('/api/auctions/:auctionId', async (req, res) => {
         const { auctionId } = req.params;
         try {
@@ -75,11 +75,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
 
             // Fetch images
             const [images] = await dbPromise.query(`
-            SELECT image_url
-            FROM auction_images
-            WHERE auction_id = ?
-            ORDER BY created_at ASC
-        `, [auctionId]);
+                SELECT image_url
+                FROM auction_images
+                WHERE auction_id = ?
+                ORDER BY created_at ASC
+            `, [auctionId]);
 
             return res.json({
                 auction: auctions[0],
@@ -92,6 +92,7 @@ module.exports = function(app, dbPromise, verifyJWT) {
         }
     });
 
+    // POST: Créer une enchère (admin)
     app.post('/api/auctions', verifyJWT, async (req, res) => {
         const { asset_id, starting_price, duration_days, images } = req.body;
         const user_email = req.user.email;
@@ -164,9 +165,9 @@ module.exports = function(app, dbPromise, verifyJWT) {
             console.log('  Inserting auction with values:', { asset_id, starting_price, duration_days: duration_days || 7, user_id, end_date_str });
 
             const [result] = await dbPromise.query(`
-            INSERT INTO auctions (asset_id, starting_price, duration_days, created_by_uid, end_date)
-            VALUES (?, ?, ?, ?, ?)
-        `, [asset_id, starting_price, duration_days || 7, user_id, end_date_str]);
+                INSERT INTO auctions (asset_id, starting_price, duration_days, created_by_uid, end_date)
+                VALUES (?, ?, ?, ?, ?)
+            `, [asset_id, starting_price, duration_days || 7, user_id, end_date_str]);
 
             const auctionId = result.insertId;
             console.log('  ✅ Auction created, id:', auctionId);
@@ -178,9 +179,9 @@ module.exports = function(app, dbPromise, verifyJWT) {
                     for (const imageUrl of images) {
                         console.log('    Saving image URL length:', imageUrl.length);
                         await dbPromise.query(`
-                        INSERT INTO auction_images (auction_id, image_url)
-                        VALUES (?, ?)
-                    `, [auctionId, imageUrl]);
+                            INSERT INTO auction_images (auction_id, image_url)
+                            VALUES (?, ?)
+                        `, [auctionId, imageUrl]);
                     }
                     console.log('  ✅ All images saved');
                 } catch (imgErr) {
@@ -199,9 +200,8 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 images_count: images?.length || 0
             });
         } catch (err) {
-            console.error('❌ POST /api/auctions CATCH ERROR:', err.message);
-            console.error('Full error:', JSON.stringify(err, null, 2));
-            return res.status(400).json({ error: err.message || 'Failed to create auction' });
+            console.error('POST /api/auctions error:', err);
+            return res.status(500).json({ error: 'Failed to create auction' });
         }
     });
 
@@ -209,7 +209,7 @@ module.exports = function(app, dbPromise, verifyJWT) {
     app.patch('/api/auctions/:auctionId/duration', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
         const { duration_days } = req.body;
-        const user_email = req.user.email;  // Utilise EMAIL
+        const user_email = req.user.email;
 
         try {
             // Vérifier admin par EMAIL
@@ -242,7 +242,7 @@ module.exports = function(app, dbPromise, verifyJWT) {
     // POST: Annuler enchère (admin)
     app.post('/api/auctions/:auctionId/cancel', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
-        const user_email = req.user.email;  // Utilise EMAIL
+        const user_email = req.user.email;
 
         try {
             // Vérifier admin par EMAIL
@@ -263,11 +263,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
         }
     });
 
-    // POST: Placer mise
+    // POST: Placer une mise (enchérisseur)
     app.post('/api/auctions/:auctionId/bid', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
         const { amount } = req.body;
-        const user_email = req.user.email;  // Utilise EMAIL
+        const user_email = req.user.email;
 
         try {
             const [auctions] = await dbPromise.query(
@@ -307,17 +307,33 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 return res.status(401).json({ error: 'User not found' });
             }
 
-            const [existingBids] = await dbPromise.query(`
-                SELECT user_uid, auto_bid_max, amount
-                FROM bids
-                WHERE auction_id = ?
-                ORDER BY amount DESC
+            // Récupérer le TOP bidder AVANT d'insérer le nouveau bid
+            const [topBidBefore] = await dbPromise.query(`
+                SELECT u.email, b.amount
+                FROM bids b
+                         JOIN users u ON b.user_uid = u.id
+                WHERE b.auction_id = ?
+                ORDER BY b.amount DESC
+                    LIMIT 1
             `, [auctionId]);
 
-            await dbPromise.query(`
+            const topBidderEmailBefore = topBidBefore && topBidBefore.length > 0 ? topBidBefore[0].email : null;
+
+            // Insérer le nouveau bid
+            const [insertResult] = await dbPromise.query(`
                 INSERT INTO bids (auction_id, user_uid, amount, auto_bid_max)
                 VALUES (?, ?, ?, ?)
             `, [auctionId, user_id, amount, amount]);
+
+            const newBidId = insertResult.insertId;
+
+            // Récupérer les bids existants pour auto-bid logic
+            const [existingBids] = await dbPromise.query(`
+                SELECT user_uid, auto_bid_max, amount
+                FROM bids
+                WHERE auction_id = ? AND id != ?
+                ORDER BY amount DESC
+            `, [auctionId, newBidId]);
 
             let topBidder = null;
             let topBidAmount = amount;
@@ -332,10 +348,17 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 }
             }
 
+            // Mettre à jour l'enchère avec le top bid
             await dbPromise.query(
                 'UPDATE auctions SET current_highest_bid = ? WHERE id = ?',
                 [topBidAmount, auctionId]
             );
+
+            // 📧 ENVOYER EMAIL DE SURENCHÈRE si quelqu'un était en tête
+            if (topBidderEmailBefore && topBidderEmailBefore !== user_email) {
+                console.log(`📧 Sending outbid email to ${topBidderEmailBefore}`);
+                await sendOutbidNotification(auctionId, topBidderEmailBefore, amount);
+            }
 
             return res.status(201).json({
                 success: true,
@@ -344,11 +367,80 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 top_bidder_uid: topBidder,
                 message: topBidder && topBidder !== user_id
                     ? 'You were outbid. You can raise your bid.'
-                    : 'You are the highest bidder.'
+                    : 'You are the highest bidder.',
+                toast: {
+                    type: 'success',
+                    title: '✅ Enchère placée',
+                    message: topBidAmount === amount
+                        ? `Vous êtes le plus offrant (${amount} FCFA)`
+                        : `Votre enchère a été surenchérie (${topBidAmount} FCFA)`
+                }
             });
         } catch (err) {
             console.error(`POST /api/auctions/${auctionId}/bid error:`, err);
             return res.status(500).json({ error: 'Failed to place bid' });
+        }
+    });
+
+    // POST: Auto-close auctions (Cron ou manuel)
+    app.post('/api/auctions/auto-close', async (req, res) => {
+        try {
+            console.log('🕐 Running auction auto-close...');
+
+            // Récupérer les enchères expirées
+            const [expiredAuctions] = await dbPromise.query(`
+                SELECT a.id, a.created_by_uid, u_creator.email as creator_email
+                FROM auctions a
+                         JOIN users u_creator ON a.created_by_uid = u_creator.id
+                WHERE a.status = 'active' AND a.end_date <= CURDATE()
+            `);
+
+            console.log(`Found ${expiredAuctions.length} expired auctions`);
+
+            for (const auction of expiredAuctions) {
+                // Récupérer le top bidder (gagnant)
+                const [winnerBid] = await dbPromise.query(`
+                    SELECT b.user_uid, b.amount, u.email as winner_email
+                    FROM bids b
+                             JOIN users u ON b.user_uid = u.id
+                    WHERE b.auction_id = ?
+                    ORDER BY b.amount DESC
+                        LIMIT 1
+                `, [auction.id]);
+
+                if (winnerBid && winnerBid.length > 0) {
+                    const winner = winnerBid[0];
+                    const finalAmount = winner.amount;
+
+                    // Mettre à jour l'enchère avec le gagnant
+                    await dbPromise.query(
+                        'UPDATE auctions SET status = ?, winner_uid = ? WHERE id = ?',
+                        ['ended', winner.user_uid, auction.id]
+                    );
+
+                    console.log(`✅ Auction ${auction.id} closed. Winner: ${winner.winner_email}, Amount: ${finalAmount}`);
+
+                    // 📧 ENVOYER EMAIL AU GAGNANT
+                    await sendWinnerNotification(
+                        auction.id,
+                        winner.winner_email,
+                        auction.creator_email,
+                        finalAmount
+                    );
+                } else {
+                    // Pas de bids, fermer sans gagnant
+                    await dbPromise.query(
+                        'UPDATE auctions SET status = ? WHERE id = ?',
+                        ['ended', auction.id]
+                    );
+                    console.log(`✅ Auction ${auction.id} closed. No bids received.`);
+                }
+            }
+
+            return res.json({ success: true, closedCount: expiredAuctions.length });
+        } catch (err) {
+            console.error('POST /api/auctions/auto-close error:', err);
+            return res.status(500).json({ error: 'Failed to close auctions' });
         }
     });
 };

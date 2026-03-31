@@ -9,10 +9,9 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
 
-// Import routes modulaires
-const setupAuctionsRoutes = require('./routes/auctions');
-
 const app = express();
+
+require('./cron-auto-close');  // Charge et lance le cron
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -43,7 +42,12 @@ app.use(cors({
   origin: ['https://assets.mfwa.org', 'http://localhost:5173', 'http://localhost:3002'],
   credentials: true,
 }));
+
 app.use(express.json());
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// JWT HELPERS - DÉCLARER AVANT LES ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // Middleware: Extract JWT from header
 const getTokenFromRequest = (req) => {
@@ -70,7 +74,11 @@ const verifyJWT = (req, res, next) => {
   }
 };
 
-// Setup auctions routes (modulaire) - APRÈS verifyJWT
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROUTES: Auctions (modulaire) - APRÈS verifyJWT déclaré
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const setupAuctionsRoutes = require('./routes/auctions');
 setupAuctionsRoutes(app, dbPromise, verifyJWT);
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -164,7 +172,6 @@ app.post('/api/categories', verifyJWT, async (req, res) => {
       return res.status(400).json({ error: 'name is required' });
     }
 
-    // Categories table uses auto-increment id
     const [result] = await dbPromise.query(
         'INSERT INTO categories (name) VALUES (?)',
         [name]
@@ -312,37 +319,6 @@ app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
 // ROUTES: Assignments
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET assignees list - DOIT ÊTRE AVANT /api/assignments/:id
-app.get('/api/assignments/assignees', verifyJWT, async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(String(req.query.page || '1')));
-    const limit = Math.max(1, parseInt(String(req.query.limit || '10')));
-    const offset = (page - 1) * limit;
-
-    const [assignees] = await dbPromise.query(`
-      SELECT assignee_name, assignee_email, COUNT(*) as asset_count
-      FROM assignments
-      WHERE status = 'active'
-      GROUP BY assignee_email, assignee_name
-      ORDER BY assignee_name ASC
-        LIMIT ? OFFSET ?
-    `, [limit, offset]);
-
-    const [countResult] = await dbPromise.query(`
-      SELECT COUNT(DISTINCT assignee_email) as total
-      FROM assignments
-      WHERE status = 'active'
-    `);
-
-    return res.json({
-      data: assignees || [],
-      count: countResult[0]?.total || 0
-    });
-  } catch (err) {
-    console.error('GET /api/assignments/assignees error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
 app.get('/api/assignments', verifyJWT, async (req, res) => {
   try {
     const [assignments] = await dbPromise.query(`
@@ -458,7 +434,6 @@ app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
   }
 });
 
-// creation incident
 app.post('/api/incidents', verifyJWT, async (req, res) => {
   try {
     const { asset_id, event_type, notes } = req.body;
@@ -480,7 +455,6 @@ app.post('/api/incidents', verifyJWT, async (req, res) => {
   }
 });
 
-// mise à jour statut
 app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
   try {
     const { id } = req.params;
@@ -599,38 +573,6 @@ app.get('/api/users', verifyJWT, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STATIC FILES & SPA FALLBACK
-// ═══════════════════════════════════════════════════════════════════════════════
-
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
-
-// SPA fallback for non-API routes
-app.use(/^(?!\/api\/).*/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
-    if (err) {
-      console.error('Error serving index.html:', err);
-      res.status(500).send('Internal Server Error');
-    }
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// START SERVER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const PORT = process.env.PORT || 3003;
-const server = app.listen(PORT, () => {
-  console.log(`\n✅ Assets Management API running on port ${PORT}`);
-  console.log(`   Database: ${process.env.DB_HOST || '92.205.29.244'}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
-});
-
-server.on('error', (err) => {
-  console.error('Server error:', err);
-  process.exit(1);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // ROUTES: RPC Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -671,4 +613,95 @@ app.get('/api/rpc/is_email_allowed', async (req, res) => {
     console.error('GET /api/rpc/is_email_allowed error:', err);
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROUTES: Auctions Auto-Close (Internal Cron)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Route interne (sans JWT) - appelée par cron toutes les heures
+app.post('/api/auctions/auto-close', async (req, res) => {
+  try {
+    // Step 1: Find all active auctions past their end_date
+    const [expiredAuctions] = await dbPromise.query(`
+      SELECT id, asset_id FROM auctions
+      WHERE status = 'active' AND end_date <= NOW()
+      ORDER BY end_date ASC
+    `);
+
+    console.log(`[AUTO-CLOSE DEBUG] expiredAuctions:`, expiredAuctions);
+
+    if (!expiredAuctions || expiredAuctions.length === 0) {
+      console.log(`[AUTO-CLOSE] No expired auctions found`);
+      return res.json({ closed: 0, message: 'No expired auctions found' });
+    }
+
+    let closedCount = 0;
+
+    // Step 2: For each expired auction, find winner and close
+    for (const auction of expiredAuctions) {
+      const auctionId = auction.id;
+      const assetId = auction.asset_id;
+
+      // Find highest bidder
+      const [bids] = await dbPromise.query(`
+        SELECT user_uid, amount FROM bids
+        WHERE auction_id = ?
+        ORDER BY amount DESC
+          LIMIT 1
+      `, [auctionId]);
+
+      const winnerUid = bids && bids.length > 0 ? bids[0].user_uid : null;
+
+      // Update auction: status='ended', winner_uid set
+      await dbPromise.query(`
+        UPDATE auctions
+        SET status = 'ended', winner_uid = ?
+        WHERE id = ?
+      `, [winnerUid, auctionId]);
+
+      closedCount++;
+      console.log(`✅ Auction ${auctionId} auto-closed. Winner: ${winnerUid || 'none'}`);
+    }
+
+    return res.json({
+      closed: closedCount,
+      message: `${closedCount} auction(s) auto-closed`
+    });
+  } catch (err) {
+    console.error('POST /api/auctions/auto-close error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATIC FILES & SPA FALLBACK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+
+// SPA fallback for non-API routes
+app.use(/^(?!\/api\/).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).send('Internal Server Error');
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// START SERVER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PORT = process.env.PORT || 3003;
+const server = app.listen(PORT, () => {
+  console.log(`\n✅ Assets Management API running on port ${PORT}`);
+  console.log(`   Database: ${process.env.DB_HOST || '92.205.29.244'}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
+});
+
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
 });
