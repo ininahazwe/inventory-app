@@ -231,17 +231,19 @@ app.get('/api/assets', verifyJWT, async (req, res) => {
         asn.assignee_name,
         asn.assignee_email
       FROM assets a
-             LEFT JOIN categories c ON a.category_id = c.id
-             LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
+        LEFT JOIN categories c ON a.category_id = c.id
+        LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
         ${whereClause}
-      ORDER BY a.id DESC
-        LIMIT ? OFFSET ?
+      ORDER BY a.label ASC
+      LIMIT ? OFFSET ?
     `;
-    const [rows] = await dbPromise.query(dataQuery, [...params, pageSize, offset]);
+    params.push(pageSize, offset);
+
+    const [assets] = await dbPromise.query(dataQuery, params);
 
     return res.json({
-      data: rows || [],
-      count: totalCount,
+      data: assets,
+      pagination: { page: pageNum, limit: pageSize, total: totalCount }
     });
   } catch (err) {
     console.error('GET /api/assets error:', err);
@@ -249,44 +251,29 @@ app.get('/api/assets', verifyJWT, async (req, res) => {
   }
 });
 
-app.get('/api/assets/:id', verifyJWT, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [assets] = await dbPromise.query(`
-      SELECT
-        a.*,
-        c.name as category_name,
-        asn.id as assignment_id,
-        asn.assignee_name,
-        asn.assignee_email,
-        asn.assigned_at
-      FROM assets a
-             LEFT JOIN categories c ON a.category_id = c.id
-             LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
-      WHERE a.id = ?
-    `, [id]);
-
-    if (!assets || assets.length === 0) {
-      return res.status(404).json({ error: 'Asset not found' });
-    }
-
-    return res.json(assets[0]);
-  } catch (err) {
-    console.error('GET /api/assets/:id error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/assets', verifyJWT, async (req, res) => {
   try {
-    const { label, serial_no, category_id, purchase_price, supplier, notes, funder } = req.body;
+    const { label, serial_no, category_id, status, funder, purchase_price } = req.body;
 
-    const [result] = await dbPromise.query(`
-      INSERT INTO assets (label, serial_no, category_id, purchase_price, supplier, notes, funder, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'in_stock')
-    `, [label, serial_no || null, category_id || null, purchase_price || null, supplier || null, notes || null, funder || null]);
+    if (!label) {
+      return res.status(400).json({ error: 'label is required' });
+    }
 
-    return res.status(201).json({ id: result.insertId, label });
+    const [result] = await dbPromise.query(
+        `INSERT INTO assets (label, serial_no, category_id, status, funder, purchase_price)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [label, serial_no || null, category_id || null, status || 'in_stock', funder || null, purchase_price || null]
+    );
+
+    return res.status(201).json({
+      id: result.insertId,
+      label,
+      serial_no,
+      category_id,
+      status,
+      funder,
+      purchase_price
+    });
   } catch (err) {
     console.error('POST /api/assets error:', err);
     return res.status(500).json({ error: err.message });
@@ -296,13 +283,46 @@ app.post('/api/assets', verifyJWT, async (req, res) => {
 app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
   try {
     const { id } = req.params;
-    const { label, serial_no, category_id, purchase_price, supplier, notes, funder } = req.body;
+    const { label, serial_no, category_id, status, funder, purchase_price } = req.body;
 
-    const [result] = await dbPromise.query(`
-      UPDATE assets
-      SET label = ?, serial_no = ?, category_id = ?, purchase_price = ?, supplier = ?, notes = ?, funder = ?
-      WHERE id = ?
-    `, [label, serial_no || null, category_id || null, purchase_price || null, supplier || null, notes || null, funder || null, id]);
+    const updates = [];
+    const values = [];
+
+    if (label !== undefined) {
+      updates.push('label = ?');
+      values.push(label);
+    }
+    if (serial_no !== undefined) {
+      updates.push('serial_no = ?');
+      values.push(serial_no);
+    }
+    if (category_id !== undefined) {
+      updates.push('category_id = ?');
+      values.push(category_id);
+    }
+    if (status !== undefined) {
+      updates.push('status = ?');
+      values.push(status);
+    }
+    if (funder !== undefined) {
+      updates.push('funder = ?');
+      values.push(funder);
+    }
+    if (purchase_price !== undefined) {
+      updates.push('purchase_price = ?');
+      values.push(purchase_price);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+
+    const [result] = await dbPromise.query(
+        `UPDATE assets SET ${updates.join(', ')} WHERE id = ?`,
+        values
+    );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Asset not found' });
@@ -321,26 +341,27 @@ app.patch('/api/assets/:id', verifyJWT, async (req, res) => {
 
 app.get('/api/assignments', verifyJWT, async (req, res) => {
   try {
-    const [assignments] = await dbPromise.query(`
-      SELECT
-        asn.id,
-        asn.asset_id,
-        asn.assignee_name,
-        asn.assignee_email,
-        asn.assigned_at,
-        asn.status,
-        a.label,
-        a.serial_no,
-        c.name as category_name
-      FROM assignments asn
-             LEFT JOIN assets a ON asn.asset_id = a.id
-             LEFT JOIN categories c ON a.category_id = c.id
-      ORDER BY asn.assigned_at DESC
-    `);
-
+    const [assignments] = await dbPromise.query(
+        `SELECT a.id, a.asset_id, a.assignee_name, a.assignee_email, a.status, a.assigned_at, a.returned_at
+         FROM assignments a
+         WHERE a.status IN ('active', 'returned')
+         ORDER BY a.assigned_at DESC`
+    );
     return res.json(assignments || []);
   } catch (err) {
     console.error('GET /api/assignments error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/assignments/assignees', verifyJWT, async (req, res) => {
+  try {
+    const [assignees] = await dbPromise.query(
+        `SELECT DISTINCT assignee_email, assignee_name FROM assignments ORDER BY assignee_name ASC`
+    );
+    return res.json(assignees || []);
+  } catch (err) {
+    console.error('GET /api/assignments/assignees error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -353,22 +374,29 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
       return res.status(400).json({ error: 'asset_id, assignee_name, assignee_email required' });
     }
 
-    // Close existing active assignments
+    // Close previous active assignment
     await dbPromise.query(
-        'UPDATE assignments SET status = ?, returned_at = NOW() WHERE asset_id = ? AND status = ?',
-        ['returned', asset_id, 'active']
+        'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
+        ['returned', new Date().toISOString().split('T')[0], asset_id, 'active']
     );
 
     // Create new assignment
-    const [result] = await dbPromise.query(`
-      INSERT INTO assignments (asset_id, assignee_name, assignee_email, status)
-      VALUES (?, ?, ?, 'active')
-    `, [asset_id, assignee_name, assignee_email]);
+    const [result] = await dbPromise.query(
+        `INSERT INTO assignments (asset_id, assignee_name, assignee_email, status)
+         VALUES (?, ?, ?, ?)`,
+        [asset_id, assignee_name, assignee_email, 'active']
+    );
 
     // Update asset status
     await dbPromise.query('UPDATE assets SET status = ? WHERE id = ?', ['assigned', asset_id]);
 
-    return res.status(201).json({ id: result.insertId });
+    return res.status(201).json({
+      id: result.insertId,
+      asset_id,
+      assignee_name,
+      assignee_email,
+      status: 'active'
+    });
   } catch (err) {
     console.error('POST /api/assignments error:', err);
     return res.status(500).json({ error: err.message });
@@ -381,22 +409,9 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
 
 app.get('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const [incidents] = await dbPromise.query(`
-      SELECT
-        le.id,
-        le.asset_id,
-        a.label as asset_label,
-        le.event_type as incident_type,
-        'medium' as severity,
-        'open' as status,
-        le.created_by as reported_by_email,
-        le.created_at,
-        le.notes
-      FROM lifecycle_events le
-             LEFT JOIN assets a ON le.asset_id = a.id
-      ORDER BY le.created_at DESC
-    `);
-
+    const [incidents] = await dbPromise.query(
+        `SELECT id, asset_id, title, description, status, reported_by, created_at, resolved_at FROM lifecycle_events ORDER BY created_at DESC`
+    );
     return res.json(incidents || []);
   } catch (err) {
     console.error('GET /api/incidents error:', err);
@@ -404,51 +419,22 @@ app.get('/api/incidents', verifyJWT, async (req, res) => {
   }
 });
 
-app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [incidents] = await dbPromise.query(`
-      SELECT
-        le.id,
-        le.asset_id,
-        a.label as asset_label,
-        le.event_type as incident_type,
-        'medium' as severity,
-        'open' as status,
-        le.created_by as reported_by_email,
-        le.created_at,
-        le.notes
-      FROM lifecycle_events le
-             LEFT JOIN assets a ON le.asset_id = a.id
-      WHERE le.id = ? LIMIT 1
-    `, [id]);
-
-    if (!incidents || incidents.length === 0) {
-      return res.status(404).json({ error: 'Incident not found' });
-    }
-
-    return res.json(incidents[0]);
-  } catch (err) {
-    console.error('GET /api/incidents/:id error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const { asset_id, event_type, notes } = req.body;
+    const { asset_id, title, description } = req.body;
+    const { email } = req.user;
 
-    if (!asset_id) {
-      return res.status(400).json({ error: 'asset_id is required' });
+    if (!asset_id || !title) {
+      return res.status(400).json({ error: 'asset_id and title required' });
     }
 
     const [result] = await dbPromise.query(
-        `INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by)
-         VALUES (?, ?, ?, ?)`,
-        [asset_id, event_type || 'repair', notes || null, req.user.email]
+        `INSERT INTO lifecycle_events (asset_id, title, description, status, reported_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [asset_id, title, description || null, 'open', email]
     );
 
-    return res.status(201).json({ id: result.insertId });
+    return res.status(201).json({ id: result.insertId, asset_id, title, description, status: 'open', reported_by: email });
   } catch (err) {
     console.error('POST /api/incidents error:', err);
     return res.status(500).json({ error: err.message });
@@ -460,15 +446,8 @@ app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    console.log(`PATCH /incidents/${id}/status -> status: ${status}`);
-
     if (!status) {
-      return res.status(400).json({ error: 'status is required' });
-    }
-
-    const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+      return res.status(400).json({ error: 'status required' });
     }
 
     const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
@@ -616,63 +595,9 @@ app.get('/api/rpc/is_email_allowed', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTES: Auctions Auto-Close (Internal Cron)
+// NOTE: Auctions auto-close route is now in routes/auctions.js
+// It's called by the cron job and includes email notifications
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// Route interne (sans JWT) - appelée par cron toutes les heures
-app.post('/api/auctions/auto-close', async (req, res) => {
-  try {
-    // Step 1: Find all active auctions past their end_date
-    const [expiredAuctions] = await dbPromise.query(`
-      SELECT id, asset_id FROM auctions
-      WHERE status = 'active' AND end_date <= NOW()
-      ORDER BY end_date ASC
-    `);
-
-    console.log(`[AUTO-CLOSE DEBUG] expiredAuctions:`, expiredAuctions);
-
-    if (!expiredAuctions || expiredAuctions.length === 0) {
-      console.log(`[AUTO-CLOSE] No expired auctions found`);
-      return res.json({ closed: 0, message: 'No expired auctions found' });
-    }
-
-    let closedCount = 0;
-
-    // Step 2: For each expired auction, find winner and close
-    for (const auction of expiredAuctions) {
-      const auctionId = auction.id;
-      const assetId = auction.asset_id;
-
-      // Find highest bidder
-      const [bids] = await dbPromise.query(`
-        SELECT user_uid, amount FROM bids
-        WHERE auction_id = ?
-        ORDER BY amount DESC
-          LIMIT 1
-      `, [auctionId]);
-
-      const winnerUid = bids && bids.length > 0 ? bids[0].user_uid : null;
-
-      // Update auction: status='ended', winner_uid set
-      await dbPromise.query(`
-        UPDATE auctions
-        SET status = 'ended', winner_uid = ?
-        WHERE id = ?
-      `, [winnerUid, auctionId]);
-
-      closedCount++;
-      console.log(`✅ Auction ${auctionId} auto-closed. Winner: ${winnerUid || 'none'}`);
-    }
-
-    return res.json({
-      closed: closedCount,
-      message: `${closedCount} auction(s) auto-closed`
-    });
-  } catch (err) {
-    console.error('POST /api/auctions/auto-close error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATIC FILES & SPA FALLBACK

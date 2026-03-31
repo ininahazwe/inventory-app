@@ -1,51 +1,41 @@
 /**
  * Cron task: Auto-close expired auctions
  * Runs every hour at :00
- * Calls POST /api/auctions/auto-close on localhost:3003
+ * Calls POST /api/auctions/auto-close on assets.mfwa.org
  */
 
 const schedule = require('node-schedule');
-const http = require('http');
 
-// Run every hour at :00
-const job = schedule.scheduleJob('*/5 * * * *', async () => {
+// Run every hour at :00 (e.g., 13:00, 14:00, 15:00...)
+const job = schedule.scheduleJob('0 * * * *', async () => {
     const now = new Date();
-    console.log(`\n[${now.toISOString()}] 🔄 Running auto-close cron...`);
+    console.log(`\n[${now.toISOString()}] 🔄 Running auction auto-close cron...`);
 
-    const postData = JSON.stringify({});
-
-    const options = {
-        hostname: 'localhost',
-        port: 3003,
-        path: '/api/auctions/auto-close',
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData),
-        },
-    };
-
-    const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => { data += chunk; });
-        res.on('end', () => {
-            try {
-                const result = JSON.parse(data);
-                console.log(`✅ Cron result: ${result.message}`);
-            } catch (err) {
-                console.error('Failed to parse cron response:', err);
-            }
+    try {
+        // Call the auction auto-close endpoint on the public domain
+        const response = await fetch('https://assets.mfwa.org/api/auctions/auto-close', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
         });
-    });
 
-    req.on('error', (err) => {
-        console.error('❌ Cron error:', err.message);
-    });
+        const result = await response.json();
 
-    req.write(postData);
-    req.end();
+        if (response.ok) {
+            console.log(`✅ Cron result: ${result.message || result.success}`);
+            if (result.closedCount) {
+                console.log(`   Closed ${result.closedCount} auction(s)`);
+            }
+        } else {
+            console.error(`❌ Cron error (${response.status}): ${result.error || 'Unknown error'}`);
+        }
+    } catch (err) {
+        console.error(`❌ Cron request failed: ${err.message}`);
+    }
 });
 
-console.log('✅ Auction auto-close cron scheduled (runs every hour)');
+console.log('✅ Auction auto-close cron scheduled (runs every hour at :00)');
 
 module.exports = job;
