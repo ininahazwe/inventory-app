@@ -42,9 +42,9 @@ export default function Home({ onNew }: { onNew: () => void }) {
     const params = new URLSearchParams({ page: String(currentPage), limit: String(ITEMS_PER_PAGE) });
     if (qCategory) params.set('category_name', qCategory);
     if (qLabel.trim()) params.set('label', qLabel.trim());
-    const { data } = await api.get<{ data: Row[]; count: number }>(`/assets?${params}`);
+    const { data } = await api.get<{ data: Row[]; pagination: { total: number } }>(`/assets?${params}`);
     setRows((data as any)?.data ?? []);
-    setTotalCount((data as any)?.count ?? 0);
+    setTotalCount((data as any)?.pagination?.total ?? 0);
   }, [qLabel, qCategory, currentPage]);
 
   useEffect(() => { load(); }, [load]);

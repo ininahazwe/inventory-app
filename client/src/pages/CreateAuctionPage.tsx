@@ -13,6 +13,15 @@ interface Asset {
   category_name: string | null;
 }
 
+interface AssetsResponse {
+  data: Asset[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
 interface UploadedImage {
   url: string;
   public_id: string;
@@ -37,33 +46,59 @@ export default function CreateAuctionPage() {
   });
 
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [allAssets, setAllAssets] = useState<Asset[]>([]); // Tous les in_stock assets
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Images
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Charger les assets "in_stock"
+  // 🔥 FIX: Charger tous les assets in_stock au montage
   useEffect(() => {
-    loadAssets();
-  }, [assetSearch]);
+    loadAllAssets();
+  }, []);
 
-  const loadAssets = async () => {
-    try {
-      const { data, error: err } = await api.get<{ data: Asset[]; count: number }>(
-        `/assets?limit=50${assetSearch ? `&label=${encodeURIComponent(assetSearch)}` : ''}`
+  // 🔥 FIX: Filtrer les assets basé sur la recherche
+  useEffect(() => {
+    if (!assetSearch.trim()) {
+      setAssets(allAssets);
+    } else {
+      const searchLower = assetSearch.toLowerCase();
+      const filtered = allAssets.filter(a =>
+        a.label.toLowerCase().includes(searchLower) ||
+        (a.serial_no && a.serial_no.toLowerCase().includes(searchLower)) ||
+        (a.category_name && a.category_name.toLowerCase().includes(searchLower))
       );
+      setAssets(filtered);
+    }
+  }, [assetSearch, allAssets]);
 
-      if (!err && data) {
-        const inStock = (data as any).data.filter((a: Asset) => a.status === 'in_stock');
-        setAssets(inStock);
+  // 🔥 FIX: Charger TOUS les assets avec status in_stock au montage
+  const loadAllAssets = async () => {
+    try {
+      setLoading(true);
+      // Charger tous les assets, paginer si nécessaire
+      const { data, error: err } = await api.get<AssetsResponse>('/assets?limit=100');
+
+      if (err || !data) {
+        setError(err || 'Failed to load assets');
+        return;
       }
+
+      // Filtrer les assets avec status = 'in_stock'
+      const inStockAssets = (data.data || []).filter((a: Asset) => a.status === 'in_stock');
+      setAllAssets(inStockAssets);
+      setAssets(inStockAssets);
     } catch (err) {
       console.error('Error loading assets:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load assets');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,6 +108,13 @@ export default function CreateAuctionPage() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  // 🔥 FIX: Sélectionner un asset et fermer le dropdown
+  const selectAsset = (asset: Asset) => {
+    setFormData(prev => ({ ...prev, asset_id: String(asset.id) }));
+    setAssetSearch('');
+    setDropdownOpen(false);
   };
 
   // Upload image to Cloudinary
@@ -93,15 +135,15 @@ export default function CreateAuctionPage() {
       }
 
       for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', uploadPreset);
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        formDataUpload.append('upload_preset', uploadPreset);
 
         const response = await fetch(
           `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
           {
             method: 'POST',
-            body: formData,
+            body: formDataUpload,
           }
         );
 
@@ -170,7 +212,7 @@ export default function CreateAuctionPage() {
     }
   };
 
-  const selectedAsset = assets.find(a => a.id === parseInt(formData.asset_id || '0'));
+  const selectedAsset = allAssets.find(a => a.id === parseInt(formData.asset_id || '0'));
 
   // Afficher loader pendant chargement des permissions
   if (permissionsLoading) {
@@ -218,84 +260,132 @@ export default function CreateAuctionPage() {
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Asset Selection */}
+          {/* Asset Selection - Dropdown déroulante */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Asset *
+              Asset * ({allAssets.length} available)
             </label>
-            <input
-              type="text"
-              placeholder="Search assets..."
-              value={assetSearch}
-              onChange={(e) => setAssetSearch(e.target.value)}
-              className="input"
-              style={{ marginBottom: 8 }}
-            />
 
-            {assets.length > 0 ? (
-              <div style={{
-                border: '1px solid #ddd',
-                borderRadius: 4,
-                maxHeight: 200,
-                overflowY: 'auto',
-              }}>
-                {assets.map(asset => (
-                  <div
-                    key={asset.id}
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, asset_id: String(asset.id) }));
-                      setAssetSearch('');
-                    }}
-                    style={{
-                      padding: 12,
-                      borderBottom: '1px solid #eee',
-                      cursor: 'pointer',
-                      background: formData.asset_id === String(asset.id) ? '#f0f0f0' : 'white',
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (formData.asset_id !== String(asset.id)) {
-                        (e.currentTarget as HTMLDivElement).style.background = '#fafafa';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (formData.asset_id !== String(asset.id)) {
-                        (e.currentTarget as HTMLDivElement).style.background = 'white';
-                      }
-                    }}
-                  >
-                    <div style={{ fontWeight: 500 }}>{asset.label}</div>
-                    {asset.serial_no && (
-                      <div style={{ fontSize: 12, color: '#666' }}>SN: {asset.serial_no}</div>
-                    )}
-                    {asset.category_name && (
-                      <div style={{ fontSize: 12, color: '#999' }}>{asset.category_name}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : assetSearch ? (
-              <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
-                No assets found
-              </div>
-            ) : (
-              <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
-                Type to search for in-stock assets
-              </div>
-            )}
+            {/* Search + Dropdown Container */}
+            <div style={{ position: 'relative' }}>
+              {/* Search Input */}
+              <input
+                type="text"
+                placeholder="Search by label, serial #, or category..."
+                value={assetSearch}
+                onChange={(e) => {
+                  setAssetSearch(e.target.value);
+                  setDropdownOpen(true);
+                }}
+                onFocus={() => setDropdownOpen(true)}
+                className="input"
+                style={{ marginBottom: assetSearch || dropdownOpen ? 0 : 8 }}
+              />
 
+              {/* Dropdown List */}
+              {dropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: 'white',
+                  border: '1px solid #ddd',
+                  borderTop: 'none',
+                  borderRadius: '0 0 4px 4px',
+                  maxHeight: 300,
+                  overflowY: 'auto',
+                  zIndex: 10,
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                }}>
+                  {assets.length > 0 ? (
+                    assets.map(asset => (
+                      <div
+                        key={asset.id}
+                        onClick={() => selectAsset(asset)}
+                        style={{
+                          padding: 12,
+                          borderBottom: '1px solid #eee',
+                          cursor: 'pointer',
+                          background: formData.asset_id === String(asset.id) ? '#e8f5e9' : 'white',
+                          transition: 'background 0.15s',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (formData.asset_id !== String(asset.id)) {
+                            (e.currentTarget as HTMLDivElement).style.background = '#f9f9f9';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (formData.asset_id !== String(asset.id)) {
+                            (e.currentTarget as HTMLDivElement).style.background = 'white';
+                          }
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 500, color: '#333' }}>
+                            {asset.label}
+                            {formData.asset_id === String(asset.id) && (
+                              <span style={{ marginLeft: 8, color: '#4caf50', fontWeight: 700 }}>✓</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 12, color: '#666' }}>
+                            {asset.serial_no && <span>SN: {asset.serial_no}</span>}
+                            {asset.category_name && <span>•</span>}
+                            {asset.category_name && <span>{asset.category_name}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : assetSearch ? (
+                    <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
+                      No assets match your search
+                    </div>
+                  ) : (
+                    <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
+                      No in-stock assets available
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Fermer le dropdown en cliquant ailleurs */}
+              {dropdownOpen && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 5,
+                  }}
+                  onClick={() => setDropdownOpen(false)}
+                />
+              )}
+            </div>
+
+            {/* Selected Asset Info */}
             {selectedAsset && (
               <div style={{
                 marginTop: 12,
                 padding: 12,
-                background: '#f5f5f5',
+                background: '#e8f5e9',
                 borderRadius: 4,
+                borderLeft: '4px solid #4caf50',
               }}>
-                <p style={{ margin: '0 0 4px 0', fontWeight: 500 }}>Selected:</p>
-                <p style={{ margin: 0, fontWeight: 600 }}>{selectedAsset.label}</p>
+                <p style={{ margin: '0 0 4px 0', fontWeight: 500, color: '#2e7d32' }}>✓ Selected:</p>
+                <p style={{ margin: 0, fontWeight: 600, color: '#333' }}>{selectedAsset.label}</p>
                 {selectedAsset.serial_no && (
                   <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666' }}>
                     SN: {selectedAsset.serial_no}
+                  </p>
+                )}
+                {selectedAsset.category_name && (
+                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666' }}>
+                    Category: {selectedAsset.category_name}
                   </p>
                 )}
               </div>

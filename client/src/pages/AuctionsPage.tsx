@@ -38,6 +38,15 @@ interface AuctionDetailView {
   bids: Bid[];
 }
 
+interface AuctionsResponse {
+  data: Auction[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
 const ITEMS_PER_PAGE = 10;
 
 export default function AuctionsPage() {
@@ -59,24 +68,34 @@ export default function AuctionsPage() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalCount);
 
+  // 🔥 FIX: Adapter à la nouvelle API qui retourne { data, pagination }
   const load = useMemo(() => async () => {
     try {
       setLoading(true);
       setError(null);
-      const { data, error: err } = await api.get<Auction[]>('/auctions');
+      const { data: response, error: err } = await api.get<AuctionsResponse>('/auctions');
 
-      if (err || !data) {
+      if (err || !response) {
         setError(err || 'Failed to load auctions');
         return;
       }
 
-      // Filter by status
-      let filtered = data;
+      // Accéder au tableau d'enchères depuis la réponse paginée
+      const auctionsList = response.data || [];
+
+      // Utiliser le total depuis la pagination response
+      const apiTotal = response.pagination?.total || auctionsList.length;
+
+      // Filter by status (optionnel, peut être fait côté serveur à l'avenir)
+      let filtered = auctionsList;
       if (filter !== 'all') {
-        filtered = data.filter(a => a.status === filter);
+        filtered = auctionsList.filter(a => a.status === filter);
       }
 
-      setTotalCount(filtered.length);
+      // Utiliser le total API si 'all', sinon le count filtré local
+      const totalToShow = filter === 'all' ? apiTotal : filtered.length;
+      setTotalCount(totalToShow);
+
       // Paginate
       const paginated = filtered.slice(
         (currentPage - 1) * ITEMS_PER_PAGE,

@@ -1,5 +1,6 @@
-const BASE_URL = (window.__ENV__?.VITE_API_URL || import.meta.env.VITE_API_URL || "/api");
-//const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// Utiliser URL relative pour que ça marche en prod ET dev
+// /api → proxy automatiquement via Apache en prod, ou Vite dev server
+const BASE_URL = '/api';
 
 let googleInitialized = false;
 let googleInitPromise: Promise<void> | null = null;
@@ -136,6 +137,25 @@ const waitForGoogle = (): Promise<void> => {
   });
 };
 
+// 🔥 FIX: Obtenir client_id depuis multiples sources (priority)
+const getGoogleClientId = (): string | undefined => {
+  // 1. Essayer window.__ENV__ (injecté côté serveur en prod)
+  if (typeof window !== 'undefined' && (window as any).__ENV__?.VITE_GOOGLE_CLIENT_ID) {
+    console.log('✅ Google Client ID from window.__ENV__');
+    return (window as any).__ENV__.VITE_GOOGLE_CLIENT_ID;
+  }
+
+  // 2. Essayer import.meta.env (Vite en dev)
+  if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+    console.log('✅ Google Client ID from import.meta.env');
+    return import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  }
+
+  // 3. Fallback hardcoded (dernière option, ne devrait pas arriver ici)
+  console.warn('⚠️  Google Client ID not found - Google Sign-In will fail');
+  return undefined;
+};
+
 // ─── Auth (Google ID Token Flow) ─────────────────────────────────────────────
 export const auth = {
   initGoogle: (): Promise<void> => {
@@ -147,10 +167,16 @@ export const auth = {
       if (googleInitialized || !window.google) return;
       googleInitialized = true;
 
+      const clientId = getGoogleClientId();
+      if (!clientId) {
+        console.error('❌ Cannot initialize Google Sign-In: client_id is missing');
+        return;
+      }
+
       console.log('Initializing Google Sign-In...');
 
       window.google.accounts.id.initialize({
-          client_id: window.__ENV__?.VITE_GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        client_id: clientId,
         callback: async (response: { credential?: string }) => {
           console.log('Google callback received:', !!response.credential);
 

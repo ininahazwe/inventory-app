@@ -16,7 +16,8 @@
     "jsonwebtoken": "^9.0.2",
     "jwt-decode": "^4.0.0",
     "mysql2": "^3.20.0",
-    "node-schedule": "^2.1.1"
+    "node-schedule": "^2.1.1",
+    "resend": "^6.10.0"
   },
   "engines": {
     "node": ">=18.0.0",
