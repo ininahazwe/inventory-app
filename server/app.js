@@ -231,11 +231,11 @@ app.get('/api/assets', verifyJWT, async (req, res) => {
         asn.assignee_name,
         asn.assignee_email
       FROM assets a
-        LEFT JOIN categories c ON a.category_id = c.id
-        LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
+             LEFT JOIN categories c ON a.category_id = c.id
+             LEFT JOIN assignments asn ON a.id = asn.asset_id AND asn.status = 'active'
         ${whereClause}
       ORDER BY a.label ASC
-      LIMIT ? OFFSET ?
+        LIMIT ? OFFSET ?
     `;
     params.push(pageSize, offset);
 
@@ -407,34 +407,59 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
 // ROUTES: Incidents
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// GET /api/incidents - Lister tous les incidents
 app.get('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const [incidents] = await dbPromise.query(
-        `SELECT id, asset_id, title, description, status, reported_by, created_at, resolved_at FROM lifecycle_events ORDER BY created_at DESC`
-    );
-    return res.json(incidents || []);
+    const [incidents] = await pool.query(`
+      SELECT
+        i.id,
+        i.asset_id,
+        a.label as asset_label,
+        i.incident_type,
+        i.severity,
+        i.description,
+        i.status,
+        i.reported_by_email,
+        i.assigned_to,
+        i.created_at,
+        i.resolved_at,
+        i.notes
+      FROM incidents i
+             LEFT JOIN assets a ON i.asset_id = a.id
+      ORDER BY i.created_at DESC
+    `);
+    res.json(incidents);
   } catch (err) {
     console.error('GET /api/incidents error:', err);
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch incidents' });
   }
 });
 
 app.post('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const { asset_id, title, description } = req.body;
+    const { asset_id, incident_type, severity, description } = req.body;
     const { email } = req.user;
 
-    if (!asset_id || !title) {
-      return res.status(400).json({ error: 'asset_id and title required' });
+    if (!asset_id) {
+      return res.status(400).json({ error: 'asset_id required' });
     }
 
-    const [result] = await dbPromise.query(
-        `INSERT INTO lifecycle_events (asset_id, title, description, status, reported_by)
-         VALUES (?, ?, ?, ?, ?)`,
-        [asset_id, title, description || null, 'open', email]
+    const [result] = await pool.query(
+        `INSERT INTO incidents (asset_id, incident_type, severity, description, status, reported_by_email, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [asset_id, incident_type || 'other', severity || 'medium', description || null, 'open', email]
     );
 
-    return res.status(201).json({ id: result.insertId, asset_id, title, description, status: 'open', reported_by: email });
+    return res.status(201).json({
+      id: result.insertId,
+      asset_id,
+      incident_type: incident_type || 'other',
+      severity: severity || 'medium',
+      description,
+      status: 'open',
+      reported_by_email: email,
+      created_at: new Date().toISOString()
+    });
   } catch (err) {
     console.error('POST /api/incidents error:', err);
     return res.status(500).json({ error: err.message });
@@ -452,8 +477,8 @@ app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
 
     const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
 
-    const [result] = await dbPromise.query(
-        `UPDATE lifecycle_events
+    const [result] = await pool.query(
+        `UPDATE incidents
          SET status = ?, resolved_at = ?
          WHERE id = ?`,
         [status, resolvedAt, id]
