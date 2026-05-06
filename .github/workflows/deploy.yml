@@ -1,0 +1,39 @@
+name: Deploy to cPanel - Assets
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd /home/dxtrmfwa/repositories/inventory-app
+            git pull origin main
+
+            # Backend — copier les fichiers vers public_html
+            cp app.js /home/dxtrmfwa/public_html/assets.mfwa.org/app.js
+            cp -r routes/. /home/dxtrmfwa/public_html/assets.mfwa.org/routes/
+            cp cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/cron-auto-close.js
+
+            # Installer les dépendances backend en prod
+            cd /home/dxtrmfwa/public_html/assets.mfwa.org
+            npm ci --omit=dev
+            pm2 restart assets-mgt
+
+            # Frontend — build depuis le repo
+            cd /home/dxtrmfwa/repositories/inventory-app/client
+            npm ci
+            npm run build
+
+            # Copier le dist vers public_html/public
+            cp -r dist/. /home/dxtrmfwa/public_html/assets.mfwa.org/public/

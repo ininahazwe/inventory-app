@@ -29,7 +29,7 @@ const db = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
-  keepAliveInitialDelayMs: 0,
+  //keepAliveInitialDelayMs: 0,
 });
 
 const dbPromise = db.promise();
