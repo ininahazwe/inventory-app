@@ -165,8 +165,14 @@ tbody {background: #f7f7f7}
     &.red{
         background: #8D86C9;
     }
+    &.bordeaux{
+      background: #6d071a;
+    }
     &.green{
         background: #213547;
+    }
+    &.blue{
+      background: royalblue;
     }
     &.green-light{
         background: #9067C6;

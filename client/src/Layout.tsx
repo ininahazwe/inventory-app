@@ -48,7 +48,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="site-right">
-            <Link to="/auctions" className="pill green">Auctions</Link>
+            <Link to="/auctions" className="pill bordeaux">⏱︎ Auctions</Link>
             {email ? (
               <button className="pill red" onClick={logout}>Log out</button>
             ) : (
