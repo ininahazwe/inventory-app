@@ -356,10 +356,57 @@ app.get('/api/assignments', verifyJWT, async (req, res) => {
 
 app.get('/api/assignments/assignees', verifyJWT, async (req, res) => {
   try {
-    const [assignees] = await dbPromise.query(
-        `SELECT DISTINCT assignee_email, assignee_name FROM assignments ORDER BY assignee_name ASC`
-    );
-    return res.json(assignees || []);
+    const { page = 1, limit = 10, q = '' } = req.query;
+    const pageNum = parseInt(page) || 1;
+    const pageSize = Math.min(parseInt(limit) || 10, 100);
+    const offset = (pageNum - 1) * pageSize;
+    const searchTerm = (q || '').toString().trim();
+
+    // Compter le total (exclure les NULL emails)
+    let countQuery = `
+      SELECT COUNT(DISTINCT TRIM(assignee_email)) as total 
+      FROM assignments 
+      WHERE status = 'active' AND assignee_email IS NOT NULL
+    `;
+    const countParams = [];
+
+    if (searchTerm) {
+      countQuery += ' AND (TRIM(assignee_name) LIKE ? OR TRIM(assignee_email) LIKE ?)';
+      countParams.push(`%${searchTerm}%`, `%${searchTerm}%`);
+    }
+
+    const [countResult] = await dbPromise.query(countQuery, countParams);
+    const total = countResult[0]?.total || 0;
+
+    // Récupérer les assignees avec pagination
+    let dataQuery = `
+      SELECT 
+        TRIM(assignee_email) as assignee_email,
+        MAX(TRIM(assignee_name)) as assignee_name,
+        COUNT(asset_id) as asset_count
+      FROM assignments
+      WHERE status = 'active' AND assignee_email IS NOT NULL
+    `;
+    const dataParams = [];
+
+    if (searchTerm) {
+      dataQuery += ' AND (TRIM(assignee_name) LIKE ? OR TRIM(assignee_email) LIKE ?)';
+      dataParams.push(`%${searchTerm}%`, `%${searchTerm}%`);
+    }
+
+    dataQuery += `
+      GROUP BY TRIM(assignee_email)
+      ORDER BY assignee_name ASC
+      LIMIT ? OFFSET ?
+    `;
+    dataParams.push(pageSize, offset);
+
+    const [assignees] = await dbPromise.query(dataQuery, dataParams);
+
+    return res.json({
+      data: assignees || [],
+      count: total
+    });
   } catch (err) {
     console.error('GET /api/assignments/assignees error:', err);
     return res.status(500).json({ error: err.message });
@@ -407,10 +454,9 @@ app.post('/api/assignments', verifyJWT, async (req, res) => {
 // ROUTES: Incidents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/incidents - Lister tous les incidents
 app.get('/api/incidents', verifyJWT, async (req, res) => {
   try {
-    const [incidents] = await pool.query(`
+    const [incidents] = await dbPromise.query(`
       SELECT
         i.id,
         i.asset_id,
@@ -428,10 +474,10 @@ app.get('/api/incidents', verifyJWT, async (req, res) => {
              LEFT JOIN assets a ON i.asset_id = a.id
       ORDER BY i.created_at DESC
     `);
-    res.json(incidents);
+    return res.json(incidents || []);
   } catch (err) {
     console.error('GET /api/incidents error:', err);
-    res.status(500).json({ error: 'Failed to fetch incidents' });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -444,7 +490,7 @@ app.post('/api/incidents', verifyJWT, async (req, res) => {
       return res.status(400).json({ error: 'asset_id required' });
     }
 
-    const [result] = await pool.query(
+    const [result] = await dbPromise.query(
         `INSERT INTO incidents (asset_id, incident_type, severity, description, status, reported_by_email, created_at)
          VALUES (?, ?, ?, ?, ?, ?, NOW())`,
         [asset_id, incident_type || 'other', severity || 'medium', description || null, 'open', email]
@@ -466,6 +512,39 @@ app.post('/api/incidents', verifyJWT, async (req, res) => {
   }
 });
 
+app.get('/api/incidents/:id', verifyJWT, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [incidents] = await dbPromise.query(`
+      SELECT
+        i.id,
+        i.asset_id,
+        a.label as asset_label,
+        i.incident_type,
+        i.severity,
+        i.description,
+        i.status,
+        i.reported_by_email,
+        i.assigned_to,
+        i.created_at,
+        i.resolved_at,
+        i.notes
+      FROM incidents i
+             LEFT JOIN assets a ON i.asset_id = a.id
+      WHERE i.id = ?
+    `, [id]);
+
+    if (!incidents.length) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    return res.json(incidents[0]);
+  } catch (err) {
+    console.error(`GET /api/incidents/:id error:`, err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
   try {
     const { id } = req.params;
@@ -477,7 +556,7 @@ app.patch('/api/incidents/:id/status', verifyJWT, async (req, res) => {
 
     const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
 
-    const [result] = await pool.query(
+    const [result] = await dbPromise.query(
         `UPDATE incidents
          SET status = ?, resolved_at = ?
          WHERE id = ?`,
@@ -531,6 +610,30 @@ app.post('/api/rpc/:name', verifyJWT, async (req, res) => {
         FROM assets
       `);
       return res.json(stats[0]);
+    }
+
+    if (name === 'assignees_rename') {
+      const { p_email, p_new_name } = params;
+      if (!p_email || !p_new_name) return res.status(400).json({ error: 'p_email and p_new_name required' });
+
+      const [result] = await dbPromise.query(
+          'UPDATE assignments SET assignee_name = ? WHERE assignee_email = ?',
+          [p_new_name, p_email]
+      );
+
+      return res.json({ success: true, affectedRows: result.affectedRows });
+    }
+
+    if (name === 'assignees_delete') {
+      const { p_email, p_name } = params;
+      if (!p_email && !p_name) return res.status(400).json({ error: 'p_email or p_name required' });
+
+      const [result] = await dbPromise.query(
+          'DELETE FROM assignments WHERE assignee_email = ? OR assignee_name = ?',
+          [p_email || '', p_name || '']
+      );
+
+      return res.json({ success: true, deletedRows: result.affectedRows });
     }
 
     return res.status(404).json({ error: `RPC function '${name}' not found` });
