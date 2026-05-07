@@ -754,6 +754,7 @@ const server = app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}\n`);
 });
 
+
 server.on('error', (err) => {
   console.error('Server error:', err);
   process.exit(1);
