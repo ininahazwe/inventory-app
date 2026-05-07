@@ -12,18 +12,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH with increased timeout
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          timeout: 300s
+          command_timeout: 300s
           script: |
+            set -e
+            
+            echo "🔄 Pulling latest code..."
             cd /home/dxtrmfwa/repositories/inventory-app
             git pull origin main
 
             echo "📦 Installing frontend dependencies..."
+            cd /home/dxtrmfwa/repositories/inventory-app/client
             npm install --legacy-peer-deps
 
             echo "🔨 Building frontend..."
@@ -34,14 +40,11 @@ jobs:
             cp -r dist /home/dxtrmfwa/public_html/assets.mfwa.org/
 
             echo "📂 Copying backend files to production..."
-            cp app.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp emailService-resend.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp inject-env.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            
-            # 🔑 IMPORTANT: Copier les routes ET les services
-            cp -r server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp -r server/services /home/dxtrmfwa/public_html/assets.mfwa.org/server/
+            cp /home/dxtrmfwa/repositories/inventory-app/server/app.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp /home/dxtrmfwa/repositories/inventory-app/server/cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp /home/dxtrmfwa/repositories/inventory-app/server/inject-env.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp -r /home/dxtrmfwa/repositories/inventory-app/server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp -r /home/dxtrmfwa/repositories/inventory-app/server/services /home/dxtrmfwa/public_html/assets.mfwa.org/server/
 
             echo "📦 Installing backend dependencies..."
             cd /home/dxtrmfwa/public_html/assets.mfwa.org
@@ -50,4 +53,28 @@ jobs:
             echo "🔄 Restarting PM2..."
             pm2 restart assets-mgt
 
-            echo "✅ Deployment complete!"
+            echo "✅ Deployment completed successfully!"
+
+      - name: Notify deployment success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Deployment to assets.mfwa.org completed successfully!'
+            })
+
+      - name: Notify deployment failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ Deployment to assets.mfwa.org failed! Check the workflow logs.'
+            })
