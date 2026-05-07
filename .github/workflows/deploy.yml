@@ -1,4 +1,4 @@
-name: Deploy to cPanel - Assets
+name: Deploy to cPanel - Inventory App
 
 on:
   push:
@@ -22,51 +22,53 @@ jobs:
           script: |
             set -e
             
-            echo "=== Starting deployment ==="
+            echo "=== 🚀 Starting deployment: inventory-app ==="
             
             # ========== GIT PULL ==========
             cd /home/dxtrmfwa/repositories/inventory-app
             git pull origin main --quiet
             echo "✅ Git pulled successfully"
             
-            # ========== BUILD BACKEND (si TypeScript) ==========
-            # Décommenter si le backend a un build step (tsc)
-            # cd /home/dxtrmfwa/repositories/inventory-app/server
-            # npm ci --quiet
-            # npm run build
-            # cd ..
-            
-            # ========== BACKEND DEPLOYMENT (CommonJS) ==========
+            # ========== BACKEND DEPLOYMENT (CommonJS from server/) ==========
             echo "📦 Deploying backend..."
-            cp app.js /home/dxtrmfwa/public_html/assets.mfwa.org/app.js
-            cp cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/cron-auto-close.js
-            cp -r routes /home/dxtrmfwa/public_html/assets.mfwa.org/routes
-            cp -r services /home/dxtrmfwa/public_html/assets.mfwa.org/services
-            cp package.json /home/dxtrmfwa/public_html/assets.mfwa.org/package.json
+            cp server/app.js /home/dxtrmfwa/public_html/assets.mfwa.org/app.js
+            cp server/cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/cron-auto-close.js
+            cp -r server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/routes
+            cp -r server/services /home/dxtrmfwa/public_html/assets.mfwa.org/services
+            cp server/package.json /home/dxtrmfwa/public_html/assets.mfwa.org/package.json
+            echo "✅ Backend files copied"
             
             # Installer les dépendances backend en prod
             cd /home/dxtrmfwa/public_html/assets.mfwa.org
             npm ci --omit=dev --quiet
-            
-            # Recharger le process PM2
-            pm2 restart assets-mgt --silent
-            echo "✅ Backend deployed and PM2 restarted"
+            echo "✅ Backend dependencies installed"
             
             # ========== FRONTEND BUILD & DEPLOYMENT ==========
             echo "🎨 Building and deploying frontend..."
             cd /home/dxtrmfwa/repositories/inventory-app/client
             npm ci --quiet
             npm run build --quiet
+            echo "✅ Frontend built"
             
             # Copier le dist vers public_html/public
             rm -rf /home/dxtrmfwa/public_html/assets.mfwa.org/public
             cp -r dist /home/dxtrmfwa/public_html/assets.mfwa.org/public
-            echo "✅ Frontend built and deployed"
+            echo "✅ Frontend deployed"
+            
+            # ========== PM2 RESTART ==========
+            echo "🔄 Restarting PM2 process..."
+            pm2 restart assets-mgt --silent
+            sleep 2
+            echo "✅ PM2 process restarted"
             
             # ========== FINAL VALIDATION ==========
             echo "🔍 Validating deployment..."
-            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/app.js ] && echo "✅ Backend entry point exists"
-            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists"
-            [ -d /home/dxtrmfwa/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists"
+            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/app.js ] && echo "✅ Backend entry point exists" || echo "❌ Backend entry point missing"
+            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
+            [ -d /home/dxtrmfwa/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
+            
+            # Vérifier le statut PM2
+            echo "📊 PM2 Status:"
+            pm2 status | grep assets-mgt || echo "⚠️ assets-mgt process not found"
             
             echo "=== ✨ Deployment complete ==="
