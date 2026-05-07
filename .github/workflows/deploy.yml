@@ -33,6 +33,16 @@ jobs:
             rm -rf /home/dxtrmfwa/public_html/assets.mfwa.org/dist
             cp -r dist /home/dxtrmfwa/public_html/assets.mfwa.org/
 
+            echo "📂 Copying backend files to production..."
+            cp app.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp emailService-resend.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp inject-env.js /home/dxtrmfwa/public_html/assets.mfwa.org/
+            
+            # 🔑 IMPORTANT: Copier les routes ET les services
+            cp -r server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/
+            cp -r server/services /home/dxtrmfwa/public_html/assets.mfwa.org/server/
+
             echo "📦 Installing backend dependencies..."
             cd /home/dxtrmfwa/public_html/assets.mfwa.org
             npm ci --omit=dev
