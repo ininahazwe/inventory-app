@@ -40,7 +40,7 @@ jobs:
             
             # Installer les dépendances backend en prod
             cd /home/dxtrmfwa/public_html/assets.mfwa.org
-            npm ci --omit=dev --quiet
+            npm install --omit=dev --quiet
             echo "✅ Backend dependencies installed"
             
             # ========== FRONTEND BUILD & DEPLOYMENT ==========
