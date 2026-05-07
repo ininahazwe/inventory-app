@@ -1,4 +1,4 @@
-name: Deploy to cPanel - Assets
+name: Deploy to cPanel - Assets (Zero Deployment)
 
 on:
   push:
@@ -8,49 +8,151 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH with increased timeout
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          timeout: 300s
-          command_timeout: 300s
+          timeout: 600s
+          command_timeout: 600s
           script: |
             set -e
             
-            echo "🔄 Pulling latest code..."
-            cd /home/dxtrmfwa/repositories/inventory-app
-            git pull origin main
-
-            echo "📦 Installing frontend dependencies..."
-            cd /home/dxtrmfwa/repositories/inventory-app/client
+            PROD_DIR="/home/dxtrmfwa/public_html/assets.mfwa.org"
+            REPO_DIR="/home/dxtrmfwa/repositories/inventory-app"
+            
+            echo "=========================================="
+            echo "🚀 ZERO DEPLOYMENT - ASSETS MGT"
+            echo "=========================================="
+            
+            # ============ CLEANUP ============
+            echo ""
+            echo "🗑️  Phase 1 : Nettoyage..."
+            if pm2 list | grep -q "assets-mgt"; then
+              pm2 delete assets-mgt || true
+            fi
+            
+            rm -rf "$PROD_DIR"/*
+            rm -rf "$REPO_DIR"
+            mkdir -p "$PROD_DIR"
+            
+            # ============ CLONE & BUILD ============
+            echo ""
+            echo "📥 Phase 2 : Clone du repo..."
+            cd /home/dxtrmfwa/repositories
+            git clone https://github.com/YOUR_USERNAME/inventory-app.git
+            cd "$REPO_DIR"
+            git checkout main
+            
+            echo ""
+            echo "📦 Frontend : Installation dépendances..."
+            cd "$REPO_DIR/client"
             npm install --legacy-peer-deps
-
-            echo "🔨 Building frontend..."
+            
+            echo ""
+            echo "🔨 Frontend : Build production..."
             npm run build
-
-            echo "📂 Copying frontend build to production..."
-            rm -rf /home/dxtrmfwa/public_html/assets.mfwa.org/dist
-            cp -r dist /home/dxtrmfwa/public_html/assets.mfwa.org/
-
-            echo "📂 Copying backend files to production..."
-            cp /home/dxtrmfwa/repositories/inventory-app/server/app.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp /home/dxtrmfwa/repositories/inventory-app/server/cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp /home/dxtrmfwa/repositories/inventory-app/server/inject-env.js /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp -r /home/dxtrmfwa/repositories/inventory-app/server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/
-            cp -r /home/dxtrmfwa/repositories/inventory-app/server/services /home/dxtrmfwa/public_html/assets.mfwa.org/server/
-
-            echo "📦 Installing backend dependencies..."
-            cd /home/dxtrmfwa/public_html/assets.mfwa.org
+            
+            echo ""
+            echo "📂 Frontend : Copie dist/ en prod..."
+            cp -r dist "$PROD_DIR/"
+            
+            # ============ BACKEND ============
+            echo ""
+            echo "📂 Backend : Copie fichiers..."
+            cp "$REPO_DIR/server/app.js" "$PROD_DIR/"
+            cp "$REPO_DIR/server/cron-auto-close.js" "$PROD_DIR/"
+            cp "$REPO_DIR/server/inject-env.js" "$PROD_DIR/"
+            cp "$REPO_DIR/server/inject-env-from-dotenv.js" "$PROD_DIR/" || true
+            cp -r "$REPO_DIR/server/routes" "$PROD_DIR/"
+            cp -r "$REPO_DIR/server/services" "$PROD_DIR/"
+            cp "$REPO_DIR/server/package.json" "$PROD_DIR/"
+            cp "$REPO_DIR/server/package-lock.json" "$PROD_DIR/" || true
+            
+            echo ""
+            echo "📦 Backend : Installation dépendances..."
+            cd "$PROD_DIR"
             npm ci --omit=dev
-
-            echo "🔄 Restarting PM2..."
-            pm2 restart assets-mgt
-
-            echo "✅ Deployment completed successfully!"
+            
+            # ============ ENV & CONFIG ============
+            echo ""
+            echo "⚙️  Phase 3 : Configuration..."
+            
+            # Créer .env.production si absent
+            if [ ! -f "$PROD_DIR/.env.production" ]; then
+              echo "⚠️  .env.production absent ! À créer manuellement :"
+              echo "  MYSQL_HOST=92.205.29.244"
+              echo "  MYSQL_USER=..."
+              echo "  MYSQL_PASSWORD=..."
+              echo "  MYSQL_DATABASE=assetmngt"
+              echo "  JWT_SECRET=..."
+              echo "  RESEND_API_KEY=..."
+            fi
+            
+            # Injecter env vars dans index.html
+            if [ -f "$PROD_DIR/inject-env-from-dotenv.js" ]; then
+              node "$PROD_DIR/inject-env-from-dotenv.js"
+            fi
+            
+            # ============ .htaccess ============
+            echo ""
+            echo "📝 Création .htaccess..."
+            cat > "$PROD_DIR/.htaccess" << 'HTACCESS_EOF'
+            <IfModule mod_rewrite.c>
+              RewriteEngine On
+              RewriteBase /
+            
+              # API proxy vers Node.js port 3003
+              RewriteRule ^api/(.*)$ http://127.0.0.1:3003/api/$1 [P,L]
+              RewriteRule ^auth/(.*)$ http://127.0.0.1:3003/auth/$1 [P,L]
+            
+              # Routes React (SPA)
+              RewriteCond %{REQUEST_FILENAME} !-f
+              RewriteCond %{REQUEST_FILENAME} !-d
+              RewriteRule ^(.*)$ index.html [L]
+            </IfModule>
+            HTACCESS_EOF
+            
+            # ============ PM2 ============
+            echo ""
+            echo "🔄 Phase 4 : Démarrage PM2..."
+            cd "$PROD_DIR"
+            
+            pm2 start app.js --name "assets-mgt" --cron-restart="0 0 * * *" --env production
+            pm2 save
+            pm2 startup systemd -u dxtrmfwa --hp /home/dxtrmfwa
+            
+            # ============ VÉRIFICATION ============
+            echo ""
+            echo "✅ Phase 5 : Vérifications..."
+            sleep 3
+            
+            if pm2 list | grep -q "assets-mgt"; then
+              echo "✓ PM2 processus actif"
+            else
+              echo "✗ ERREUR : PM2 processus DOWN"
+              pm2 logs assets-mgt --lines 50
+              exit 1
+            fi
+            
+            if curl -f http://127.0.0.1:3003/health 2>/dev/null || echo ""; then
+              echo "✓ Backend accessible"
+            else
+              echo "⚠️  Backend pas encore prêt (attendre 10s)"
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "✅ DÉPLOIEMENT TERMINÉ"
+            echo "=========================================="
+            echo "URL : https://assets.mfwa.org"
+            echo "Logs : pm2 logs assets-mgt"
+            echo ""
