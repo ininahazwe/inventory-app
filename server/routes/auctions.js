@@ -1,5 +1,4 @@
 // routes/auctions.js
-const { sendOutbidNotification, sendWinnerNotification } = require('../emailService-resend');
 const { sendBidConfirmationEmail, sendOutbidNotificationEmails } = require('../services/gmailService');
 
 module.exports = function(app, dbPromise, verifyJWT) {
