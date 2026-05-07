@@ -54,27 +54,3 @@ jobs:
             pm2 restart assets-mgt
 
             echo "✅ Deployment completed successfully!"
-
-      - name: Notify deployment success
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Deployment to assets.mfwa.org completed successfully!'
-            })
-
-      - name: Notify deployment failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ Deployment to assets.mfwa.org failed! Check the workflow logs.'
-            })
