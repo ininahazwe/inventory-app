@@ -59,6 +59,7 @@ export default function AuctionDetailPage() {
   const [bidError, setBidError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
 
   useEffect(() => {
     setIsLoggedIn(auth.isAuthenticated());
@@ -92,7 +93,7 @@ export default function AuctionDetailPage() {
     e.preventDefault();
 
     if (!isLoggedIn) {
-      showError('❌ Non authentifié', 'Veuillez vous connecter pour placer une enchère');
+      showError('❌ Not Authenticated', 'Please log in to place a bid');
       return;
     }
 
@@ -104,8 +105,8 @@ export default function AuctionDetailPage() {
       : data.auction.starting_price;
 
     if (amount < minBid) {
-      setBidError(`Minimum bid is ${minBid}`);
-      showError('❌ Montant invalide', `L'enchère minimum est ${minBid}`);
+      setBidError(`Minimum bid is $${minBid}`);
+      showError('❌ Invalid Amount', `Minimum bid is $${minBid}`);
       return;
     }
 
@@ -121,16 +122,16 @@ export default function AuctionDetailPage() {
       if (err || !result) {
         const errorMsg = err || 'Failed to place bid';
         setBidError(errorMsg);
-        showError('❌ Erreur', errorMsg);
+        showError('❌ Error', errorMsg);
         return;
       }
 
-      // ✅ Afficher le toast depuis la réponse du backend
+      // ✅ Show toast from backend response
       if (result.toast) {
         showSuccess(result.toast.title, result.toast.message);
       } else {
-        // Fallback si pas de toast dans la réponse
-        showSuccess('✅ Enchère placée', `Votre enchère de ${amount} FCFA a été acceptée`);
+        // Fallback if no toast in response
+        showSuccess('✅ Bid Placed', `Your bid of $${amount.toFixed(2)} has been accepted`);
       }
 
       // Refresh
@@ -139,16 +140,24 @@ export default function AuctionDetailPage() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to place bid';
       setBidError(errorMsg);
-      showError('❌ Erreur', errorMsg);
+      showError('❌ Error', errorMsg);
     } finally {
       setBidLoading(false);
     }
   };
 
-  const handleShareAuction = () => {
+  const handleShareAuction = async () => {
     const url = `${window.location.origin}/auctions/${auctionId}`;
-    navigator.clipboard.writeText(url);
-    showSuccess('✅ Lien copié', 'Le lien de l\'enchère a été copié dans le presse-papiers');
+
+    try {
+      setShareLoading(true);
+      await navigator.clipboard.writeText(url);
+      showSuccess('✅ Link Copied', 'Auction link has been copied to clipboard');
+    } catch (err) {
+      showError('❌ Copy Failed', 'Could not copy link to clipboard');
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -158,7 +167,7 @@ export default function AuctionDetailPage() {
     if (diff < 0) return 'Ended';
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    if (days > 0) return `${days}j ${hours}h`;
+    if (days > 0) return `${days}d ${hours}h`;
     if (hours > 0) return `${hours}h`;
     return 'Closing soon';
   };
@@ -203,7 +212,7 @@ export default function AuctionDetailPage() {
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 12px' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          {/* Bouton "Back" visible seulement pour les admins */}
+          {/* Back button - visible for logged in users */}
           {isLoggedIn && (
             <button
               onClick={() => navigate('/auctions')}
@@ -223,7 +232,7 @@ export default function AuctionDetailPage() {
           <h1 style={{ margin: '0 0 8px 0' }}>{auction.label}</h1>
           {auction.serial_no && (
             <p style={{ margin: '0 0 12px 0', color: 'var(--muted)', fontSize: 14 }}>
-              SN: {auction.serial_no}
+              Serial No: {auction.serial_no}
             </p>
           )}
         </div>
@@ -238,6 +247,7 @@ export default function AuctionDetailPage() {
               maxHeight: 300,
               overflowY: 'auto',
               marginBottom: 12,
+              borderRadius: 4,
             }}>
               {auctionImages.map((img, idx) => (
                 <div
@@ -322,21 +332,22 @@ export default function AuctionDetailPage() {
         <div style={{ marginBottom: 24 }}>
           <button
             onClick={handleShareAuction}
+            disabled={shareLoading}
             style={{
               width: '100%',
               padding: '12px 16px',
-              background: '#f0f0f0',
+              background: shareLoading ? '#e0e0e0' : '#f0f0f0',
               border: '1px solid #ddd',
               borderRadius: 4,
               fontSize: 14,
               fontWeight: 500,
-              cursor: 'pointer',
+              cursor: shareLoading ? 'not-allowed' : 'pointer',
               transition: 'background 0.2s',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#e0e0e0'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#f0f0f0'}
+            onMouseEnter={(e) => !shareLoading && (e.currentTarget.style.background = '#e0e0e0')}
+            onMouseLeave={(e) => !shareLoading && (e.currentTarget.style.background = '#f0f0f0')}
           >
-            🔗 Share Auction Link
+            {shareLoading ? '⏳ Copying...' : '🔗 Share Auction Link'}
           </button>
         </div>
 
