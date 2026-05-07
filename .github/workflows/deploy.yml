@@ -27,7 +27,7 @@ jobs:
 
             # Installer les dépendances backend en prod
             cd /home/dxtrmfwa/public_html/assets.mfwa.org
-            npm ci --omit=dev
+            npm ci
             pm2 restart assets-mgt
 
             # Frontend — build depuis le repo
