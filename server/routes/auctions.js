@@ -230,14 +230,14 @@ module.exports = function(app, dbPromise, verifyJWT) {
         try {
             // 1. Vérifier que l'enchère existe et est active
             const [auctions] = await dbPromise.query(`
-                        SELECT
-                            a.id, a.starting_price, a.current_highest_bid, a.end_date,
-                            ast.label, ast.serial_no, ast.purchase_price,
-                            c.name as category
-                        FROM auctions a
-                                 JOIN assets ast ON a.asset_id = ast.id
-                                 LEFT JOIN categories c ON ast.category_id = c.id
-                        WHERE a.id = ? AND a.status = 'active'`,
+                SELECT
+                    a.id, a.starting_price, a.current_highest_bid, a.end_date,
+                    ast.label, ast.serial_no, ast.purchase_price,
+                    c.name as category
+                FROM auctions a
+                JOIN assets ast ON a.asset_id = ast.id
+                LEFT JOIN categories c ON ast.category_id = c.id
+                WHERE a.id = ? AND a.status = 'active'`,
                 [auctionId]
             );
 
@@ -267,6 +267,7 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 });
             }
 
+
             // 3. Vérifier si l'utilisateur a déjà une mise
             const [existingBids] = await dbPromise.query(
                 `SELECT id, amount FROM bids WHERE auction_id = ? AND user_uid = ? ORDER BY amount DESC LIMIT 1`,
@@ -293,8 +294,8 @@ module.exports = function(app, dbPromise, verifyJWT) {
 
             // 4. Récupérer tous les enchérisseurs précédents (sauf le nouvel enchérisseur)
             const [previousBidders] = await dbPromise.query(
-                `SELECT DISTINCT u.email FROM bids b
-                                                  JOIN users u ON b.user_uid = u.id
+                `SELECT DISTINCT u.email FROM bids b 
+                 JOIN users u ON b.user_uid = u.id 
                  WHERE b.auction_id = ? AND b.user_uid != ?`,
                 [auctionId, userUid]
             );
