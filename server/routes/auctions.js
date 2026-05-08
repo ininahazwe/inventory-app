@@ -8,10 +8,9 @@ module.exports = function(app, dbPromise, verifyJWT) {
         try {
             const { page = 1, limit = 20 } = req.query;
             const pageNum = parseInt(page) || 1;
-            const pageSize = Math.min(parseInt(limit) || 20, 100); // Max 100 per page
+            const pageSize = Math.min(parseInt(limit) || 20, 100);
             const offset = (pageNum - 1) * pageSize;
 
-            // Compter le total
             const [countResult] = await dbPromise.query(`
                 SELECT COUNT(DISTINCT a.id) as total
                 FROM auctions a
@@ -19,7 +18,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
             `);
             const total = countResult[0]?.total || 0;
 
-            // Récupérer les enchères avec pagination
             const [auctions] = await dbPromise.query(`
                 SELECT
                     a.id,
@@ -92,7 +90,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 ORDER BY b.amount DESC
             `, [auctionId]);
 
-            // Fetch images
             const [images] = await dbPromise.query(`
                 SELECT image_url
                 FROM auction_images
@@ -124,7 +121,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
         console.log('  images count:', images?.length || 0);
 
         try {
-            // Vérifier que c'est un admin
             console.log('  Checking admin status...');
             const [user] = await dbPromise.query('SELECT role FROM users WHERE email = ?', [user_email]);
             console.log('  User found:', user.length > 0, 'Role:', user[0]?.role);
@@ -169,7 +165,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
 
             console.log('  end_date_str:', end_date_str);
 
-            // Récupérer le user_id
             console.log('  Fetching user_id...');
             const [userRecord] = await dbPromise.query('SELECT id FROM users WHERE email = ?', [user_email]);
             const user_id = userRecord[0]?.id;
@@ -183,7 +178,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
 
             console.log('  Inserting auction with values:', { asset_id, starting_price, duration_days: duration_days || 7, user_id, end_date_str });
 
-            // Insérer l'enchère
             const [result] = await dbPromise.query(
                 `INSERT INTO auctions (asset_id, starting_price, duration_days, created_by_uid, end_date, status)
                  VALUES (?, ?, ?, ?, ?, 'active')`,
@@ -193,7 +187,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
             const auctionId = result.insertId;
             console.log('  ✅ Auction created with ID:', auctionId);
 
-            // Insérer les images
             if (images && images.length > 0) {
                 for (const imageUrl of images) {
                     await dbPromise.query(
@@ -267,7 +260,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 });
             }
 
-
             // 3. Vérifier si l'utilisateur a déjà une mise
             const [existingBids] = await dbPromise.query(
                 `SELECT id, amount FROM bids WHERE auction_id = ? AND user_uid = ? ORDER BY amount DESC LIMIT 1`,
@@ -323,7 +315,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 console.log('  ✅ Bid confirmation email sent');
             } catch (emailError) {
                 console.error('  ⚠️ Failed to send bid confirmation email:', emailError.message);
-                // Ne pas fail la requête si l'email échoue
             }
 
             // 8. Envoyer les emails de notification aux autres enchérisseurs
@@ -333,7 +324,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
                     console.log('  ✅ Outbid notifications sent');
                 } catch (emailError) {
                     console.error('  ⚠️ Failed to send outbid notifications:', emailError.message);
-                    // Ne pas fail la requête si les emails échouent
                 }
             }
 
@@ -362,12 +352,11 @@ module.exports = function(app, dbPromise, verifyJWT) {
         }
     });
 
-    // POST: Auto-close auctions (Cron ou manuel)
+    // POST: Auto-close auctions
     app.post('/api/auctions/auto-close', async (req, res) => {
         try {
             console.log('🕐 Running auction auto-close...');
 
-            // Utiliser DATE(NOW()) pour timezone awareness
             const [expiredAuctions] = await dbPromise.query(`
                 SELECT a.id, a.created_by_uid, u_creator.email as creator_email, a.asset_id
                 FROM auctions a
@@ -378,7 +367,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
             console.log(`Found ${expiredAuctions.length} expired auctions`);
 
             for (const auction of expiredAuctions) {
-                // Récupérer le top bidder (gagnant)
                 const [winnerBid] = await dbPromise.query(`
                     SELECT b.user_uid, b.amount, u.email as winner_email
                     FROM bids b
@@ -392,7 +380,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
                     const winner = winnerBid[0];
                     const finalAmount = winner.amount;
 
-                    // Mettre à jour l'enchère avec le gagnant
                     await dbPromise.query(
                         'UPDATE auctions SET status = ?, winner_uid = ? WHERE id = ?',
                         ['ended', winner.user_uid, auction.id]
@@ -400,7 +387,6 @@ module.exports = function(app, dbPromise, verifyJWT) {
 
                     console.log(`✅ Auction ${auction.id} closed. Winner: ${winner.winner_email}, Amount: ${finalAmount}`);
                 } else {
-                    // Pas de bids, fermer sans gagnant
                     await dbPromise.query(
                         'UPDATE auctions SET status = ? WHERE id = ?',
                         ['ended', auction.id]
