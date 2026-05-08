@@ -20,13 +20,17 @@ const router = createBrowserRouter([
     element: <AuthGateWrapper />,
     children: [
       { path: "/", element: <HomePage /> },
-      { path: "/asset/:id", element: <AssetDetailPage /> },
-      { path: "/asset/:id/report-incident", element: <IncidentReportPage /> },
-      { path: "/incidents", element: <IncidentsPage /> },
-      { path: "/incidents/:id", element: <IncidentDetailPage /> },
-      { path: "/auctions", element: <AuctionsPage  /> },
+
+      // Routes spécifiques d'abord
       { path: "/auctions/create", element: <CreateAuctionPage /> },
+      { path: "/asset/:id/report-incident", element: <IncidentReportPage /> },
+
+      // Routes paramétrées après
+      { path: "/asset/:id", element: <AssetDetailPage /> },
+      { path: "/auctions", element: <AuctionsPage /> },
       { path: "/auctions/:auctionId", element: <AuctionDetailPage /> },
+      { path: "/incidents/:id", element: <IncidentDetailPage /> },
+      { path: "/incidents", element: <IncidentsPage /> },
     ],
   },
 ]);
