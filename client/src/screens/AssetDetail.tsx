@@ -13,10 +13,71 @@ import AuditLog from '../components/AuditLog';
 import PublicAssetCard from './PublicAssetCard';
 import { IncidentForm } from '../components/IncidentForm';
 
-type Asset = { id: number; label: string; category_id: number | null; category_name: string | null; serial_no: string | null; status: 'in_stock' | 'assigned' | 'repair' | 'retired'; purchased_at: string | null; purchase_price: number | null; supplier: string | null; funder: string | null; warranty_end: string | null; qr_slug: string | null; notes: string | null; created_at: string; };
-type LastAssignment = { asset_id: number; assignment_id: number | null; assignee_name: string | null; assignee_email: string | null; assigned_at: string | null; returned_at: string | null; status: 'active' | 'returned' | null; };
-type LifeEvent = { event_id: number; event_type: string; event_at: string; notes: string | null; actor_uid: string | null; repair_cost?: number | null; };
+type Asset = {
+  id: number;
+  label: string;
+  category_id: number | null;
+  category_name: string | null;
+  serial_no: string | null;
+  status: 'in_stock' | 'assigned' | 'repair' | 'retired';
+  purchased_at: string | null;
+  purchase_price: number | null;
+  supplier: string | null;
+  funder: string | null;
+  warranty_end: string | null;
+  qr_slug: string | null;
+  notes: string | null;
+  created_at: string;
+};
 type LifecycleAction = 'repair' | 'exit_repair' | 'retire';
+
+// ✅ Helper functions for date formatting
+const formatDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    // Format: DD/MM/YYYY
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return '—';
+  }
+};
+
+const getWarrantyStatus = (warrantyEndStr: string | null | undefined): { daysLeft: number | null; text: string } => {
+  if (!warrantyEndStr) return { daysLeft: null, text: '—' };
+  try {
+    // Parse the warranty end date (treat as UTC midnight)
+    const end = new Date(warrantyEndStr + 'T00:00:00Z');
+    if (isNaN(end.getTime())) return { daysLeft: null, text: '—' };
+
+    // Get today's date (UTC midnight)
+    const today = new Date();
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    // Calculate days difference
+    const ms = end.getTime() - todayUTC.getTime();
+    const daysLeft = Math.floor(ms / 86400000);
+
+    const formattedDate = formatDate(warrantyEndStr);
+    if (daysLeft >= 0) {
+      return {
+        daysLeft,
+        text: `${formattedDate} — ${daysLeft} days left`
+      };
+    } else {
+      return {
+        daysLeft,
+        text: `${formattedDate} — ${Math.abs(daysLeft)} days overdue`
+      };
+    }
+  } catch {
+    return { daysLeft: null, text: '—' };
+  }
+};
 
 export default function AssetDetail() {
   const { id } = useParams();
@@ -27,8 +88,6 @@ export default function AssetDetail() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked]         = useState(false);
   const [asset, setAsset]                     = useState<Asset | null>(null);
-  const [last, setLast]                       = useState<LastAssignment | null>(null);
-  const [timeline, setTimeline]               = useState<LifeEvent[]>([]);
   const [loading, setLoading]                 = useState(true);
   const [err, setErr]                         = useState<string | null>(null);
   const [busy, setBusy]                       = useState(false);
@@ -53,7 +112,11 @@ export default function AssetDetail() {
   const [savingEdit, setSavingEdit]         = useState(false);
   const [errEdit, setErrEdit]               = useState<string | null>(null);
 
-  const sweep: Variants = { initial: { y: 40, opacity: 0 }, animate: { y: 0, opacity: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }, exit: { y: 20, opacity: 0, transition: { duration: 0.24, ease: 'easeInOut' } } };
+  const sweep: Variants = {
+    initial: { y: 40, opacity: 0 },
+    animate: { y: 0, opacity: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+    exit: { y: 20, opacity: 0, transition: { duration: 0.24, ease: 'easeInOut' } }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') navigate('/'); };
@@ -67,36 +130,69 @@ export default function AssetDetail() {
   }, []);
 
   const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
-  const qrDataUrl = useMemo(() => { if (!asset) return ''; const slug = asset.qr_slug || `asset/${asset.id}`; return `${siteUrl}/${slug}`; }, [asset, siteUrl]);
-  const qrImg     = useMemo(() => { if (!qrDataUrl) return ''; return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataUrl)}`; }, [qrDataUrl]);
-  const warrantyDaysLeft = useMemo(() => { if (!asset?.warranty_end) return null; const end = new Date(asset.warranty_end + 'T00:00:00'); const ms = end.getTime() - new Date(new Date().toDateString()).getTime(); return Math.floor(ms / 86400000); }, [asset?.warranty_end]);
+  const qrDataUrl = useMemo(() => {
+    if (!asset) return '';
+    const slug = asset.qr_slug || `asset/${asset.id}`;
+    return `${siteUrl}/${slug}`;
+  }, [asset, siteUrl]);
+
+  const qrImg = useMemo(() => {
+    if (!qrDataUrl) return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataUrl)}`;
+  }, [qrDataUrl]);
+
+  // ✅ FIXED: Use helper function for warranty display
+  const warrantyStatus = useMemo(() => {
+    return getWarrantyStatus(asset?.warranty_end);
+  }, [asset?.warranty_end]);
 
   const load = async () => {
     setErr(null);
     const { data: a, error: ea } = await api.get<Asset>(`/assets/${assetId}`);
     if (ea) { setErr(ea); return; }
     setAsset(a);
-    const { data: la } = await api.get<LastAssignment>(`/assets/${assetId}/last-assignment`);
-    setLast(la ?? null);
-    const { data: tl } = await api.get<LifeEvent[]>(`/assets/${assetId}/timeline`);
-    setTimeline(tl ?? []);
   };
 
-  useEffect(() => { (async () => { setLoading(true); await load(); setLoading(false); })(); }, [assetId]);
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await load();
+      setLoading(false);
+    })();
+  }, [assetId]);
 
-  const openLifecycleModal = (action: LifecycleAction) => { setCurrentLifecycleAction(action); setLifecycleModalOpen(true); };
-  const closeLifecycleModal = () => { setLifecycleModalOpen(false); setCurrentLifecycleAction(null); };
+  const openLifecycleModal = (action: LifecycleAction) => {
+    setCurrentLifecycleAction(action);
+    setLifecycleModalOpen(true);
+  };
+  const closeLifecycleModal = () => {
+    setLifecycleModalOpen(false);
+    setCurrentLifecycleAction(null);
+  };
 
   const handleLifecycleAction = async (data: { notes?: string; cost?: number }) => {
     if (!currentLifecycleAction) return;
-    setBusy(true); setErr(null);
-    const rpcMap = { repair: 'send_to_repair', exit_repair: 'exit_repair', retire: 'retire_asset' };
-    const params: Record<string, unknown> = { p_asset_id: assetId, p_notes: data.notes || null };
+    setBusy(true);
+    setErr(null);
+    const rpcMap = {
+      repair: 'send_to_repair',      // ✅ Correct
+      exit_repair: 'exit_repair',    // ✅ Correct
+      retire: 'retire_asset'         // ✅ Correct
+    };
+    const params: Record<string, unknown> = {
+      p_asset_id: assetId,
+      p_notes: data.notes || null
+    };
     if (currentLifecycleAction === 'exit_repair') params.p_cost = data.cost || null;
+
+    // THE PROBLEM IS HERE - Wrong API call
     const { error } = await rpc(rpcMap[currentLifecycleAction], params);
+    // ☝️ This calls rpc() function - check what rpc() does!
+
     setBusy(false);
     if (error) throw new Error(error);
-    closeLifecycleModal(); await load();
+    closeLifecycleModal();
+    await load();
   };
 
   const returnAsset = async () => {
@@ -108,19 +204,44 @@ export default function AssetDetail() {
   };
 
   const deleteAsset = async () => {
-    setBusy(true); setErr(null);
+    setBusy(true);
+    setErr(null);
     const { error } = await api.delete(`/assets/${assetId}`);
     setBusy(false);
-    if (error) { setErr(`Erreur : ${error}`); return; }
-    setDeleteConfirmOpen(false); navigate('/');
+    if (error) {
+      setErr(`Erreur : ${error}`);
+      return;
+    }
+    setDeleteConfirmOpen(false);
+    navigate('/');
+  };
+
+  const normalizeDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    if (dateStr.includes('T')) return dateStr.split('T')[0];
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
   };
 
   const openEdit = () => {
     if (!asset) return;
-    setEdLabel(asset.label); setEdSerial(asset.serial_no ?? ''); setEdCategoryName(asset.category_name ?? '');
-    setEdPurchasedAt(asset.purchased_at ?? ''); setEdPrice(asset.purchase_price != null ? String(asset.purchase_price) : '');
-    setEdSupplier(asset.supplier ?? ''); setEdFunder(asset.funder ?? ''); setEdWarrantyEnd(asset.warranty_end ?? '');
-    setEdNotes(asset.notes ?? ''); setErrEdit(null); setEditOpen(true);
+    setEdLabel(asset.label);
+    setEdSerial(asset.serial_no ?? '');
+    setEdCategoryName(asset.category_name ?? '');
+    setEdPurchasedAt(normalizeDate(asset.purchased_at));
+    setEdPrice(asset.purchase_price != null ? String(asset.purchase_price) : '');
+    setEdSupplier(asset.supplier ?? '');
+    setEdFunder(asset.funder ?? '');
+    setEdWarrantyEnd(normalizeDate(asset.warranty_end));
+    setEdNotes(asset.notes ?? '');
+    setErrEdit(null);
+    setEditOpen(true);
   };
 
   async function fetchCategoryOptions(q: string) {
@@ -129,24 +250,54 @@ export default function AssetDetail() {
   }
 
   async function getOrCreateCategoryId(name: string): Promise<number | null> {
-    const trimmed = name.trim(); if (!trimmed) return null;
+    const trimmed = name.trim();
+    if (!trimmed) return null;
     const { data, error } = await api.post<{ id: number }>('/categories', { name: trimmed });
     if (error) throw new Error(error);
     return data?.id ?? null;
   }
 
   const saveEdit = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!asset) return;
-    setSavingEdit(true); setErrEdit(null);
+    e.preventDefault();
+    if (!asset) return;
+    setSavingEdit(true);
+    setErrEdit(null);
     try {
       if (!edLabel.trim()) throw new Error('Label requis');
+
       const category_id = await getOrCreateCategoryId(edCategoryName);
-      const priceNum = edPrice.trim() === '' ? null : Number.isNaN(Number(edPrice.replace(',', '.'))) ? (() => { throw new Error('Prix invalide'); })() : Number((+edPrice.replace(',', '.')).toFixed(2));
-      const { error } = await api.put(`/assets/${asset.id}`, { label: edLabel.trim(), serial_no: edSerial.trim() || null, category_id, purchased_at: edPurchasedAt || null, purchase_price: priceNum, supplier: edSupplier.trim() || null, funder: edFunder.trim() || null, warranty_end: edWarrantyEnd || null, notes: edNotes.trim() || null });
+
+      let priceNum: number | null = null;
+      if (edPrice.trim() !== '') {
+        const normalized = edPrice.replace(',', '.');
+        priceNum = parseFloat(normalized);
+        if (isNaN(priceNum)) {
+          throw new Error('Prix invalide');
+        }
+        priceNum = parseFloat(priceNum.toFixed(2));
+      }
+
+      const { error } = await api.put(`/assets/${asset.id}`, {
+        label: edLabel.trim(),
+        serial_no: edSerial.trim() || null,
+        category_id,
+        purchased_at: edPurchasedAt || null,
+        purchase_price: priceNum,
+        supplier: edSupplier.trim() || null,
+        funder: edFunder.trim() || null,
+        warranty_end: edWarrantyEnd || null,
+        notes: edNotes.trim() || null
+      });
+
       if (error) throw new Error(error);
-      setEditOpen(false); await load();
-    } catch (e: unknown) { setErrEdit(e instanceof Error ? e.message : 'Erreur'); }
-    finally { setSavingEdit(false); }
+      setEditOpen(false);
+      await load();
+    } catch (e: unknown) {
+      setErrEdit(e instanceof Error ? e.message : 'Erreur');
+    }
+    finally {
+      setSavingEdit(false);
+    }
   };
 
   if (!authChecked) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Vérification…</p></div></main>;
@@ -169,10 +320,10 @@ export default function AssetDetail() {
             <div className="presentation">
               <Info label="Serial number" value={asset.serial_no || '—'} />
               <Info label="Category" value={asset.category_name || '—'} />
-              <Info label="Purchase date" value={asset.purchased_at || '—'} />
-              <Info label="Purchase price" value={asset.purchase_price != null ? asset.purchase_price.toFixed(2) : '—'} />
+              <Info label="Purchase date" value={formatDate(asset.purchased_at)} />
+              <Info label="Purchase price" value={asset.purchase_price != null ? `$${asset.purchase_price.toFixed(2)}` : '—'} />
               <Info label="Supplier" value={asset.supplier || '—'} />
-              <Info label="Warranty end" value={asset.warranty_end ? `${asset.warranty_end}${typeof warrantyDaysLeft === 'number' ? ` — ${warrantyDaysLeft >= 0 ? `${warrantyDaysLeft} days left` : `${Math.abs(warrantyDaysLeft)} days overdue`}` : ''}` : '—'} />
+              <Info label="Warranty end" value={warrantyStatus.text} />
               <Info label="Funder" value={asset.funder || '—'} />
               {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
@@ -187,12 +338,6 @@ export default function AssetDetail() {
             </div>
 
             <div>
-              {last?.assignment_id ? (
-                <div style={{ display: 'grid', gap: 4 }}>
-                  <div>{last.status === 'active' ? 'Assigned to ' : 'Last assignee'} : <strong>{last.assignee_name ?? '—'}</strong>{last.assignee_email ? ` (${last.assignee_email})` : ''}</div>
-                  <small style={{ color: 'var(--muted)' }}>{last.assigned_at ? `since ${last.assigned_at}` : ''}{last.returned_at ? ` — returned on ${last.returned_at}` : ''}</small>
-                </div>
-              ) : <div>No assignments</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {asset.status !== 'assigned' ? <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
               </div>
@@ -209,17 +354,6 @@ export default function AssetDetail() {
               </div>
             </section>
           )}
-
-          <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
-            <h3 style={{ margin: '8px 0' }}>Activity log</h3>
-            {timeline.length === 0 ? <p style={{ color: 'var(--muted)' }}>No events</p> : (
-              <ul style={{ margin: 0, paddingLeft: 16 }} className="journal">
-                {timeline.map(ev => (
-                  <li key={ev.event_id}><code>{new Date(ev.event_at).toLocaleString()}</code> — <strong>{ev.event_type}</strong>{ev.notes ? ` — ${ev.notes}` : ''}{ev.event_type === 'maintenance' && ev.repair_cost != null ? ` — coût : ${ev.repair_cost.toFixed(2)}` : ''}</li>
-                ))}
-              </ul>
-            )}
-          </section>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <button className="pill" onClick={() => setShowIncidentForm(true)} style={{ background: '#b98b46' }}>📋 Report an incident</button>
@@ -277,12 +411,12 @@ export default function AssetDetail() {
             </div>
           </form>
         </Modal>
-      </div>
 
-      <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
-        <h3 style={{ margin: '8px 0' }}>📋 Complete Audit History</h3>
-        <AuditLog entityType="asset" entityId={asset.id.toString()} limit={20} />
-      </section>
+        <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
+          <h3 style={{ margin: '8px 0' }}>📋 Complete Audit History</h3>
+          <AuditLog entityType="assets" entityId={asset.id.toString()} />
+        </section>
+      </div>
     </motion.main>
   );
 }

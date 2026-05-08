@@ -62,13 +62,26 @@ export interface GoogleUser {
 
 // ─── RPC Routes Map ───────────────────────────────────────────────────────────
 const rpcRouteMap: Record<string, { method: 'GET' | 'POST'; path: (params: any) => string }> = {
+  // ✅ Query RPCs (GET)
   'is_admin': { method: 'GET', path: (p) => `/rpc/is_admin?email=${encodeURIComponent(p?.email || '')}` },
   'is_super_admin': { method: 'GET', path: (p) => `/rpc/is_super_admin?email=${encodeURIComponent(p?.email || '')}` },
   'is_email_allowed': { method: 'GET', path: (p) => `/rpc/is_email_allowed?email=${encodeURIComponent(p?.email || '')}` },
   'is_current_admin': { method: 'GET', path: () => '/me/is-admin' },
+  'get_asset_stats': { method: 'POST', path: () => '/rpc/get_asset_stats' },
+
+  // ✅ Asset RPCs (POST)
+  'return_asset': { method: 'POST', path: () => '/rpc/return_asset' },
+  'send_to_repair': { method: 'POST', path: () => '/rpc/send_to_repair' },
+  'exit_repair': { method: 'POST', path: () => '/rpc/exit_repair' },
+  'retire_asset': { method: 'POST', path: () => '/rpc/retire_asset' },
+
+  // ✅ Assignment RPCs (POST)
   'assign_asset': { method: 'POST', path: () => '/rpc/assign_asset' },
   'unassign_asset': { method: 'POST', path: () => '/rpc/unassign_asset' },
-  'return_asset': { method: 'POST', path: () => '/assets/return' },
+  'assignees_rename': { method: 'POST', path: () => '/rpc/assignees_rename' },
+  'assignees_delete': { method: 'POST', path: () => '/rpc/assignees_delete' },
+
+  // Legacy/Admin RPCs
   'list_allowed_emails': { method: 'GET', path: () => '/allowed-emails' },
   'add_allowed_email': { method: 'POST', path: () => '/allowed-emails' },
   'remove_allowed_email': { method: 'POST', path: () => '/allowed-emails/remove' },
@@ -76,8 +89,6 @@ const rpcRouteMap: Record<string, { method: 'GET' | 'POST'; path: (params: any) 
   'add_user': { method: 'POST', path: () => '/users' },
   'change_user_role': { method: 'POST', path: () => '/users/role' },
   'delete_user': { method: 'POST', path: () => '/users/delete' },
-  'assignees_rename': { method: 'POST', path: () => '/assignees/rename' },
-  'assignees_delete': { method: 'POST', path: () => '/assignees/delete' },
 };
 
 // ─── RPC Generic Call ────────────────────────────────────────────────────────
@@ -109,6 +120,14 @@ export const rpcMethods = {
     rpc<{ success: boolean }>('assign_asset', { asset_id: assetId, user_email: userEmail, assigned_by_email: assignedByEmail }),
   unassign_asset: (assetId: string, unassignedByEmail: string) =>
     rpc<{ success: boolean }>('unassign_asset', { asset_id: assetId, unassigned_by_email: unassignedByEmail }),
+  return_asset: (assetId: number) =>
+    rpc<{ success: boolean }>('return_asset', { p_asset_id: assetId }),
+  send_to_repair: (assetId: number, notes?: string) =>
+    rpc<{ success: boolean }>('send_to_repair', { p_asset_id: assetId, p_notes: notes }),
+  exit_repair: (assetId: number, notes?: string, cost?: number) =>
+    rpc<{ success: boolean; repair_cost?: number }>('exit_repair', { p_asset_id: assetId, p_notes: notes, p_cost: cost }),
+  retire_asset: (assetId: number, notes?: string) =>
+    rpc<{ success: boolean }>('retire_asset', { p_asset_id: assetId, p_notes: notes }),
 };
 
 // ─── Wait for Google SDK to load ───────────────────────────────────────────
