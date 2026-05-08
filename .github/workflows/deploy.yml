@@ -1,9 +1,8 @@
-name: Deploy to cPanel - Inventory App
+name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
@@ -12,71 +11,70 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Deploy to cPanel
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            
+
             echo "=== 🚀 Starting deployment: inventory-app ==="
-            
+
             # ========== GIT PULL ==========
-            cd /home/dxtrmfwa/repositories/inventory-app
+            cd /home/${{ secrets.SERVER_USER }}/repositories/inventory-app
             git pull origin main --quiet
             echo "✅ Git pulled successfully"
-            
-            # ========== FRONTEND BUILD FIRST ==========
+
+            # ========== FRONTEND BUILD ==========
             echo "🎨 Building frontend..."
-            cd /home/dxtrmfwa/repositories/inventory-app/client
+            cd /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/client
             npm ci --quiet
             npm run build --quiet
             echo "✅ Frontend built"
-            
-            # ========== BACKEND DEPLOYMENT (CommonJS from server/) ==========
+
+            # ========== BACKEND DEPLOYMENT (CommonJS) ==========
             echo "📦 Deploying backend..."
-            cp server/app.js /home/dxtrmfwa/public_html/assets.mfwa.org/app.js
-            cp server/cron-auto-close.js /home/dxtrmfwa/public_html/assets.mfwa.org/cron-auto-close.js
-            cp -r server/routes /home/dxtrmfwa/public_html/assets.mfwa.org/routes
-            cp -r server/services /home/dxtrmfwa/public_html/assets.mfwa.org/services
-            cp server/package.json /home/dxtrmfwa/public_html/assets.mfwa.org/package.json
+            cp /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/server/app.js /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/app.js
+            cp /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/server/cron-auto-close.js /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/cron-auto-close.js
+            cp -r /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/server/routes /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/routes
+            cp -r /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/server/services /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/services
+            cp /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/server/package.json /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/package.json
             echo "✅ Backend files copied"
-            
+
             # ========== DEPLOY .HTACCESS ==========
             echo "📄 Deploying .htaccess..."
-            cp .htaccess /home/dxtrmfwa/public_html/assets.mfwa.org/.htaccess
+            cp /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/.htaccess /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/.htaccess
             echo "✅ .htaccess deployed"
-            
+
             # ========== DEPLOY FRONTEND TO /public ==========
             echo "📁 Deploying frontend to /public..."
-            rm -rf /home/dxtrmfwa/public_html/assets.mfwa.org/public
-            mkdir -p /home/dxtrmfwa/public_html/assets.mfwa.org/public
-            cp -r /home/dxtrmfwa/repositories/inventory-app/client/dist/* /home/dxtrmfwa/public_html/assets.mfwa.org/public/
+            rm -rf /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/public
+            mkdir -p /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/public
+            cp -r /home/${{ secrets.SERVER_USER }}/repositories/inventory-app/client/dist/* /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/public/
             echo "✅ Frontend deployed to /public"
-            
+
             # ========== INSTALL BACKEND DEPENDENCIES ==========
             echo "📦 Installing backend dependencies..."
-            cd /home/dxtrmfwa/public_html/assets.mfwa.org
+            cd /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org
             npm install --omit=dev --quiet
             echo "✅ Backend dependencies installed"
-            
+
             # ========== PM2 RESTART ==========
             echo "🔄 Restarting PM2 process..."
             pm2 restart assets-mgt --silent
             sleep 2
             echo "✅ PM2 process restarted"
-            
+
             # ========== FINAL VALIDATION ==========
             echo "🔍 Validating deployment..."
-            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/app.js ] && echo "✅ Backend entry point exists" || echo "❌ Backend entry point missing"
-            [ -f /home/dxtrmfwa/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
-            [ -d /home/dxtrmfwa/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
-            
+            [ -f /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/app.js ] && echo "✅ Backend entry point exists" || echo "❌ Backend entry point missing"
+            [ -f /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
+            [ -d /home/${{ secrets.SERVER_USER }}/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
+
             # Vérifier le statut PM2
             echo "📊 PM2 Status:"
             pm2 status | grep assets-mgt || echo "⚠️ assets-mgt process not found"
-            
+
             echo "=== ✨ Deployment complete ==="
