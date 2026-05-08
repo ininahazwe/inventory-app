@@ -1,9 +1,11 @@
-// routes/auctions.js
+// routes/auctions.js - VERSION NETTOYÉE ET COMPLÈTE
 const { sendBidConfirmationEmail, sendOutbidNotificationEmails } = require('../services/gmailService');
 
 module.exports = function(app, dbPromise, verifyJWT) {
 
+    // ============================================================
     // GET: Lister toutes les enchères (avec pagination)
+    // ============================================================
     app.get('/api/auctions', async (req, res) => {
         try {
             const { page = 1, limit = 20 } = req.query;
@@ -53,10 +55,15 @@ module.exports = function(app, dbPromise, verifyJWT) {
         }
     });
 
-    // GET: Détail enchère
+    // ============================================================
+    // GET: Détail d'une enchère (par ID)
+    // ============================================================
     app.get('/api/auctions/:auctionId', async (req, res) => {
         const { auctionId } = req.params;
+        console.log(`GET /api/auctions/${auctionId}`);
+
         try {
+            // 1. Récupérer l'enchère avec ses détails
             const [auctions] = await dbPromise.query(`
                 SELECT
                     a.*,
@@ -75,9 +82,13 @@ module.exports = function(app, dbPromise, verifyJWT) {
             `, [auctionId]);
 
             if (!auctions.length) {
+                console.log(`  ❌ Auction ${auctionId} not found`);
                 return res.status(404).json({ error: 'Auction not found' });
             }
 
+            console.log(`  ✅ Auction found: ${auctions[0].label}`);
+
+            // 2. Récupérer les enchères (bids)
             const [bids] = await dbPromise.query(`
                 SELECT
                     b.id,
@@ -90,6 +101,9 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 ORDER BY b.amount DESC
             `, [auctionId]);
 
+            console.log(`  ✅ Found ${bids.length} bids`);
+
+            // 3. Récupérer les images
             const [images] = await dbPromise.query(`
                 SELECT image_url
                 FROM auction_images
@@ -97,131 +111,82 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 ORDER BY created_at ASC
             `, [auctionId]);
 
+            console.log(`  ✅ Found ${images.length} images`);
+
             return res.json({
                 auction: auctions[0],
                 bids,
                 images: images.map(img => img.image_url)
             });
+
         } catch (err) {
             console.error(`GET /api/auctions/${auctionId} error:`, err);
             return res.status(500).json({ error: 'Failed to fetch auction' });
         }
     });
 
-    // POST: Créer une enchère (admin)
-    app.post('/api/auctions', verifyJWT, async (req, res) => {
-        const { asset_id, starting_price, duration_days, images } = req.body;
-        const user_email = req.user.email;
-
-        console.log('🔍 POST /api/auctions');
-        console.log('  user_email:', user_email);
-        console.log('  asset_id:', asset_id);
-        console.log('  starting_price:', starting_price);
-        console.log('  duration_days:', duration_days);
-        console.log('  images count:', images?.length || 0);
-
-        try {
-            console.log('  Checking admin status...');
-            const [user] = await dbPromise.query('SELECT role FROM users WHERE email = ?', [user_email]);
-            console.log('  User found:', user.length > 0, 'Role:', user[0]?.role);
-
-            if (!user.length || (user[0].role !== 'super_admin' && user[0].role !== 'admin')) {
-                return res.status(403).json({ error: 'Only admins can create auctions' });
-            }
-
-            console.log('  ✅ Admin check passed');
-
-            const [assets] = await dbPromise.query(
-                'SELECT status FROM assets WHERE id = ?',
-                [asset_id]
-            );
-            console.log('  Asset check - found:', assets.length > 0);
-
-            if (!assets.length) {
-                return res.status(404).json({ error: 'Asset not found' });
-            }
-            if (assets[0].status !== 'in_stock') {
-                return res.status(400).json({ error: 'Asset must be in_stock to auction' });
-            }
-
-            console.log('  ✅ Asset check passed');
-
-            console.log('  Checking existing auctions...');
-            const [existing] = await dbPromise.query(
-                'SELECT id FROM auctions WHERE asset_id = ? AND status IN ("active", "ended")',
-                [asset_id]
-            );
-            console.log('  Existing auctions found:', existing.length);
-
-            if (existing.length) {
-                return res.status(400).json({ error: 'Asset already has an active auction' });
-            }
-
-            console.log('  ✅ Existing auction check passed');
-
-            const end_date = new Date();
-            end_date.setDate(end_date.getDate() + (duration_days || 7));
-            const end_date_str = end_date.toISOString().split('T')[0];
-
-            console.log('  end_date_str:', end_date_str);
-
-            console.log('  Fetching user_id...');
-            const [userRecord] = await dbPromise.query('SELECT id FROM users WHERE email = ?', [user_email]);
-            const user_id = userRecord[0]?.id;
-
-            console.log('  user_id:', user_id);
-
-            if (!user_id) {
-                console.error('  ❌ user_id not found for email:', user_email);
-                return res.status(500).json({ error: 'User ID not found' });
-            }
-
-            console.log('  Inserting auction with values:', { asset_id, starting_price, duration_days: duration_days || 7, user_id, end_date_str });
-
-            const [result] = await dbPromise.query(
-                `INSERT INTO auctions (asset_id, starting_price, duration_days, created_by_uid, end_date, status)
-                 VALUES (?, ?, ?, ?, ?, 'active')`,
-                [asset_id, starting_price, duration_days || 7, user_id, end_date_str]
-            );
-
-            const auctionId = result.insertId;
-            console.log('  ✅ Auction created with ID:', auctionId);
-
-            if (images && images.length > 0) {
-                for (const imageUrl of images) {
-                    await dbPromise.query(
-                        'INSERT INTO auction_images (auction_id, image_url) VALUES (?, ?)',
-                        [auctionId, imageUrl]
-                    );
-                }
-                console.log('  ✅ Images inserted:', images.length);
-            }
-
-            return res.status(201).json({
-                success: true,
-                auction_id: auctionId,
-                message: 'Auction created successfully'
-            });
-        } catch (err) {
-            console.error('POST /api/auctions error:', err);
-            return res.status(500).json({ error: 'Failed to create auction' });
-        }
-    });
-
+    // ============================================================
     // POST: Placer une enchère
+    // ============================================================
     app.post('/api/auctions/:auctionId/bid', verifyJWT, async (req, res) => {
         const { auctionId } = req.params;
         const { amount } = req.body;
-        const userEmail = req.user.email;
-        const userUid = req.user.id;
 
-        console.log(`🔍 POST /api/auctions/${auctionId}/bid`);
+        const userEmail = req.user?.email;
+        const userUid = req.user?.id;
+
+        console.log(`\n🔍 POST /api/auctions/${auctionId}/bid`);
         console.log('  userEmail:', userEmail);
-        console.log('  userUid:', userUid);
+        console.log('  userUid:', userUid, `(type: ${typeof userUid})`);
         console.log('  amount:', amount);
 
+        // Vérifier que l'user est authentifié
+        if (!userEmail || !userUid) {
+            console.error('  ❌ Authentication failed - missing user data');
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required',
+                toast: {
+                    type: 'error',
+                    title: 'Not Authenticated',
+                    message: 'Please log in to place a bid',
+                },
+            });
+        }
+
         try {
-            // 1. Vérifier que l'enchère existe et est active
+            // Step 1: Vérifier que l'user existe dans la table users
+            console.log('  [Step 1] Verifying user exists...');
+            const [userExists] = await dbPromise.query(
+                'SELECT id, email FROM users WHERE id = ?',
+                [userUid]
+            );
+
+            if (!userExists || userExists.length === 0) {
+                console.error(`  ❌ User NOT found in users table!`);
+                console.error(`     Looking for: userUid = "${userUid}"`);
+
+                // Debug: afficher tous les users
+                const [allUsers] = await dbPromise.query(
+                    'SELECT id, email FROM users LIMIT 10'
+                );
+                console.error('     Users in DB:', allUsers.map(u => ({ id: u.id, email: u.email })));
+
+                return res.status(400).json({
+                    success: false,
+                    message: 'User account not found in system',
+                    toast: {
+                        type: 'error',
+                        title: 'Account Error',
+                        message: 'Your user account is invalid. Please contact support.',
+                    },
+                });
+            }
+
+            console.log(`  ✅ User verified:`, userExists[0].email);
+
+            // Step 2: Vérifier que l'enchère existe et est active
+            console.log('  [Step 2] Checking auction...');
             const [auctions] = await dbPromise.query(`
                 SELECT
                     a.id, a.starting_price, a.current_highest_bid, a.end_date,
@@ -234,7 +199,8 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 [auctionId]
             );
 
-            if (auctions.length === 0) {
+            if (!auctions || auctions.length === 0) {
+                console.log(`  ❌ Auction ${auctionId} not found or not active`);
                 return res.status(404).json({
                     success: false,
                     message: 'Auction not found or inactive'
@@ -242,13 +208,16 @@ module.exports = function(app, dbPromise, verifyJWT) {
             }
 
             const auction = auctions[0];
+            console.log(`  ✅ Auction found: "${auction.label}"`);
 
-            // 2. Valider le montant de la mise
+            // Step 3: Valider le montant de la mise
+            console.log('  [Step 3] Validating bid amount...');
             const minBid = auction.current_highest_bid
                 ? auction.current_highest_bid + 1
                 : auction.starting_price;
 
             if (amount < minBid) {
+                console.log(`  ❌ Bid amount too low: $${amount} < $${minBid}`);
                 return res.status(400).json({
                     success: false,
                     message: `Bid must be at least $${minBid}`,
@@ -260,15 +229,19 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 });
             }
 
-            // 3. Vérifier si l'utilisateur a déjà une mise
+            console.log(`  ✅ Bid amount valid: $${amount}`);
+
+            // Step 4: Vérifier si l'utilisateur a déjà une mise
+            console.log('  [Step 4] Checking for previous bids...');
             const [existingBids] = await dbPromise.query(
                 `SELECT id, amount FROM bids WHERE auction_id = ? AND user_uid = ? ORDER BY amount DESC LIMIT 1`,
                 [auctionId, userUid]
             );
 
-            if (existingBids.length > 0) {
+            if (existingBids && existingBids.length > 0) {
                 const previousBid = existingBids[0];
                 if (amount <= previousBid.amount) {
+                    console.log(`  ❌ New bid not higher: $${amount} <= $${previousBid.amount}`);
                     return res.status(400).json({
                         success: false,
                         message: `Your new bid ($${amount}) must be higher than your previous bid ($${previousBid.amount})`,
@@ -281,10 +254,13 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 }
                 // Supprimer la mise précédente
                 await dbPromise.query(`DELETE FROM bids WHERE id = ?`, [previousBid.id]);
-                console.log('  ✅ Previous bid removed');
+                console.log(`  ✅ Previous bid removed (was $${previousBid.amount})`);
+            } else {
+                console.log('  ℹ️ No previous bids found');
             }
 
-            // 4. Récupérer tous les enchérisseurs précédents (sauf le nouvel enchérisseur)
+            // Step 5: Récupérer les enchérisseurs précédents
+            console.log('  [Step 5] Getting previous bidders...');
             const [previousBidders] = await dbPromise.query(
                 `SELECT DISTINCT u.email FROM bids b 
                  JOIN users u ON b.user_uid = u.id 
@@ -292,42 +268,50 @@ module.exports = function(app, dbPromise, verifyJWT) {
                 [auctionId, userUid]
             );
 
-            const previousBidderEmails = previousBidders.map((bid) => bid.email);
-            console.log('  Previous bidders to notify:', previousBidderEmails.length);
+            const biddersList = Array.isArray(previousBidders) ? previousBidders : [];
+            const previousBidderEmails = biddersList.map((bid) => bid.email);
+            console.log(`  ✅ Found ${previousBidderEmails.length} previous bidders to notify`);
 
-            // 5. Insérer la nouvelle mise
+            // Step 6: Insérer la nouvelle mise
+            console.log('  [Step 6] Inserting bid...');
             await dbPromise.query(
                 `INSERT INTO bids (auction_id, user_uid, amount) VALUES (?, ?, ?)`,
                 [auctionId, userUid, amount]
             );
             console.log('  ✅ Bid inserted');
 
-            // 6. Mettre à jour current_highest_bid
+            // Step 7: Mettre à jour current_highest_bid
+            console.log('  [Step 7] Updating auction...');
             await dbPromise.query(
                 `UPDATE auctions SET current_highest_bid = ? WHERE id = ?`,
                 [amount, auctionId]
             );
-            console.log('  ✅ Auction highest bid updated');
+            console.log(`  ✅ Auction updated: highest bid now $${amount}`);
 
-            // 7. Envoyer l'email de confirmation au nouvel enchérisseur
+            // Step 8: Envoyer l'email de confirmation
             try {
+                console.log('  [Step 8] Sending confirmation email...');
                 await sendBidConfirmationEmail(userEmail, auction, amount);
-                console.log('  ✅ Bid confirmation email sent');
+                console.log(`  ✅ Confirmation email sent to ${userEmail}`);
             } catch (emailError) {
-                console.error('  ⚠️ Failed to send bid confirmation email:', emailError.message);
+                console.error('  ⚠️ Email failed (non-fatal):', emailError.message);
             }
 
-            // 8. Envoyer les emails de notification aux autres enchérisseurs
+            // Step 9: Envoyer les emails de notification aux autres enchérisseurs
             if (previousBidderEmails.length > 0) {
                 try {
+                    console.log('  [Step 9] Sending outbid notifications...');
                     await sendOutbidNotificationEmails(previousBidderEmails, auction, amount, userEmail);
-                    console.log('  ✅ Outbid notifications sent');
+                    console.log(`  ✅ Outbid notifications sent to ${previousBidderEmails.length} users`);
                 } catch (emailError) {
-                    console.error('  ⚠️ Failed to send outbid notifications:', emailError.message);
+                    console.error('  ⚠️ Outbid notifications failed (non-fatal):', emailError.message);
                 }
             }
 
-            res.json({
+            console.log('  ✅ Bid placed successfully!');
+            console.log('================================\n');
+
+            return res.json({
                 success: true,
                 your_bid: amount,
                 current_highest_bid: amount,
@@ -338,21 +322,37 @@ module.exports = function(app, dbPromise, verifyJWT) {
                     message: `Your bid of $${amount.toFixed(2)} has been placed. A confirmation email has been sent.`,
                 },
             });
+
         } catch (error) {
-            console.error('Error placing bid:', error);
-            res.status(500).json({
+            console.error('\n❌ Error placing bid:', error.message);
+            console.error('Stack trace:', error.stack);
+            console.error('================================\n');
+
+            // Déterminer le message d'erreur à afficher
+            let userMessage = 'Failed to place bid. Please try again.';
+
+            if (error.message.includes('foreign key constraint')) {
+                userMessage = 'There was a problem with your account. Please contact support.';
+            } else if (error.message.includes('DUPLICATE')) {
+                userMessage = 'This bid already exists. Please try a different amount.';
+            }
+
+            return res.status(500).json({
                 success: false,
                 message: 'Error placing bid',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined,
                 toast: {
                     type: 'error',
                     title: 'Error',
-                    message: 'Failed to place bid. Please try again.',
+                    message: userMessage,
                 },
             });
         }
     });
 
+    // ============================================================
     // POST: Auto-close auctions
+    // ============================================================
     app.post('/api/auctions/auto-close', async (req, res) => {
         try {
             console.log('🕐 Running auction auto-close...');
