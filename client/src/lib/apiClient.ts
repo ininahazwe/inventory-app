@@ -156,22 +156,22 @@ const waitForGoogle = (): Promise<void> => {
   });
 };
 
-// 🔥 FIX: Obtenir client_id depuis multiples sources (priority)
+// 🔥 FIX: Obtenir client_id depuis import.meta.env (build-time) en priorité
 const getGoogleClientId = (): string | undefined => {
-  // 1. Essayer window.__ENV__ (injecté côté serveur en prod)
-  if (typeof window !== 'undefined' && (window as any).__ENV__?.VITE_GOOGLE_CLIENT_ID) {
-    console.log('✅ Google Client ID from window.__ENV__');
-    return (window as any).__ENV__.VITE_GOOGLE_CLIENT_ID;
-  }
-
-  // 2. Essayer import.meta.env (Vite en dev)
+  // 1. import.meta.env (Vite - constant à la build, toujours présent en prod/dev)
   if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {
-    console.log('✅ Google Client ID from import.meta.env');
+    console.log('✅ Google Client ID from import.meta.env (build-time)');
     return import.meta.env.VITE_GOOGLE_CLIENT_ID;
   }
 
-  // 3. Fallback hardcoded (dernière option, ne devrait pas arriver ici)
-  console.warn('⚠️  Google Client ID not found - Google Sign-In will fail');
+  // 2. Fallback: window.__ENV__ (runtime override si besoin)
+  if (typeof window !== 'undefined' && (window as any).__ENV__?.VITE_GOOGLE_CLIENT_ID) {
+    console.log('✅ Google Client ID from window.__ENV__ (runtime override)');
+    return (window as any).__ENV__.VITE_GOOGLE_CLIENT_ID;
+  }
+
+  // 3. Erreur
+  console.error('❌ Google Client ID not found in import.meta.env or window.__ENV__');
   return undefined;
 };
 
