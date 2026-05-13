@@ -81,11 +81,22 @@ jobs:
 
             # ========== BACKEND DEPLOYMENT (CommonJS) ==========
             echo "📦 Deploying backend..."
+            
+            # Copy app files
             cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/app.js /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/app.js
             cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/cron-auto-close.js /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/cron-auto-close.js
-            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/routes /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/routes
-            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/services /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/services
             cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/package.json /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package.json
+            
+            # Remove old routes/services and copy fresh ones
+            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/routes
+            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/services
+            
+            mkdir -p /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/routes
+            mkdir -p /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/services
+            
+            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/routes/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/routes/
+            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/services/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/services/
+            
             echo "✅ Backend files copied"
 
             # ========== DEPLOY .HTACCESS ==========
@@ -118,6 +129,8 @@ jobs:
             [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
             [ -d /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
             [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html ] && grep -q "window.__ENV__" /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html && echo "✅ Environment variables injected" || echo "❌ Environment variables NOT injected"
+            [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/routes/audit.js ] && echo "✅ Routes deployed" || echo "❌ Routes missing"
+            [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/services/db.js ] && echo "✅ Services deployed" || echo "❌ Services missing"
 
             # Vérifier le statut PM2
             echo "📊 PM2 Status:"
