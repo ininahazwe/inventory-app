@@ -36,13 +36,48 @@ jobs:
 
             # ========== INJECT ENVIRONMENT VARIABLES INTO dist/index.html ==========
             echo "🔧 Injecting environment variables..."
+            cat > /tmp/inject-env.js << 'INJECT_EOF'
+            const fs = require('fs');
+            const path = require('path');
+            
+            const distIndexPath = path.join('/home/${{ secrets.SSH_USER }}/repositories/inventory-app/client', 'dist', 'index.html');
+            
+            if (!fs.existsSync(distIndexPath)) {
+              console.error('❌ dist/index.html not found');
+              process.exit(1);
+            }
+            
+            const envVars = {
+              VITE_GOOGLE_CLIENT_ID: process.env.VITE_GOOGLE_CLIENT_ID || '',
+              VITE_CLOUDINARY_CLOUD_NAME: process.env.VITE_CLOUDINARY_CLOUD_NAME || '',
+              VITE_CLOUDINARY_UPLOAD_PRESET: process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '',
+              VITE_API_URL: process.env.VITE_API_URL || '',
+            };
+            
+            const injectionScript = `<script>
+            window.__ENV__ = ${JSON.stringify(envVars, null, 2)};
+            console.log('✅ Environment injected:', window.__ENV__);
+            </script>`;
+            
+            let html = fs.readFileSync(distIndexPath, 'utf-8');
+            const scriptIndex = html.indexOf('<script');
+            
+            if (scriptIndex === -1) {
+              console.error('❌ No <script> tag found');
+              process.exit(1);
+            }
+            
+            html = html.slice(0, scriptIndex) + injectionScript + '\n' + html.slice(scriptIndex);
+            fs.writeFileSync(distIndexPath, html, 'utf-8');
+            console.log('✅ Environment injected into dist/index.html');
+            INJECT_EOF
+            
             export VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}"
             export VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}"
             export VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}"
             export VITE_API_URL="https://assets.mfwa.org/api"
             
-            node /home/${{ secrets.SSH_USER }}/repositories/inventory-app/inject-env.js
-            echo "✅ Environment variables injected into dist/index.html"
+            node /tmp/inject-env.js
 
             # ========== BACKEND DEPLOYMENT (CommonJS) ==========
             echo "📦 Deploying backend..."
@@ -76,7 +111,6 @@ jobs:
             pm2 restart assets-mgt --silent
             sleep 2
             echo "✅ PM2 process restarted"
-            
 
             # ========== FINAL VALIDATION ==========
             echo "🔍 Validating deployment..."
