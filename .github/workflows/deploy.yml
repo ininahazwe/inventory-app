@@ -34,6 +34,16 @@ jobs:
             npm run build --quiet
             echo "✅ Frontend built"
 
+            # ========== INJECT ENVIRONMENT VARIABLES INTO dist/index.html ==========
+            echo "🔧 Injecting environment variables..."
+            export VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}"
+            export VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}"
+            export VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}"
+            export VITE_API_URL="https://assets.mfwa.org/api"
+            
+            node /home/${{ secrets.SSH_USER }}/repositories/inventory-app/inject-env.js
+            echo "✅ Environment variables injected into dist/index.html"
+
             # ========== BACKEND DEPLOYMENT (CommonJS) ==========
             echo "📦 Deploying backend..."
             cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/app.js /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/app.js
@@ -72,6 +82,7 @@ jobs:
             [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/app.js ] && echo "✅ Backend entry point exists" || echo "❌ Backend entry point missing"
             [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
             [ -d /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
+            [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html ] && grep -q "window.__ENV__" /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html && echo "✅ Environment variables injected" || echo "❌ Environment variables NOT injected"
 
             # Vérifier le statut PM2
             echo "📊 PM2 Status:"
