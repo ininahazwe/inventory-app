@@ -63,9 +63,9 @@ export interface GoogleUser {
 // ─── RPC Routes Map ───────────────────────────────────────────────────────────
 const rpcRouteMap: Record<string, { method: 'GET' | 'POST'; path: (params: any) => string }> = {
   // ✅ Query RPCs (GET)
-  'is_admin': { method: 'GET', path: (p) => `/rpc/is_admin?email=${encodeURIComponent(p?.email || '')}` },
-  'is_super_admin': { method: 'GET', path: (p) => `/rpc/is_super_admin?email=${encodeURIComponent(p?.email || '')}` },
-  'is_email_allowed': { method: 'GET', path: (p) => `/rpc/is_email_allowed?email=${encodeURIComponent(p?.email || '')}` },
+  'is_admin': { method: 'GET', path: (p) => `/users/is_admin?email=${encodeURIComponent(p?.email || '')}` },
+  'is_super_admin': { method: 'GET', path: (p) => `/users/is_super_admin?email=${encodeURIComponent(p?.email || '')}` },
+  'is_email_allowed': { method: 'GET', path: (p) => `/users/is_email_allowed?email=${encodeURIComponent(p?.email || '')}` },
   'is_current_admin': { method: 'GET', path: () => '/me/is-admin' },
   'get_asset_stats': { method: 'POST', path: () => '/rpc/get_asset_stats' },
 

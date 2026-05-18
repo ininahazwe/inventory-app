@@ -52,8 +52,8 @@ export default function InventoryStats({ refreshTrigger = 0, onCategoryFilter, s
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, textAlign: 'center', color: 'var(--ink)' }}>Par catégorie</div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            {stats.categories.map(cat => (
-              <div key={cat.name}
+            {stats.categories.map((cat, index) => (
+              <div key={`${cat.name}-${index}`}
                 onClick={() => handleCategoryClick(cat.name)}
                 style={{ textAlign: 'center', padding: '10px 14px', borderRadius: 6, minWidth: 80, cursor: onCategoryFilter ? 'pointer' : 'default', background: selectedCategory === cat.name ? 'var(--brand)' : '#fff', color: selectedCategory === cat.name ? '#fff' : 'var(--ink)', transition: 'all 0.2s ease' }}
               >
