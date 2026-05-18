@@ -46,7 +46,38 @@ router.post('/google', async (req: Request, res: Response) => {
         return res.status(500).json({ error: (err as Error).message });
     }
 });
+// GET /api/auth/me - Récupère les infos de l'utilisateur connecté (requiert le JWT)
+router.get('/me', requireAuth, async (req: Request, res: Response) => {
+    try {
+        // 1. Récupérer l'utilisateur injecté par le middleware requireAuth
+        const user = (req as any).user;
+        if (!user) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
 
+        const { email } = user;
+
+        // 2. Chercher les informations à jour de l'utilisateur dans la base de données
+        const [users] = await db.query(
+            'SELECT id, email, role, created_at FROM users WHERE email = ? LIMIT 1',
+            [email]
+        );
+
+        // 3. Vérifier si l'utilisateur existe toujours dans la base
+        if (!users || (users as any[]).length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        logger.info(`GET /auth/me success for ${email}`, 'AUTH');
+
+        // 4. Retourner les données de l'utilisateur au frontend
+        return res.json((users as any[])[0]);
+
+    } catch (err) {
+        logger.error('GET /auth/me error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
 // GET /api/me - Get current user info (requires JWT)
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {

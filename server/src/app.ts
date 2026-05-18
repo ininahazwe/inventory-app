@@ -8,6 +8,7 @@ import incidentsRoutes from './routes/incidents';
 import usersRoutes from './routes/users';
 import rpcRoutes from './routes/rpc';
 import suppliesRoutes from './routes/supplies';
+import auditRoutes from './routes/audit';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 
@@ -37,7 +38,7 @@ export function createApp() {
     // PROTECTED ROUTES (require auth)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    app.use('/api/me', requireAuth, authRoutes);
+    //app.use('/api/me', requireAuth, authRoutes);
     app.use('/api/assets', assetsRoutes);
     app.use('/api/assignments', assignmentsRoutes);
     app.use('/api/incidents', incidentsRoutes);
@@ -46,6 +47,8 @@ export function createApp() {
 
     // Legacy/Business specific
     app.use('/api/supplies', suppliesRoutes);
+
+    app.use('/api/audit', requireAuth, auditRoutes);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLER (must be last)

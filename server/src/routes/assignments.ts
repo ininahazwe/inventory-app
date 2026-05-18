@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { logAudit } from './audit';
 
 const router = Router();
 

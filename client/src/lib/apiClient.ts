@@ -261,7 +261,7 @@ export const auth = {
   },
 
   getUser: async () => {
-    return api.get<GoogleUser>('/me');
+    return api.get<GoogleUser>('/auth/me');
   },
 
   isAuthenticated: (): boolean => !!token.get(),

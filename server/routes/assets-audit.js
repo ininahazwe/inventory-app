@@ -1,4 +1,4 @@
-// server/routes/assets-audit.js
+// server/routes/assets-audit.ts
 // À ajouter dans app.js : const { logAudit } = require('./routes/audit')(app, dbPromise, verifyJWT);
 
 module.exports = function(app, dbPromise, verifyJWT, logAudit) {

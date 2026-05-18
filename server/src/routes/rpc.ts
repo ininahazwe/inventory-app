@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { logAudit } from './audit';
 
 const router = Router();
 
@@ -60,6 +61,8 @@ router.post('/return_asset', requireAuth, async (req: Request, res: Response) =>
 
         // Log audit
         await auditLog(user.email, 'asset_returned', 'assets', p_asset_id, oldValue, newValue);
+
+        await logAudit(user.email, 'asset_returned', 'assets', p_asset_id, oldValue, newValue);
 
         logger.info(`Asset ${p_asset_id} returned to stock`, 'RPC');
         return res.json({ success: true });

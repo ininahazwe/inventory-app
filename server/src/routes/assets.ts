@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { logAudit } from './audit';
 
 const router = Router();
 
@@ -94,7 +95,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 // GET /api/assets/:id - Get single asset
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const id = String(req.params.id);
 
         const [asset] = await db.query(`
             SELECT
@@ -143,6 +144,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const { label, serial_no, category_id, status, funder, purchase_price } = req.body;
+        const user = (req as any).user;
 
         if (!label) {
             return res.status(400).json({ error: 'label is required' });
@@ -154,9 +156,21 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             [label, serial_no || null, category_id || null, status || 'in_stock', funder || null, purchase_price || null]
         );
 
+        const assetId = (result as any).insertId;
+
+        // ✅ Log audit
+        await logAudit(
+            user.email,
+            'asset_created',
+            'assets',
+            assetId,
+            null,
+            { label, serial_no, category_id, status, funder, purchase_price }
+        );
+
         logger.info(`Created asset: ${label}`, 'ASSETS');
         return res.status(201).json({
-            id: (result as any).insertId,
+            id: assetId,
             label,
             serial_no,
             category_id,
@@ -172,7 +186,10 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
 // PUT /api/assets/:id - Update asset
 router.put('/:id', requireAuth, async (req: Request, res: Response) => {
-    const { id } = req.params;
+    // ✅ Type id correctly (req.params.id is string | string[])
+    const id = String(req.params.id);
+    const assetId = parseInt(id, 10);
+
     const {
         label,
         serial_no,
@@ -184,11 +201,19 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
         warranty_end,
         notes
     } = req.body;
+    const user = (req as any).user;
 
     try {
         if (!label || !label.trim()) {
             return res.status(400).json({ error: 'label is required' });
         }
+
+        // ✅ Get old state for audit
+        const [oldAssetResult] = await db.query('SELECT * FROM assets WHERE id = ?', [assetId]);
+        if (!(oldAssetResult as any[]).length) {
+            return res.status(404).json({ error: 'Asset not found' });
+        }
+        const oldValue = (oldAssetResult as any[])[0];
 
         let parsedPrice = null;
         if (purchase_price !== null && purchase_price !== undefined && purchase_price !== '') {
@@ -228,11 +253,19 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
             funder || null,
             cleanWarrantyEnd,
             notes || null,
-            id
+            assetId
         ];
 
         await db.query(sql, params);
-        logger.info(`Updated asset ${id}`, 'ASSETS');
+
+        // ✅ Get new state for audit
+        const [newAssetResult] = await db.query('SELECT * FROM assets WHERE id = ?', [assetId]);
+        const newValue = (newAssetResult as any[])[0];
+
+        // ✅ Log audit (now with correct type)
+        await logAudit(user.email, 'asset_updated', 'assets', assetId, oldValue, newValue);
+
+        logger.info(`Updated asset ${assetId}`, 'ASSETS');
         res.json({ message: 'Asset updated successfully' });
     } catch (err) {
         logger.error('PUT /assets/:id error:', err as Error);
