@@ -23,6 +23,14 @@ export function EditAssetModal({ open, onClose, asset, onSaved }: { open: boolea
     }
   };
 
+  // ✅ Helper: clean date to YYYY-MM-DD before sending to API
+  const cleanDateForApi = (dateStr: string | null | undefined): string | null => {
+    if (!dateStr) return null;
+    // Already YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    return normalizeDate(dateStr) || null;
+  };
+
   const [edLabel, setEdLabel]               = useState(asset?.label ?? '');
   const [edSerial, setEdSerial]             = useState(asset?.serial_no ?? '');
   const [edCategoryName, setEdCategoryName] = useState(asset?.category_name ?? '');
@@ -74,16 +82,20 @@ export function EditAssetModal({ open, onClose, asset, onSaved }: { open: boolea
         priceNum = parseFloat(priceNum.toFixed(2));
       }
 
+      // ✅ Clean dates to YYYY-MM-DD before sending
+      const cleanPurchasedAt = cleanDateForApi(edPurchasedAt);
+      const cleanWarrantyEnd = cleanDateForApi(edWarrantyEnd);
+
       // Make API call
       const { error } = await api.put(`/assets/${asset.id}`, {
         label: edLabel.trim(),
         serial_no: edSerial.trim() || null,
         category_id,
-        purchased_at: edPurchasedAt || null,
+        purchased_at: cleanPurchasedAt,
         purchase_price: priceNum,
         supplier: edSupplier.trim() || null,
         funder: edFunder.trim() || null,
-        warranty_end: edWarrantyEnd || null,
+        warranty_end: cleanWarrantyEnd,
         notes: edNotes.trim() || null
       });
 

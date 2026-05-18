@@ -5,6 +5,27 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
+// ✅ Helper: clean date to YYYY-MM-DD format
+const cleanDate = (dateStr: any): string | null => {
+    if (!dateStr) return null;
+    if (typeof dateStr !== 'string') return null;
+
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+    // ISO format with time
+    if (dateStr.includes('T')) return dateStr.split('T')[0];
+
+    // Try to parse
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().split('T')[0];
+    } catch {
+        return null;
+    }
+};
+
 // GET /api/assets - List all assets with pagination
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
@@ -178,6 +199,10 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
             parsedPrice = parseFloat(parsedPrice.toFixed(2));
         }
 
+        // ✅ Clean dates to YYYY-MM-DD before MySQL
+        const cleanPurchasedAt = cleanDate(purchased_at);
+        const cleanWarrantyEnd = cleanDate(warranty_end);
+
         const sql = `
             UPDATE assets
             SET
@@ -197,11 +222,11 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
             label.trim(),
             serial_no || null,
             category_id || null,
-            purchased_at || null,
+            cleanPurchasedAt,
             parsedPrice,
             supplier || null,
             funder || null,
-            warranty_end || null,
+            cleanWarrantyEnd,
             notes || null,
             id
         ];

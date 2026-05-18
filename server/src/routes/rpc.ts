@@ -25,6 +25,9 @@ async function auditLog(userEmail: string, action: string, targetTable: string, 
     }
 }
 
+// ✅ Verify route is registered
+console.log('🔧 RPC router initializing...');
+
 // POST /api/rpc/return_asset
 router.post('/return_asset', requireAuth, async (req: Request, res: Response) => {
     try {
@@ -274,5 +277,8 @@ router.post('/get_asset_stats', requireAuth, async (req: Request, res: Response)
         return res.status(500).json({ error: (err as Error).message });
     }
 });
+
+// ✅ Log all registered POST routes
+console.log('✅ RPC routes registered: /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats');
 
 export default router;
