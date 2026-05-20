@@ -132,6 +132,12 @@ jobs:
             sleep 2
             echo "✅ PM2 process restarted"
 
+            # ========== CLEAR PASSENGER CACHE ==========
+            echo "🧹 Clearing Passenger cache..."
+            touch /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/tmp/restart.txt 2>/dev/null || true
+            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/tmp/cache/* 2>/dev/null || true
+            echo "✅ Passenger cache cleared"
+
             # ========== FINAL VALIDATION ==========
             echo "🔍 Validating deployment..."
             [ -d /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/dist ] && echo "✅ Backend dist exists" || echo "❌ Backend dist missing"
