@@ -14,8 +14,10 @@ import {ConfirmProvider} from "./components/ConfirmProvider.tsx";
 import AuctionsPage from './pages/AuctionsPage';
 import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
 import AuctionDetailPage from "./pages/Auctiondetailpage.tsx";
-import {SuppliesPage} from "./pages/SuppliesPage.tsx";
 import AssigneesPage from "./pages/AssigneesPage.tsx";
+import SuppliesPage from "./pages/SuppliesPage.tsx";
+import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
+import EditSupplyPage from "./pages/EditSupplyPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -33,6 +35,8 @@ const router = createBrowserRouter([
       { path: "/auctions", element: <AuctionsPage /> },
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
       { path: "/incidents", element: <IncidentsPage /> },
+      { path: "/supplies/create", element: <CreateSupplyPage /> },
+      { path: "/supplies/:id/edit", element: <EditSupplyPage /> },
       { path: "/supplies", element: <SuppliesPage  /> },
       { path: "/assignees", element: <AssigneesPage  /> },
     ],
