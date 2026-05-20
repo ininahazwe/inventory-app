@@ -5,6 +5,115 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
+// Middleware pour vérifier admin (utilisé dans les routes de modif)
+const requireAdmin = (req: Request, res: Response, next: Function) => {
+    const user = (req as any).user;
+    if (!user || (user.role !== 'super_admin' && user.role !== 'admin')) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPECIFIC ROUTES (/:id/action) - MUST BE BEFORE GENERIC /:id
+// ═══════════════════════════════════════════════════════════════════════════
+
+// PATCH /incidents/:id/status - Changer le statut (admin seulement)
+router.patch('/:id/status', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status || !['open', 'in_progress', 'resolved', 'closed'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status. Must be: open, in_progress, resolved, or closed' });
+        }
+
+        const resolvedAt = status === 'resolved' ? new Date() : null;
+
+        const [result] = await db.query(
+            `UPDATE incidents
+             SET status = ?, resolved_at = ?
+             WHERE id = ?`,
+            [status, resolvedAt, id]
+        );
+
+        if ((result as any).affectedRows === 0) {
+            return res.status(404).json({ error: 'Incident not found' });
+        }
+
+        logger.info(`Updated incident ${id} status to ${status}`, 'INCIDENTS');
+        return res.json({ success: true, status });
+    } catch (err) {
+        logger.error('PATCH /incidents/:id/status error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// PATCH /incidents/:id/assign - Assigner un incident à un technicien (admin seulement)
+router.patch('/:id/assign', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { assigned_to } = req.body;
+
+        if (!assigned_to) {
+            return res.status(400).json({ error: 'assigned_to (email) required' });
+        }
+
+        // Optionnel: vérifier que l'email existe dans la table users
+        const [users] = await db.query('SELECT id FROM users WHERE email = ?', [assigned_to]);
+        if (!(users as any[]).length) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+
+        const [result] = await db.query(
+            `UPDATE incidents SET assigned_to = ? WHERE id = ?`,
+            [assigned_to, id]
+        );
+
+        if ((result as any).affectedRows === 0) {
+            return res.status(404).json({ error: 'Incident not found' });
+        }
+
+        logger.info(`Assigned incident ${id} to ${assigned_to}`, 'INCIDENTS');
+        return res.json({ success: true, assigned_to });
+    } catch (err) {
+        logger.error('PATCH /incidents/:id/assign error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// PATCH /incidents/:id/notes - Ajouter/modifier les notes (admin seulement)
+router.patch('/:id/notes', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+
+        if (notes === undefined || notes === null) {
+            return res.status(400).json({ error: 'notes required' });
+        }
+
+        const [result] = await db.query(
+            `UPDATE incidents SET notes = ? WHERE id = ?`,
+            [notes, id]
+        );
+
+        if ((result as any).affectedRows === 0) {
+            return res.status(404).json({ error: 'Incident not found' });
+        }
+
+        logger.info(`Updated notes for incident ${id}`, 'INCIDENTS');
+        return res.json({ success: true, notes });
+    } catch (err) {
+        logger.error('PATCH /incidents/:id/notes error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GENERIC ROUTES (/:id) - MUST BE AFTER SPECIFIC ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /incidents - Lister tous les incidents
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const [incidents] = await db.query(`
@@ -33,6 +142,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// GET /incidents/:id - Détail d'un incident
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -66,6 +176,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// POST /incidents - Créer un nouvel incident
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const { asset_id, incident_type, severity, description } = req.body;
@@ -82,49 +193,25 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             [asset_id, incident_type || 'other', severity || 'medium', description || null, 'open', email]
         );
 
-        logger.info(`Created incident for asset ${asset_id}`, 'INCIDENTS');
+        const incidentId = (result as any).insertId;
+        const createdAt = new Date().toISOString();
+
+        logger.info(`Created incident ${incidentId} for asset ${asset_id}`, 'INCIDENTS');
         return res.status(201).json({
-            id: (result as any).insertId,
+            id: incidentId,
             asset_id,
             incident_type: incident_type || 'other',
             severity: severity || 'medium',
             description,
             status: 'open',
             reported_by_email: email,
-            created_at: new Date().toISOString()
+            assigned_to: null,
+            created_at: createdAt,
+            resolved_at: null,
+            notes: null
         });
     } catch (err) {
         logger.error('POST /incidents error:', err as Error);
-        return res.status(500).json({ error: (err as Error).message });
-    }
-});
-
-router.patch('/:id/status', requireAuth, async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        if (!status) {
-            return res.status(400).json({ error: 'status required' });
-        }
-
-        const resolvedAt = status === 'resolved' ? new Date().toISOString().split('T')[0] : null;
-
-        const [result] = await db.query(
-            `UPDATE incidents
-             SET status = ?, resolved_at = ?
-             WHERE id = ?`,
-            [status, resolvedAt, id]
-        );
-
-        if ((result as any).affectedRows === 0) {
-            return res.status(404).json({ error: 'Incident not found' });
-        }
-
-        logger.info(`Updated incident ${id} status to ${status}`, 'INCIDENTS');
-        return res.json({ success: true });
-    } catch (err) {
-        logger.error('PATCH /incidents/:id/status error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
 });

@@ -1,88 +1,111 @@
-// src/components/IncidentBadge.tsx
 import React from 'react';
 
 interface IncidentBadgeProps {
-  type: 'status' | 'severity' | 'type';
+  type: 'type' | 'severity' | 'status';
   value: string;
 }
 
 export const IncidentBadge: React.FC<IncidentBadgeProps> = ({ type, value }) => {
-  const getBadgeClass = () => {
-    if (type === 'status') {
-      switch (value) {
-        case 'open':
-          return 'incident-badge incident-badge--open';
-        case 'in_progress':
-          return 'incident-badge incident-badge--in-progress';
-        case 'resolved':
-          return 'incident-badge incident-badge--resolved';
-        case 'closed':
-          return 'incident-badge incident-badge--closed';
-        default:
-          return 'incident-badge';
-      }
+  let label = value;
+  let bgColor = '#f4f1ee';
+  let textColor = 'var(--ink)';
+
+  if (type === 'type') {
+    switch (value) {
+      case 'damage':
+        label = 'Dommage';
+        bgColor = '#fee2e2';
+        textColor = '#991b1b';
+        break;
+      case 'loss':
+        label = 'Perte';
+        bgColor = '#fce7f3';
+        textColor = '#831843';
+        break;
+      case 'malfunction':
+        label = 'Dysfonctionnement';
+        bgColor = '#fef3c7';
+        textColor = '#92400e';
+        break;
+      case 'theft':
+        label = 'Vol';
+        bgColor = '#f3e8ff';
+        textColor = '#6b21a8';
+        break;
+      case 'other':
+        label = 'Autre';
+        bgColor = '#f4f1ee';
+        textColor = 'var(--ink)';
+        break;
+      default:
+        label = value.charAt(0).toUpperCase() + value.slice(1);
     }
-
-    if (type === 'severity') {
-      switch (value) {
-        case 'low':
-          return 'incident-badge incident-badge--low';
-        case 'medium':
-          return 'incident-badge incident-badge--medium';
-        case 'high':
-          return 'incident-badge incident-badge--high';
-        case 'critical':
-          return 'incident-badge incident-badge--critical';
-        default:
-          return 'incident-badge';
-      }
+  } else if (type === 'severity') {
+    switch (value) {
+      case 'low':
+        label = 'Faible';
+        bgColor = '#dcfce7';
+        textColor = '#166534';
+        break;
+      case 'medium':
+        label = 'Moyen';
+        bgColor = '#fef08a';
+        textColor = '#713f12';
+        break;
+      case 'high':
+        label = 'Élevé';
+        bgColor = '#fed7aa';
+        textColor = '#92400e';
+        break;
+      case 'critical':
+        label = 'Critique';
+        bgColor = '#fecaca';
+        textColor = '#7f1d1d';
+        break;
+      default:
+        label = value.charAt(0).toUpperCase() + value.slice(1);
     }
-
-    if (type === 'type') {
-      switch (value) {
-        case 'damage':
-          return 'incident-badge incident-badge--damage';
-        case 'loss':
-          return 'incident-badge incident-badge--loss';
-        case 'malfunction':
-          return 'incident-badge incident-badge--malfunction';
-        case 'theft':
-          return 'incident-badge incident-badge--theft';
-        case 'other':
-          return 'incident-badge incident-badge--other';
-        default:
-          return 'incident-badge';
-      }
+  } else if (type === 'status') {
+    switch (value) {
+      case 'open':
+        label = 'Ouvert';
+        bgColor = '#bfdbfe';
+        textColor = '#1e3a8a';
+        break;
+      case 'in_progress':
+        label = 'En cours';
+        bgColor = '#fde68a';
+        textColor = '#713f12';
+        break;
+      case 'resolved':
+        label = 'Résolu';
+        bgColor = '#bbf7d0';
+        textColor = '#166534';
+        break;
+      case 'closed':
+        label = 'Fermé';
+        bgColor = '#e5e7eb';
+        textColor = '#374151';
+        break;
+      default:
+        label = value.charAt(0).toUpperCase() + value.slice(1);
     }
-
-    return 'incident-badge';
-  };
-
-  const getDisplayLabel = () => {
-    const labels: Record<string, string> = {
-      // Status
-      'open': 'Open',
-      'in_progress': 'In progress',
-      'resolved': 'Resolved',
-      'closed': 'Closed',
-      // Severity
-      'low': 'Low',
-      'medium': 'Medium',
-      'high': 'High',
-      'critical': 'Critical',
-      // Type
-      'damage': 'Damage',
-      'loss': 'Loss',
-      'malfunction': 'Malfunction',
-      'theft': 'Theft',
-      'other': 'Other',
-    };
-    return labels[value] || value;
-  };
+  }
 
   return (
-    <span className={getBadgeClass()}>
-      {getDisplayLabel()}
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '4px 10px',
+        backgroundColor: bgColor,
+        color: textColor,
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: 500,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
     </span>
   );
 };

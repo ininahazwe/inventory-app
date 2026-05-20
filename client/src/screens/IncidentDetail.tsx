@@ -9,18 +9,24 @@ import { usePermissions } from '../hooks/usePermissions';
 export const IncidentDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { fetchIncidentById, updateIncidentStatus, loading, error } = useIncidents();
+  const { fetchIncidentById, updateIncidentStatus, assignIncident, updateIncidentNotes, loading, error } = useIncidents();
   const { isAdmin, isSuperAdmin } = usePermissions();
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState('');
+  const [isEditingAssign, setIsEditingAssign] = useState(false);
+  const [assignEmail, setAssignEmail] = useState('');
 
   useEffect(() => {
     const loadIncident = async () => {
       if (id) {
         const data = await fetchIncidentById(parseInt(id));
         setIncident(data);
+        setNotesText(data?.notes || '');
+        setAssignEmail(data?.assigned_to || '');
       }
     };
 
@@ -45,7 +51,34 @@ export const IncidentDetail: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const handleSaveNotes = async () => {
+    if (!incident) return;
+
+    try {
+      await updateIncidentNotes(incident.id, notesText);
+      const updated = await fetchIncidentById(incident.id);
+      setIncident(updated);
+      setIsEditingNotes(false);
+    } catch (err) {
+      console.error('Error updating notes:', err);
+    }
+  };
+
+  const handleSaveAssign = async () => {
+    if (!incident || !assignEmail.trim()) return;
+
+    try {
+      await assignIncident(incident.id, assignEmail);
+      const updated = await fetchIncidentById(incident.id);
+      setIncident(updated);
+      setIsEditingAssign(false);
+    } catch (err) {
+      console.error('Error assigning incident:', err);
+    }
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '—';
     return new Date(dateString).toLocaleDateString('fr-FR', {
       year: 'numeric',
       month: 'long',
@@ -58,7 +91,7 @@ export const IncidentDetail: React.FC = () => {
   if (loading) {
     return (
       <div className="main-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <p style={{ color: 'var(--muted)' }}>Chargement...</p>
+        <p style={{ color: 'var(--muted)' }}>Loading...</p>
       </div>
     );
   }
@@ -67,14 +100,14 @@ export const IncidentDetail: React.FC = () => {
     return (
       <div className="main-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
         <p style={{ color: '#991b1b' }}>
-          {error ? `Erreur: ${error}` : 'Incident non trouvé'}
+          {error ? `Error: ${error}` : 'Incident not found'}
         </p>
         <button
           className="pill"
           onClick={() => navigate('/incidents')}
           style={{ marginTop: '12px' }}
         >
-          Retour à la liste
+          Back to list
         </button>
       </div>
     );
@@ -85,20 +118,20 @@ export const IncidentDetail: React.FC = () => {
   return (
     <div className="main-card">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '24px',
-        paddingBottom: '16px',
-        borderBottom: '1px solid var(--line)',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: '24px',
+          paddingBottom: '16px',
+          borderBottom: '1px solid var(--line)',
+        }}
+      >
         <div>
-          <h2 style={{ margin: '0 0 8px 0' }}>
-            Incident #{incident.id}
-          </h2>
+          <h2 style={{ margin: '0 0 8px 0' }}>Incident #{incident.id}</h2>
           <p style={{ margin: 0, color: 'var(--muted)', fontSize: '14px' }}>
-            Matériel: <strong>{incident.asset_label}</strong> (SN: {incident.serial_no})
+            Asset: <strong>{incident.asset_label || `Asset #${incident.asset_id}`}</strong>
           </p>
         </div>
 
@@ -107,80 +140,87 @@ export const IncidentDetail: React.FC = () => {
           style={{ padding: '6px 12px', fontSize: '13px' }}
           onClick={() => navigate('/incidents')}
         >
-          ← Retour
+          ← Back
         </button>
       </div>
 
-      {/* Info Row 1: Type, Severity, Status */}
-      <div className="infos">
+      {/* Info Row: Type, Severity, Status */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '24px',
+          marginBottom: '24px',
+        }}
+      >
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
             Type
           </p>
           <IncidentBadge type="type" value={incident.incident_type} />
         </div>
 
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Sévérité
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Severity
           </p>
           <IncidentBadge type="severity" value={incident.severity} />
         </div>
 
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Statut
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Status
           </p>
           <div style={{ position: 'relative' }}>
             <button
-              className="pill"
+              className="pill padding"
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
               disabled={!canManage || isUpdatingStatus}
               style={{
                 opacity: !canManage ? 0.6 : 1,
                 cursor: canManage ? 'pointer' : 'not-allowed',
+                paddingRight: '10px',
               }}
             >
-              <IncidentBadge type="status" value={incident.status} />
+              <IncidentBadge type="status" value={incident.status} /> click to update
             </button>
 
             {canManage && showStatusDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: '4px',
-                backgroundColor: '#fff',
-                border: '1px solid var(--line)',
-                borderRadius: '12px',
-                boxShadow: '0 10px 24px rgba(0,0,0,.08)',
-                zIndex: 10,
-                minWidth: '160px',
-              }}>
-                {['open', 'in_progress', 'resolved', 'closed'].map(status => (
+              <div className="incident-status-dropdown">
+                {['open', 'in_progress', 'resolved'].map(status => (
                   <button
                     key={status}
                     onClick={() => handleStatusChange(status)}
                     disabled={isUpdatingStatus}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '10px 12px',
-                      border: 'none',
-                      background: incident.status === status ? '#f4f1ee' : 'transparent',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      color: 'var(--ink)',
-                      transition: 'background .2s ease',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#fbf8f6')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = incident.status === status ? '#f4f1ee' : 'transparent')}
+                    className={incident.status === status ? 'active' : ''}
                   >
-                    {status === 'open' && 'Ouvert'}
-                    {status === 'in_progress' && 'En cours'}
-                    {status === 'resolved' && 'Résolu'}
-                    {status === 'closed' && 'Fermé'}
+                    {status === 'open' && 'Open'}
+                    {status === 'in_progress' && 'In Progress'}
+                    {status === 'resolved' && 'Resolved'}
                   </button>
                 ))}
               </div>
@@ -190,46 +230,67 @@ export const IncidentDetail: React.FC = () => {
       </div>
 
       {/* Description */}
-      <div style={{ marginTop: '24px', marginBottom: '24px' }}>
-        <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <p
+          style={{
+            margin: '0 0 8px 0',
+            fontSize: '12px',
+            color: 'var(--muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+          }}
+        >
           Description
         </p>
-        <div style={{
-          padding: '14px',
-          backgroundColor: '#f4f1ee',
-          borderRadius: '12px',
-          lineHeight: 1.6,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>
+        <div
+          style={{
+            padding: '14px',
+            backgroundColor: '#f4f1ee',
+            borderRadius: '12px',
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
           {incident.description}
         </div>
       </div>
 
-      {/* Location */}
-      {incident.location && (
-        <div style={{ marginBottom: '24px' }}>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Localisation
-          </p>
-          <p style={{ margin: 0, color: 'var(--ink)' }}>{incident.location}</p>
-        </div>
-      )}
-
       {/* Timeline Info */}
-      <div className="infos">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '24px',
+          marginBottom: '24px',
+        }}
+      >
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Signalé par
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Reported By
           </p>
-          <p style={{ margin: 0, color: 'var(--ink)' }}>
-            {incident.reported_by_email}
-          </p>
+          <p style={{ margin: 0, color: 'var(--ink)' }}>{incident.reported_by_email}</p>
         </div>
 
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Date de création
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Created At
           </p>
           <p style={{ margin: 0, color: 'var(--ink)', fontSize: '13px' }}>
             {formatDate(incident.created_at)}
@@ -237,26 +298,141 @@ export const IncidentDetail: React.FC = () => {
         </div>
 
         <div>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-            Assigné à
+          <p
+            style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Resolved At
           </p>
-          <p style={{ margin: 0, color: 'var(--ink)' }}>
-            {incident.assigned_to_email || '—'}
+          <p style={{ margin: 0, color: 'var(--ink)', fontSize: '13px' }}>
+            {formatDate(incident.resolved_at)}
           </p>
         </div>
       </div>
 
-      {incident.resolved_at && (
-        <div style={{
-          marginTop: '24px',
-          padding: '12px',
-          backgroundColor: '#f0fdf4',
-          borderLeft: '3px solid #22c55e',
-          borderRadius: '6px',
-        }}>
-          <p style={{ margin: 0, fontSize: '13px', color: '#166534' }}>
-            Résolu le {formatDate(incident.resolved_at)}
+      {/* Assigned To Section (Admin only) */}
+      {canManage && (
+        <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#fbf8f6', borderRadius: '12px' }}>
+          <p
+            style={{
+              margin: '0 0 12px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Assigned To
           </p>
+          {!isEditingAssign ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, color: 'var(--ink)' }}>
+                {incident.assigned_to || '—'}
+              </p>
+              <button
+                className="pill"
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => setIsEditingAssign(true)}
+              >
+                Edit
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="email"
+                value={assignEmail}
+                onChange={(e) => setAssignEmail(e.target.value)}
+                placeholder="Technician email"
+                className="field"
+                style={{ flex: 1 }}
+              />
+              <button className="pill" onClick={handleSaveAssign} style={{ padding: '8px 12px' }}>
+                Save
+              </button>
+              <button
+                className="pill pill--muted"
+                onClick={() => {
+                  setIsEditingAssign(false);
+                  setAssignEmail(incident.assigned_to || '');
+                }}
+                style={{ padding: '8px 12px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notes Section (Admin only) */}
+      {canManage && (
+        <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#fbf8f6', borderRadius: '12px' }}>
+          <p
+            style={{
+              margin: '0 0 12px 0',
+              fontSize: '12px',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+            }}
+          >
+            Repair Notes
+          </p>
+          {!isEditingNotes ? (
+            <div>
+              <div
+                style={{
+                  padding: '12px',
+                  backgroundColor: '#fff',
+                  borderRadius: '8px',
+                  marginBottom: '8px',
+                  minHeight: '40px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {notesText || '—'}
+              </div>
+              <button
+                className="pill"
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => setIsEditingNotes(true)}
+              >
+                Edit
+              </button>
+            </div>
+          ) : (
+            <div>
+              <textarea
+                value={notesText}
+                onChange={(e) => setNotesText(e.target.value)}
+                placeholder="Add repair notes..."
+                className="field"
+                style={{ width: '100%', minHeight: '100px', marginBottom: '8px' }}
+              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="pill" onClick={handleSaveNotes} style={{ padding: '8px 12px' }}>
+                  Save
+                </button>
+                <button
+                  className="pill pill--muted"
+                  onClick={() => {
+                    setIsEditingNotes(false);
+                    setNotesText(incident.notes || '');
+                  }}
+                  style={{ padding: '8px 12px' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

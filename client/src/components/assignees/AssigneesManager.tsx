@@ -1,7 +1,7 @@
 // src/components/assignees/AssigneesManager.tsx
 import React from "react";
 import { useEffect, useMemo, useState } from 'react';
-import { api, rpc } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import type { Assignee } from './type';
 import AssigneesTable from './AssigneesTable';
 import AssigneeForm from './AssigneeForm.tsx';
@@ -29,12 +29,14 @@ export default function AssigneesManager({ onClose }: { onClose?: () => void }) 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [q]);
 
+  // ✅ REST: DELETE /assignments/assignee au lieu de RPC
   const onDelete = async (a: Assignee) => {
-    if (!confirm(`Supprimer toutes les attributions de ${a.full_name ?? '—'} ?`)) return;
+    if (!confirm(`Supprimer toutes les attributions de ${a.assignee_name ?? '—'} ?`)) return;
     if (!confirm('Confirmer la suppression DÉFINITIVE ?')) return;
-    const { data, error } = await rpc<number>('assignees_delete', { p_email: a.email, p_name: a.full_name });
+
+    const { error } = await api.delete(`/assignments/assignee/${encodeURIComponent(a.assignee_email)}`);
     if (error) { alert(error); return; }
-    alert(`${data ?? 0} attribution(s) supprimée(s).`);
+    alert(`Attribution(s) supprimée(s).`);
     await load();
   };
 

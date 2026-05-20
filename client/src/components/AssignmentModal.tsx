@@ -43,7 +43,7 @@ export function AssignmentModal({ open, onClose, assetId, onDone }: { open: bool
           <textarea className="field" rows={2} value={assignNotes} onChange={e => setAssignNotes(e.target.value)} />
         </div>
         <div className="span-2 modal-actions">
-          <button type="button" className="pill pill--muted" onClick={onClose}>Annuler</button>
+          <button type="button" className="pill pill--muted" onClick={onClose}>Cancel</button>
           <button className="pill" disabled={assigning}>{assigning ? 'Attribution…' : 'Attribuer'}</button>
         </div>
       </form>

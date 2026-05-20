@@ -31,6 +31,8 @@ export default function AuditLog({ entityType, entityId }: AuditLogProps) {
 
   const loadEntries = async (newOffset: number) => {
     try {
+      console.log('🔍 loadEntries called with offset:', newOffset);
+      console.log('📦 entityType:', entityType, 'entityId:', entityId);
       const isInitial = newOffset === 0;
       if (isInitial) setLoading(true);
       else setLoadingMore(true);
@@ -42,14 +44,19 @@ export default function AuditLog({ entityType, entityId }: AuditLogProps) {
       params.set('offset', String(newOffset));
 
       // ✅ Use /api/audit endpoint (matches backend route)
-      const { data, error: err } = await api.get<AuditEntry[]>(`/audit?${params.toString()}`);
+      const { data, error: err } = await api.get<any>(`/audit?${params.toString()}`);
+
+      console.log('📊 Response:', { data, error: err });
+
+// ✅ PATCH : Si data est un tableau directement (pas wrappé), le wrapper
+      const auditData = Array.isArray(data) ? data : (data?.data || []);
 
       if (err) {
         setError(err);
         return;
       }
 
-      const newEntries = data ?? [];
+      const newEntries = auditData ?? [];
 
       if (isInitial) {
         setEntries(newEntries);

@@ -282,6 +282,6 @@ router.post('/get_asset_stats', requireAuth, async (req: Request, res: Response)
 });
 
 // ✅ Log all registered POST routes
-console.log('✅ RPC routes registered: /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats');
+console.log('✅ RPC routes registered: /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats, /assignees_rename, /assignees_delete');
 
 export default router;

@@ -3,12 +3,12 @@ import React from "react";
 import { useEffect, useRef } from "react";
 
 export default function Modal({
-  title,
-  open,
-  onClose,
-  children,
-  closeOnBackdrop = true,
-}: {
+                                title,
+                                open,
+                                onClose,
+                                children,
+                                closeOnBackdrop = true,
+                              }: {
   title?: string;
   open: boolean;
   onClose: () => void;
@@ -37,7 +37,7 @@ export default function Modal({
     <div
       className="modal-backdrop"
       onClick={closeOnBackdrop ? onClose : undefined}
-      aria-hidden
+      aria-hidden={!open}
     >
       <div
         className="modal"

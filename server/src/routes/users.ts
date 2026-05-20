@@ -82,4 +82,25 @@ router.get('/is_email_allowed', async (req: Request, res: Response) => {
     }
 });
 
+// GET /users/assignable - Autocomplete pour les assignations (filtre par rôle 'assignee')
+router.get('/assignable', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const { q } = req.query;
+        let query = 'SELECT id, email FROM users WHERE role = ? ORDER BY email ASC LIMIT 50';
+        const params: any[] = ['assignee'];
+
+        if (q) {
+            query = 'SELECT id, email FROM users WHERE role = ? AND email LIKE ? ORDER BY email ASC LIMIT 50';
+            params.push(`%${q}%`);
+        }
+
+        const [results] = await db.query(query, params);
+        logger.info(`Fetched assignable users`, 'USERS');
+        return res.json(results || []);
+    } catch (err) {
+        logger.error('GET /users/assignable error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 export default router;

@@ -29,17 +29,33 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const { name } = req.body;
-        if (!name) {
-            return res.status(400).json({ error: 'name is required' });
+        if (!name || typeof name !== 'string') {
+            return res.status(400).json({ error: 'Category name required' });
         }
 
-        const [result] = await db.query(
-            'INSERT INTO categories (name) VALUES (?)',
-            [name]
+        const trimmed = name.trim();
+
+        // ✅ Vérifier si la catégorie existe DÉJÀ (case-insensitive)
+        const [existing] = await db.query(
+            'SELECT id FROM categories WHERE LOWER(name) = LOWER(?)',
+            [trimmed]
         );
 
-        logger.info(`Created category: ${name}`, 'CATEGORIES');
-        return res.status(201).json({ id: (result as any).insertId, name });
+        if ((existing as any[]).length > 0) {
+            // ✅ Elle existe → retourner l'ID existant (sans créer)
+            logger.info(`Category already exists: ${trimmed} (ID: ${(existing as any[])[0].id})`, 'CATEGORIES');
+            return res.status(200).json({ id: (existing as any[])[0].id, name: trimmed });
+        }
+
+        // ✅ Elle n'existe pas → créer
+        const [result] = await db.query(
+            'INSERT INTO categories (name) VALUES (?)',
+            [trimmed]
+        );
+
+        const insertId = (result as any).insertId;
+        logger.info(`Category created: ${trimmed} (ID: ${insertId})`, 'CATEGORIES');
+        return res.status(201).json({ id: insertId, name: trimmed });
     } catch (err) {
         logger.error('POST /categories error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });

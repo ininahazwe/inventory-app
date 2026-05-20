@@ -154,29 +154,34 @@ tbody {background: #f7f7f7}
 }
 
 /* navigation pill (déjà dans ton thème) */
+
 .pill{
     border:0; cursor:pointer;
     background:var(--brand); color:#fff;
-    padding:10px 18px; border-radius: 999px;
+    padding:12px 18px; border-radius: 999px;
     transition: background .2s ease, transform .08s ease;
     font-size: 0.8em;
     text-decoration: none;
 
-    &.red{
+  &.padding{
+    padding:0 !important;
+  }
+
+  &.red{
         background: #8D86C9;
     }
-    &.bordeaux{
-      background: #6d071a;
-    }
-    &.green{
-        background: #213547;
-    }
-    &.blue{
-      background: royalblue;
-    }
-    &.green-light{
-        background: #9067C6;
-    }
+  &.bordeaux{
+    background: #6d071a;
+  }
+  &.green{
+      background: #213547;
+  }
+  &.blue{
+    background: royalblue;
+  }
+  &.green-light{
+      background: #9067C6;
+  }
 }
 .pill:hover{ background: var(--brand-2); }
 

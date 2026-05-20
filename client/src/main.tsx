@@ -15,7 +15,7 @@ import AuctionsPage from './pages/AuctionsPage';
 import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
 import AuctionDetailPage from "./pages/Auctiondetailpage.tsx";
 import {SuppliesPage} from "./pages/SuppliesPage.tsx";
-
+import AssigneesPage from "./pages/AssigneesPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -29,11 +29,12 @@ const router = createBrowserRouter([
 
       // Routes paramétrées après
       { path: "/asset/:id", element: <AssetDetailPage /> },
-      { path: "/auctions", element: <AuctionsPage /> },
       { path: "/auctions/:auctionId", element: <AuctionDetailPage /> },
+      { path: "/auctions", element: <AuctionsPage /> },
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
       { path: "/incidents", element: <IncidentsPage /> },
       { path: "/supplies", element: <SuppliesPage  /> },
+      { path: "/assignees", element: <AssigneesPage  /> },
     ],
   },
 ]);

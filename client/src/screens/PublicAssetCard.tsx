@@ -117,7 +117,7 @@ export default function PublicAssetCard() {
             {authLoading ? "Connexion…" : "Continuer avec Google"}
           </button>
           <button onClick={() => setAuthModalOpen(false)} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", background: "#bbb" }}>
-            Annuler
+            Cancel
           </button>
         </div>
       </Modal>

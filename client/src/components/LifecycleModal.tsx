@@ -198,7 +198,7 @@ export default function LifecycleModal({
             onClick={handleClose}
             disabled={busy || isSubmitting}
           >
-            Annuler
+            Cancel
           </button>
           <button
             type="submit"

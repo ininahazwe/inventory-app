@@ -156,7 +156,7 @@ const waitForGoogle = (): Promise<void> => {
   });
 };
 
-// 🔥 FIX: Obtenir client_id depuis import.meta.env (build-time) en priorité
+// ✅ Obtenir client_id depuis import.meta.env (build-time) en priorité
 const getGoogleClientId = (): string | undefined => {
   // 1. import.meta.env (Vite - constant à la build, toujours présent en prod/dev)
   if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {

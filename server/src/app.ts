@@ -9,6 +9,7 @@ import usersRoutes from './routes/users';
 import rpcRoutes from './routes/rpc';
 import suppliesRoutes from './routes/supplies';
 import auditRoutes from './routes/audit';
+import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 
@@ -47,6 +48,8 @@ export function createApp() {
 
     // Legacy/Business specific
     app.use('/api/supplies', suppliesRoutes);
+
+    app.use('/api/auctions', auctionsRouter);
 
     app.use('/api/audit', requireAuth, auditRoutes);
 

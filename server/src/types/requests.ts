@@ -3,11 +3,11 @@
  */
 
 export interface AuthUser {
-    uid: string;              // UUID from Google / JWT
-    email: string;            // Email address
-    role: 'user' | 'admin' | 'super_admin' | 'accountant';  // User role
-    iat?: number;             // Issued at (unix timestamp)
-    exp?: number;             // Expiration (unix timestamp)
+    uid: number;           // Modifié : ID numérique de la base de données (ex: 1, 2, 3)
+    email: string;         // Email obligatoire
+    role: 'user' | 'admin' | 'super_admin' | 'accountant';
+    iat?: number;
+    exp?: number;
 }
 
 declare global {

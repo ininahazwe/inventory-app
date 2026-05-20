@@ -3,7 +3,7 @@ import React from "react";
 import { useEffect, useState } from 'react';
 import { rpc } from '../lib/apiClient';
 
-type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin'; created_at: string; created_by_email: string | null; };
+type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin' | 'assignee'; created_at: string; created_by_email: string | null; };
 
 export default function UserManagementPanel({ onClose }: { onClose?: () => void }) {
   const [users, setUsers]         = useState<User[]>([]);
@@ -11,7 +11,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
   const [error, setError]         = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newEmail, setNewEmail]   = useState('');
-  const [newRole, setNewRole]     = useState<'user' | 'admin'>('user');
+  const [newRole, setNewRole]     = useState<'user' | 'admin' | 'assignee'>('user');
   const [adding, setAdding]       = useState(false);
 
   const load = async () => {
@@ -64,9 +64,10 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Rôle</label>
-          <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin')} disabled={adding}>
+          <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin' | 'assignee')} disabled={adding}>
             <option value="user">User</option>
             <option value="admin">Admin</option>
+            <option value="assignee">Assignee</option>
           </select>
         </div>
         <button className="pill" type="submit" disabled={adding}>{adding ? '…' : '+ Ajouter'}</button>
@@ -75,39 +76,40 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
       <table className="table">
         <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
         <tbody>
-          {users.length === 0 ? (
-            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
-          ) : users.map(user => (
-            <tr key={user.id}>
-              <td>{user.email}</td>
-              <td>
+        {users.length === 0 ? (
+          <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
+        ) : users.map(user => (
+          <tr key={user.id}>
+            <td>{user.email}</td>
+            <td>
+              {editingUser?.id === user.id ? (
+                <select className="input" value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value as User['role'] })} style={{ width: '100%' }}>
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
+                  <option value="assignee">Assignee</option>
+                </select>
+              ) : <span style={{ textTransform: 'capitalize' }}>{user.role}</span>}
+            </td>
+            <td style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(user.created_at).toLocaleDateString()}</td>
+            <td style={{ fontSize: 12, color: 'var(--muted)' }}>{user.created_by_email || '—'}</td>
+            <td>
+              <div style={{ display: 'flex', gap: 6 }}>
                 {editingUser?.id === user.id ? (
-                  <select className="input" value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value as User['role'] })} style={{ width: '100%' }}>
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                    <option value="super_admin">Super Admin</option>
-                  </select>
-                ) : <span style={{ textTransform: 'capitalize' }}>{user.role}</span>}
-              </td>
-              <td style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(user.created_at).toLocaleDateString()}</td>
-              <td style={{ fontSize: 12, color: 'var(--muted)' }}>{user.created_by_email || '—'}</td>
-              <td>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {editingUser?.id === user.id ? (
-                    <>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => handleChangeRole(user.id, editingUser.role)}>Sauver</button>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#bbb' }} onClick={() => setEditingUser(null)}>Annuler</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Éditer</button>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user.id, user.email)}>Supprimer</button>
-                    </>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
+                  <>
+                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => handleChangeRole(user.id, editingUser.role)}>Save</button>
+                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#bbb' }} onClick={() => setEditingUser(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
+                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user.id, user.email)}>Delete</button>
+                  </>
+                )}
+              </div>
+            </td>
+          </tr>
+        ))}
         </tbody>
       </table>
     </div>

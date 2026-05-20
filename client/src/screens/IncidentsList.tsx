@@ -49,30 +49,31 @@ export const IncidentsList: React.FC = () => {
   return (
     <div className="">
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ margin: '0 0 16px 0' }}>Incidents list</h2>
+        <h2 style={{ margin: '0 0 16px 0' }}>Incidents</h2>
         <p style={{ margin: 0, color: 'var(--muted)', fontSize: '14px' }}>
           {filteredIncidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
         </p>
       </div>
 
-      {/* Filtres */}
-      <div className="filters">
+      {/* Filters */}
+      <div className="filters" style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
         <select
           value={filters.status}
           onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
           className="select"
+          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)' }}
         >
-          <option value="">All status</option>
+          <option value="">All statuses</option>
           <option value="open">Open</option>
-          <option value="in_progress">In progress</option>
+          <option value="in_progress">In Progress</option>
           <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
         </select>
 
         <select
           value={filters.severity}
           onChange={(e) => setFilters(prev => ({ ...prev, severity: e.target.value }))}
           className="select"
+          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--line)' }}
         >
           <option value="">All severities</option>
           <option value="low">Low</option>
@@ -81,76 +82,87 @@ export const IncidentsList: React.FC = () => {
           <option value="critical">Critical</option>
         </select>
 
-        <div style={{ color: 'var(--muted)', fontSize: '13px', display: 'flex', alignItems: 'center' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '13px', marginLeft: 'auto' }}>
           {loading && 'Loading...'}
-          {error && <span style={{ color: '#991b1b' }}>Erreur: {error}</span>}
+          {error && <span style={{ color: '#991b1b' }}>Error: {error}</span>}
         </div>
       </div>
 
-      {/* Tableau */}
+      {/* Table */}
       {filteredIncidents.length > 0 ? (
-        <table className="table">
-          <thead>
-          <tr style={{ backgroundColor: 'var(--brand)' }}>
-            <th style={{ color: '#fff' }}>Materiel</th>
-            <th style={{ color: '#fff' }}>Type</th>
-            <th style={{ color: '#fff' }}>Severity</th>
-            <th style={{ color: '#fff' }}>Status</th>
-            <th style={{ color: '#fff' }}>Reported by</th>
-            <th style={{ color: '#fff' }}>Date</th>
-            <th style={{ color: '#fff', textAlign: 'right' }}>Actions</th>
-          </tr>
-          </thead>
-          <tbody>
-          {filteredIncidents.map(incident => (
-            <tr key={incident.id} style={{ cursor: 'pointer' }}>
-              <td>
-                  <span
-                    className="asset-link"
-                    onClick={() => handleRowClick(incident.id)}
-                  >
-                    {incident.asset_label}
-                  </span>
-              </td>
-              <td>
-                <IncidentBadge type="type" value={incident.incident_type} />
-              </td>
-              <td>
-                <IncidentBadge type="severity" value={incident.severity} />
-              </td>
-              <td>
-                <IncidentBadge type="status" value={incident.status} />
-              </td>
-              <td style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                {incident.reported_by_email}
-              </td>
-              <td style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                {formatDate(incident.created_at)}
-              </td>
-              <td>
-                <div className="actions">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+            <tr style={{ backgroundColor: 'var(--brand)', color: '#fff' }}>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Asset</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Type</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Severity</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Reported By</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+              <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {filteredIncidents.map(incident => (
+              <tr
+                key={incident.id}
+                style={{
+                  borderBottom: '1px solid var(--line)',
+                  cursor: 'pointer',
+                  transition: 'background-color .2s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fbf8f6')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <td style={{ padding: '12px' }}>
+                    <span
+                      style={{ color: 'var(--brand)', fontWeight: 500, cursor: 'pointer' }}
+                      onClick={() => handleRowClick(incident.id)}
+                    >
+                      {incident.asset_label || `Asset #${incident.asset_id}`}
+                    </span>
+                </td>
+                <td style={{ padding: '12px' }}>
+                  <IncidentBadge type="type" value={incident.incident_type} />
+                </td>
+                <td style={{ padding: '12px' }}>
+                  <IncidentBadge type="severity" value={incident.severity} />
+                </td>
+                <td style={{ padding: '12px' }}>
+                  <IncidentBadge type="status" value={incident.status} />
+                </td>
+                <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
+                  {incident.reported_by_email}
+                </td>
+                <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
+                  {formatDate(incident.created_at)}
+                </td>
+                <td style={{ padding: '12px', textAlign: 'right' }}>
                   <button
                     className="pill"
                     style={{ padding: '6px 12px', fontSize: '12px' }}
                     onClick={() => handleRowClick(incident.id)}
                   >
-                    Voir
+                    View
                   </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          </tbody>
-        </table>
+                </td>
+              </tr>
+            ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <div style={{
-          padding: '40px 20px',
-          textAlign: 'center',
-          color: 'var(--muted)',
-          backgroundColor: '#f4f1ee',
-          borderRadius: '14px',
-        }}>
-          <p style={{ margin: 0 }}>Not incident found</p>
+        <div
+          style={{
+            padding: '40px 20px',
+            textAlign: 'center',
+            color: 'var(--muted)',
+            backgroundColor: '#f4f1ee',
+            borderRadius: '14px',
+          }}
+        >
+          <p style={{ margin: 0 }}>No incidents found</p>
         </div>
       )}
     </div>

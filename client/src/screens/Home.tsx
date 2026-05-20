@@ -7,8 +7,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import Autocomplete from '../components/Autocomplete';
 import AssignAsset from './AssignAsset';
 import Modal from '../components/Modal';
-import AssigneesManager from '../components/assignees/AssigneesManager';
-import UserManagementPanel from '../components/UserManagementPanel';
 import InventoryStats from '../components/InventoryStats';
 import AuditDashboard from '../components/AuditDashboard';
 
@@ -24,8 +22,6 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [qLabel, setQLabel]       = useState('');
   const [qCategory, setQCategory] = useState('');
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
-  const [assigneesOpen, setAssigneesOpen]         = useState(false);
-  const [userManagementOpen, setUserManagementOpen] = useState(false);
   const [auditOpen, setAuditOpen]                 = useState(false);
   const [assignOpen, setAssignOpen]               = useState(false);
   const [assignAssetId, setAssignAssetId]         = useState<number | null>(null);
@@ -86,15 +82,14 @@ export default function Home({ onNew }: { onNew: () => void }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill" onClick={() => navigate('/incidents')}>Incidents</button>
-          <button className="pill" onClick={() => setAssigneesOpen(true)}>Manage assignees</button>
           {isSuperAdmin && (
             <>
-              <button className="pill" onClick={() => setUserManagementOpen(true)}>👥 User Management</button>
+              <button className="pill" onClick={() => navigate('/incidents')}>Incidents</button>
+              <button className="pill" onClick={() => navigate('/assignees')}>👥 User Management</button>
               <button className="pill" onClick={() => setAuditOpen(true)}>📋 Audit Log</button>
+              <button className="pill" onClick={onNew}>+ New asset</button>
             </>
           )}
-          <button className="pill" onClick={onNew}>+ New asset</button>
         </div>
       </div>
 
@@ -143,14 +138,9 @@ export default function Home({ onNew }: { onNew: () => void }) {
           <button className="pill" onClick={confirmReturn}>Confirm</button>
         </div>
       </Modal>
-      <Modal open={assigneesOpen} onClose={() => setAssigneesOpen(false)} title="Manage assignees">
-        <AssigneesManager onClose={() => setAssigneesOpen(false)} />
-      </Modal>
+
       {isSuperAdmin && (
         <>
-          <Modal open={userManagementOpen} onClose={() => setUserManagementOpen(false)} title="User Management">
-            <UserManagementPanel onClose={() => setUserManagementOpen(false)} />
-          </Modal>
           <Modal open={auditOpen} onClose={() => setAuditOpen(false)} title="📋 Audit Log">
             <AuditDashboard />
           </Modal>

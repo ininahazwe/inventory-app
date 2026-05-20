@@ -31,7 +31,7 @@ export default function CreateAuctionPage() {
   const navigate = useNavigate();
   const { isAdmin, loading: permissionsLoading } = usePermissions();
 
-  // Redirect si pas admin - mais attendre le chargement d'abord
+  // Redirect if not admin
   useEffect(() => {
     if (!permissionsLoading && !isAdmin) {
       alert('Only admins can create auctions');
@@ -43,10 +43,11 @@ export default function CreateAuctionPage() {
     asset_id: '',
     starting_price: '',
     duration_days: '7',
+    notes: '',
   });
 
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [allAssets, setAllAssets] = useState<Asset[]>([]); // Tous les in_stock assets
+  const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -58,12 +59,12 @@ export default function CreateAuctionPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // 🔥 FIX: Charger tous les assets in_stock au montage
+  // Load all in_stock assets on mount
   useEffect(() => {
     loadAllAssets();
   }, []);
 
-  // 🔥 FIX: Filtrer les assets basé sur la recherche
+  // Filter assets based on search
   useEffect(() => {
     if (!assetSearch.trim()) {
       setAssets(allAssets);
@@ -78,48 +79,27 @@ export default function CreateAuctionPage() {
     }
   }, [assetSearch, allAssets]);
 
-  // 🔥 FIX: Charger TOUS les assets avec status in_stock au montage
   const loadAllAssets = async () => {
     try {
-      setLoading(true);
-      // Charger tous les assets, paginer si nécessaire
-      const { data, error: err } = await api.get<AssetsResponse>('/assets?limit=100');
-
-      if (err || !data) {
-        setError(err || 'Failed to load assets');
-        return;
+      const { data: response, error: err } = await api.get<AssetsResponse>(
+        '/assets?status=in_stock&limit=1000'
+      );
+      if (!err && response?.data) {
+        setAllAssets(response.data);
+        setAssets(response.data);
       }
-
-      // Filtrer les assets avec status = 'in_stock'
-      const inStockAssets = (data.data || []).filter((a: Asset) => a.status === 'in_stock');
-      setAllAssets(inStockAssets);
-      setAssets(inStockAssets);
     } catch (err) {
-      console.error('Error loading assets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load assets');
-    } finally {
-      setLoading(false);
+      console.error('Failed to load assets:', err);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  // 🔥 FIX: Sélectionner un asset et fermer le dropdown
-  const selectAsset = (asset: Asset) => {
-    setFormData(prev => ({ ...prev, asset_id: String(asset.id) }));
-    setAssetSearch('');
+  const handleSelectAsset = (asset: Asset) => {
+    setFormData(prev => ({ ...prev, asset_id: asset.id.toString() }));
+    setAssetSearch(asset.label);
     setDropdownOpen(false);
   };
 
-  // Upload image to Cloudinary
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const handleUploadImages = async (files: FileList | null) => {
     if (!files) return;
 
     setUploading(true);
@@ -130,22 +110,18 @@ export default function CreateAuctionPage() {
       const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
       if (!cloudName || !uploadPreset) {
-        setUploadError('Cloudinary config missing');
-        return;
+        throw new Error('Cloudinary config missing');
       }
 
       for (const file of Array.from(files)) {
-        const formDataUpload = new FormData();
-        formDataUpload.append('file', file);
-        formDataUpload.append('upload_preset', uploadPreset);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
 
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-          {
-            method: 'POST',
-            body: formDataUpload,
-          }
-        );
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: formData,
+        });
 
         if (!response.ok) {
           throw new Error('Upload failed');
@@ -154,31 +130,25 @@ export default function CreateAuctionPage() {
         const data = await response.json();
         setUploadedImages(prev => [
           ...prev,
-          {
-            url: data.secure_url,
-            public_id: data.public_id,
-          },
+          { url: data.secure_url, public_id: data.public_id }
         ]);
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
-      // Reset input
-      e.target.value = '';
     }
   };
 
-  // Remove image from preview
-  const removeImage = (index: number) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  const removeImage = (publicId: string) => {
+    setUploadedImages(prev => prev.filter(img => img.public_id !== publicId));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.asset_id || !formData.starting_price || !formData.duration_days) {
-      setError('All fields are required');
+      setError('Please fill in all required fields');
       return;
     }
 
@@ -186,13 +156,15 @@ export default function CreateAuctionPage() {
       setLoading(true);
       setError(null);
 
+      // Send auction + images together (Cloudinary URLs)
       const { data, error: err } = await api.post<{ id: number; asset_id: number }>(
         '/auctions',
         {
           asset_id: parseInt(formData.asset_id),
           starting_price: parseFloat(formData.starting_price),
           duration_days: parseInt(formData.duration_days),
-          images: uploadedImages.map(img => img.url), // Send image URLs
+          notes: formData.notes || null,
+          images: uploadedImages.map(img => img.url), // Send Cloudinary URLs
         }
       );
 
@@ -212,286 +184,240 @@ export default function CreateAuctionPage() {
     }
   };
 
-  const selectedAsset = allAssets.find(a => a.id === parseInt(formData.asset_id || '0'));
-
-  // Afficher loader pendant chargement des permissions
-  if (permissionsLoading) {
-    return (
-      <Layout>
-        <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 12px', textAlign: 'center' }}>
-          <p>Loading permissions...</p>
-        </div>
-      </Layout>
-    );
-  }
-
-  // Si pas admin après chargement, le useEffect redirige déjà
-  if (!isAdmin) {
-    return null;
-  }
-
   return (
     <Layout>
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 12px' }}>
-        <h1 style={{ marginBottom: 24 }}>🔨 Create Auction</h1>
-
-        {error && (
-          <div style={{
-            padding: 12,
-            background: '#fee',
-            color: '#c00',
-            borderRadius: 4,
-            marginBottom: 16,
-          }}>
-            {error}
-          </div>
-        )}
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: 20 }}>
+        <h1>Create Auction</h1>
 
         {success && (
           <div style={{
             padding: 12,
-            background: '#efe',
-            color: '#0a0',
+            margin: '12px 0',
+            background: '#d4edda',
+            color: '#155724',
             borderRadius: 4,
-            marginBottom: 16,
           }}>
             ✅ Auction created successfully! Redirecting...
           </div>
         )}
 
+        {error && (
+          <div style={{
+            padding: 12,
+            margin: '12px 0',
+            background: '#f8d7da',
+            color: '#721c24',
+            borderRadius: 4,
+          }}>
+            ❌ {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
-          {/* Asset Selection - Dropdown déroulante */}
+          {/* Asset Selection */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Asset * ({allAssets.length} available)
-            </label>
-
-            {/* Search + Dropdown Container */}
-            <div style={{ position: 'relative' }}>
-              {/* Search Input */}
-              <input
-                type="text"
-                placeholder="Search by label, serial #, or category..."
-                value={assetSearch}
-                onChange={(e) => {
-                  setAssetSearch(e.target.value);
-                  setDropdownOpen(true);
-                }}
-                onFocus={() => setDropdownOpen(true)}
-                className="input"
-                style={{ marginBottom: assetSearch || dropdownOpen ? 0 : 8 }}
-              />
-
-              {/* Dropdown List */}
-              {dropdownOpen && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  background: 'white',
-                  border: '1px solid #ddd',
-                  borderTop: 'none',
-                  borderRadius: '0 0 4px 4px',
-                  maxHeight: 300,
-                  overflowY: 'auto',
-                  zIndex: 10,
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                }}>
-                  {assets.length > 0 ? (
-                    assets.map(asset => (
-                      <div
-                        key={asset.id}
-                        onClick={() => selectAsset(asset)}
-                        style={{
-                          padding: 12,
-                          borderBottom: '1px solid #eee',
-                          cursor: 'pointer',
-                          background: formData.asset_id === String(asset.id) ? '#e8f5e9' : 'white',
-                          transition: 'background 0.15s',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (formData.asset_id !== String(asset.id)) {
-                            (e.currentTarget as HTMLDivElement).style.background = '#f9f9f9';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (formData.asset_id !== String(asset.id)) {
-                            (e.currentTarget as HTMLDivElement).style.background = 'white';
-                          }
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 500, color: '#333' }}>
-                            {asset.label}
-                            {formData.asset_id === String(asset.id) && (
-                              <span style={{ marginLeft: 8, color: '#4caf50', fontWeight: 700 }}>✓</span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 12, color: '#666' }}>
-                            {asset.serial_no && <span>SN: {asset.serial_no}</span>}
-                            {asset.category_name && <span>•</span>}
-                            {asset.category_name && <span>{asset.category_name}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : assetSearch ? (
-                    <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
-                      No assets match your search
-                    </div>
-                  ) : (
-                    <div style={{ padding: 12, color: '#999', textAlign: 'center' }}>
-                      No in-stock assets available
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Fermer le dropdown en cliquant ailleurs */}
-              {dropdownOpen && (
-                <div
+            <label>
+              <strong>Asset *</strong>
+              <div style={{ position: 'relative', marginTop: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Search asset..."
+                  value={assetSearch}
+                  onChange={(e) => {
+                    setAssetSearch(e.target.value);
+                    setDropdownOpen(true);
+                  }}
+                  onFocus={() => setDropdownOpen(true)}
+                  onBlur={() => {
+                    // Delay to allow click on dropdown items
+                    setTimeout(() => setDropdownOpen(false), 200);
+                  }}
                   style={{
-                    position: 'fixed',
-                    top: 0,
+                    width: '100%',
+                    padding: 8,
+                    border: dropdownOpen ? '2px solid var(--brand)' : '1px solid #ddd',
+                    borderRadius: 4,
+                    boxSizing: 'border-box',
+                    transition: 'border-color 0.2s',
+                  }}
+                />
+
+                {dropdownOpen && assets.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
                     left: 0,
                     right: 0,
-                    bottom: 0,
-                    zIndex: 5,
-                  }}
-                  onClick={() => setDropdownOpen(false)}
-                />
-              )}
-            </div>
-
-            {/* Selected Asset Info */}
-            {selectedAsset && (
-              <div style={{
-                marginTop: 12,
-                padding: 12,
-                background: '#e8f5e9',
-                borderRadius: 4,
-                borderLeft: '4px solid #4caf50',
-              }}>
-                <p style={{ margin: '0 0 4px 0', fontWeight: 500, color: '#2e7d32' }}>✓ Selected:</p>
-                <p style={{ margin: 0, fontWeight: 600, color: '#333' }}>{selectedAsset.label}</p>
-                {selectedAsset.serial_no && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666' }}>
-                    SN: {selectedAsset.serial_no}
-                  </p>
+                    background: 'white',
+                    border: '1px solid #ddd',
+                    borderTop: 'none',
+                    borderRadius: '0 0 4px 4px',
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                    zIndex: 10,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  }}>
+                    {assets.map((asset) => (
+                      <div
+                        key={asset.id}
+                        onMouseDown={() => handleSelectAsset(asset)}
+                        style={{
+                          padding: 10,
+                          borderBottom: '1px solid #eee',
+                          cursor: 'pointer',
+                          background: formData.asset_id === asset.id.toString() ? '#e3f2fd' : 'white',
+                          transition: 'background-color 0.1s',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = formData.asset_id === asset.id.toString() ? '#e3f2fd' : '#f9f9f9';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = formData.asset_id === asset.id.toString() ? '#e3f2fd' : 'white';
+                        }}
+                      >
+                        <strong>{asset.label}</strong> {asset.serial_no && `(${asset.serial_no})`}
+                        {asset.category_name && <span style={{ color: '#666', marginLeft: 4, fontSize: 12 }}>{asset.category_name}</span>}
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {selectedAsset.category_name && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#666' }}>
-                    Category: {selectedAsset.category_name}
-                  </p>
+
+                {/* Show message if no results */}
+                {dropdownOpen && assetSearch && assets.length === 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '1px solid #ddd',
+                    borderTop: 'none',
+                    borderRadius: '0 0 4px 4px',
+                    padding: 10,
+                    color: '#999',
+                    zIndex: 10,
+                  }}>
+                    No assets found
+                  </div>
                 )}
               </div>
-            )}
+            </label>
           </div>
 
           {/* Starting Price */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Starting Price ($) *
+            <label>
+              <strong>Starting Price (ghs) *</strong>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.starting_price}
+                onChange={(e) => setFormData(prev => ({ ...prev, starting_price: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  marginTop: 8,
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                }}
+              />
             </label>
-            <input
-              type="number"
-              name="starting_price"
-              value={formData.starting_price}
-              onChange={handleChange}
-              placeholder="e.g., 100"
-              step="0.01"
-              min="0"
-              className="input"
-              required
-            />
           </div>
 
           {/* Duration */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Duration (days) *
+            <label>
+              <strong>Duration (days) *</strong>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={formData.duration_days}
+                onChange={(e) => setFormData(prev => ({ ...prev, duration_days: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  marginTop: 8,
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                }}
+              />
             </label>
-            <select
-              name="duration_days"
-              value={formData.duration_days}
-              onChange={handleChange}
-              className="input"
-              required
-            >
-              <option value="1">1 day</option>
-              <option value="3">3 days</option>
-              <option value="7">7 days (default)</option>
-              <option value="14">14 days</option>
-              <option value="21">21 days</option>
-              <option value="30">30 days</option>
-            </select>
           </div>
 
-          {/* Image Upload */}
+          {/* Notes */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Images (optional)
+            <label>
+              <strong>Notes</strong>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional notes..."
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  marginTop: 8,
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                  minHeight: 80,
+                  fontFamily: 'inherit',
+                }}
+              />
             </label>
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImageUpload}
-              disabled={uploading}
-              className="input"
-              style={{ marginBottom: 8 }}
-            />
-            {uploading && <p style={{ fontSize: 12, color: 'var(--muted)' }}>Uploading...</p>}
-            {uploadError && <p style={{ fontSize: 12, color: '#c00' }}>{uploadError}</p>}
+          </div>
 
-            {/* Image Preview */}
+          {/* Images Upload */}
+          <div style={{ marginBottom: 20 }}>
+            <label>
+              <strong>Images</strong>
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={(e) => handleUploadImages(e.target.files)}
+                disabled={uploading}
+                style={{ display: 'block', marginTop: 8 }}
+              />
+              {uploading && <p style={{ margin: '8px 0 0 0', color: '#666' }}>Uploading...</p>}
+              {uploadError && <p style={{ margin: '8px 0 0 0', color: '#c00' }}>❌ {uploadError}</p>}
+            </label>
+
             {uploadedImages.length > 0 && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                gap: 12,
-                marginTop: 12,
-              }}>
-                {uploadedImages.map((img, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      position: 'relative',
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                      border: '1px solid #ddd',
-                    }}
-                  >
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {uploadedImages.map((img) => (
+                  <div key={img.public_id} style={{ position: 'relative' }}>
                     <img
                       src={img.url}
-                      alt={`preview ${idx}`}
+                      alt="Auction"
                       style={{
-                        width: '100%',
-                        height: '100px',
+                        width: 80,
+                        height: 80,
                         objectFit: 'cover',
+                        borderRadius: 4,
                       }}
                     />
                     <button
                       type="button"
-                      onClick={() => removeImage(idx)}
+                      onClick={() => removeImage(img.public_id)}
                       style={{
                         position: 'absolute',
-                        top: 4,
-                        right: 4,
-                        background: 'rgba(0, 0, 0, 0.6)',
+                        top: -8,
+                        right: -8,
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: '#c00',
                         color: 'white',
                         border: 'none',
-                        borderRadius: 3,
-                        padding: '4px 8px',
                         cursor: 'pointer',
-                        fontSize: 12,
+                        fontSize: 14,
                       }}
                     >
-                      ✕
+                      ×
                     </button>
                   </div>
                 ))}
@@ -499,27 +425,38 @@ export default function CreateAuctionPage() {
             )}
           </div>
 
-          {/* Form Actions */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={() => navigate('/auctions')}
-              className="pill"
-              style={{ background: '#bbb', color: 'white' }}
-            >
-              Cancel
-            </button>
+          {/* Submit */}
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="submit"
-              disabled={loading || !formData.asset_id}
-              className="pill"
+              disabled={loading}
               style={{
-                background: loading || !formData.asset_id ? '#ccc' : 'var(--brand)',
+                flex: 1,
+                padding: 12,
+                background: 'var(--brand)',
                 color: 'white',
+                border: 'none',
+                borderRadius: 4,
                 cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1,
               }}
             >
               {loading ? 'Creating...' : 'Create Auction'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/auctions')}
+              style={{
+                flex: 1,
+                padding: 12,
+                background: '#f4f1ee',
+                color: 'var(--ink)',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
             </button>
           </div>
         </form>

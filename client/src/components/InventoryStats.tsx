@@ -17,7 +17,7 @@ export default function InventoryStats({ refreshTrigger = 0, onCategoryFilter, s
       const statusCounts = (rows as { status: string }[]).reduce((acc, a) => { acc[a.status] = (acc[a.status] || 0) + 1; return acc; }, {} as Record<string, number>);
       const catMap = new Map<string, number>();
       (rows as { category_name: string | null }[]).forEach(a => {
-        const c = a.category_name || 'Sans catégorie';
+        const c = a.category_name || 'No category';
         catMap.set(c, (catMap.get(c) || 0) + 1);
       });
       setStats({

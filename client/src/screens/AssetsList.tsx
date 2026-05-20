@@ -61,7 +61,7 @@ export default function AssetsList() {
             {assignForId === r.id && (
               <div style={{ marginTop: 12 }}>
                 <AssignAsset assetId={r.id} onDone={async () => { setAssignForId(null); await load(); }} />
-                <button onClick={() => setAssignForId(null)} style={{ marginTop: 8 }}>Annuler</button>
+                <button onClick={() => setAssignForId(null)} style={{ marginTop: 8 }}>Cancel</button>
               </div>
             )}
           </li>

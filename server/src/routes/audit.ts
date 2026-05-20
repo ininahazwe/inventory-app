@@ -5,9 +5,8 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-// Helper: Audit log function (reusable)
 export async function logAudit(
-    userId: string,
+    userId: string | number,
     action: string,
     targetTable: string,
     targetId: number,
@@ -16,9 +15,9 @@ export async function logAudit(
 ): Promise<void> {
     try {
         await db.query(`
-      INSERT INTO audit_log (user_id, action, target_table, target_id, old_value, new_value, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, NOW())
-    `, [
+            INSERT INTO audit_log (user_id, action, target_table, target_id, old_value, new_value, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [
             userId,
             action,
             targetTable,
@@ -29,11 +28,10 @@ export async function logAudit(
         logger.info(`✅ Audit logged: ${action} on ${targetTable}:${targetId} by ${userId}`, 'AUDIT');
     } catch (err) {
         logger.error('❌ logAudit error:', err as Error);
-        // Ne pas throw — continuer même si le log échoue
     }
 }
 
-// GET /api/audit - List audit logs with filters
+// GET /api/audit - List audit logs
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const limit = Math.max(1, parseInt(String(req.query.limit || '10')));
@@ -59,7 +57,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
         const [logs] = await db.query(query, params);
 
-        logger.info(`Fetched ${(logs as any[]).length} audit logs`, 'AUDIT');
+        console.log('🔍 Query params:', { targetTable, targetId, limit, offset });
+        console.log('📊 Found logs:', (logs as any[]).length);
+
         return res.json({
             data: logs || [],
             pagination: { limit, offset }

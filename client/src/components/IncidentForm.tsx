@@ -158,7 +158,7 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
           className="pill pill--muted"
           disabled={loading}
         >
-          Annuler
+          Cancel
         </button>
         <button
           type="submit"

@@ -5,7 +5,7 @@ import { api, auth } from '../lib/apiClient';
 import { useToast } from '../hooks/useToast';
 import Layout from '../Layout';
 
-interface AuctionDetail {
+interface Auction {
   id: number;
   asset_id: number;
   label: string;
@@ -16,9 +16,10 @@ interface AuctionDetail {
   duration_days: number;
   status: 'active' | 'ended' | 'cancelled';
   end_date: string;
-  purchase_price: number | null;
   created_by: string;
   winner_email: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
 interface Bid {
@@ -26,27 +27,23 @@ interface Bid {
   amount: number;
   bidder_email: string;
   user_uid: string;
+  created_at?: string;
 }
 
 interface AuctionDetailView {
-  auction: AuctionDetail;
+  auction: Auction;
   bids: Bid[];
   images: string[];
 }
 
 interface BidResponse {
   success: boolean;
-  your_bid: number;
-  current_highest_bid: number;
+  amount: number;
   message: string;
-  toast?: {
-    type: 'success' | 'error' | 'info' | 'warning';
-    title: string;
-    message: string;
-  };
 }
 
 export default function AuctionDetailPage() {
+  // ✅ CORRECTION : Utiliser auctionId, pas id
   const { auctionId } = useParams<{ auctionId: string }>();
   const navigate = useNavigate();
   const { success: showSuccess, error: showError } = useToast();
@@ -59,7 +56,6 @@ export default function AuctionDetailPage() {
   const [bidError, setBidError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [shareLoading, setShareLoading] = useState(false);
 
   useEffect(() => {
     setIsLoggedIn(auth.isAuthenticated());
@@ -70,6 +66,7 @@ export default function AuctionDetailPage() {
     try {
       setLoading(true);
       setError(null);
+      // ✅ Utiliser auctionId ici aussi
       const { data: result, error: err } = await api.get<AuctionDetailView>(`/auctions/${auctionId}`);
 
       if (err || !result) {
@@ -93,7 +90,7 @@ export default function AuctionDetailPage() {
     e.preventDefault();
 
     if (!isLoggedIn) {
-      showError('❌ Not Authenticated', 'Please log in to place a bid');
+      showError('❌ Non authentifié', 'Veuillez vous connecter pour placer une enchère');
       return;
     }
 
@@ -105,8 +102,8 @@ export default function AuctionDetailPage() {
       : data.auction.starting_price;
 
     if (amount < minBid) {
-      setBidError(`Minimum bid is $${minBid}`);
-      showError('❌ Invalid Amount', `Minimum bid is $${minBid}`);
+      setBidError(`Minimum bid is ${minBid}`);
+      showError('❌ Montant invalide', `L'enchère minimum est ${minBid}`);
       return;
     }
 
@@ -114,25 +111,20 @@ export default function AuctionDetailPage() {
       setBidLoading(true);
       setBidError(null);
 
+      // ✅ Utiliser auctionId ici aussi
       const { data: result, error: err } = await api.post<BidResponse>(
-        `/auctions/${auctionId}/bid`,
+        `/auctions/${auctionId}/bids`,
         { amount }
       );
 
       if (err || !result) {
         const errorMsg = err || 'Failed to place bid';
         setBidError(errorMsg);
-        showError('❌ Error', errorMsg);
+        showError('❌ Erreur', errorMsg);
         return;
       }
 
-      // ✅ Show toast from backend response
-      if (result.toast) {
-        showSuccess(result.toast.title, result.toast.message);
-      } else {
-        // Fallback if no toast in response
-        showSuccess('✅ Bid Placed', `Your bid of $${amount.toFixed(2)} has been accepted`);
-      }
+      showSuccess('✅ Enchère placée', `Votre enchère de ${amount} a été acceptée`);
 
       // Refresh
       await loadAuctionDetail();
@@ -140,24 +132,16 @@ export default function AuctionDetailPage() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to place bid';
       setBidError(errorMsg);
-      showError('❌ Error', errorMsg);
+      showError('❌ Erreur', errorMsg);
     } finally {
       setBidLoading(false);
     }
   };
 
-  const handleShareAuction = async () => {
+  const handleShareAuction = () => {
     const url = `${window.location.origin}/auctions/${auctionId}`;
-
-    try {
-      setShareLoading(true);
-      await navigator.clipboard.writeText(url);
-      showSuccess('✅ Link Copied', 'Auction link has been copied to clipboard');
-    } catch (err) {
-      showError('❌ Copy Failed', 'Could not copy link to clipboard');
-    } finally {
-      setShareLoading(false);
-    }
+    navigator.clipboard.writeText(url);
+    showSuccess('✅ Lien copié', 'Le lien de l\'enchère a été copié dans le presse-papiers');
   };
 
   const formatTime = (dateStr: string) => {
@@ -167,7 +151,7 @@ export default function AuctionDetailPage() {
     if (diff < 0) return 'Ended';
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    if (days > 0) return `${days}d ${hours}h`;
+    if (days > 0) return `${days}j ${hours}h`;
     if (hours > 0) return `${hours}h`;
     return 'Closing soon';
   };
@@ -203,7 +187,7 @@ export default function AuctionDetailPage() {
     );
   }
 
-  const { auction, bids, images: auctionImages } = data;
+  const { auction, bids, images: auctionImages = [] } = data;
   const isActive = auction.status === 'active';
   const currentBid = auction.current_highest_bid || auction.starting_price;
 
@@ -212,7 +196,7 @@ export default function AuctionDetailPage() {
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 12px' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          {/* Back button - visible for logged in users */}
+          {/* Bouton "Back" visible seulement pour les admins */}
           {isLoggedIn && (
             <button
               onClick={() => navigate('/auctions')}
@@ -232,7 +216,7 @@ export default function AuctionDetailPage() {
           <h1 style={{ margin: '0 0 8px 0' }}>{auction.label}</h1>
           {auction.serial_no && (
             <p style={{ margin: '0 0 12px 0', color: 'var(--muted)', fontSize: 14 }}>
-              Serial No: {auction.serial_no}
+              SN: {auction.serial_no}
             </p>
           )}
         </div>
@@ -247,7 +231,6 @@ export default function AuctionDetailPage() {
               maxHeight: 300,
               overflowY: 'auto',
               marginBottom: 12,
-              borderRadius: 4,
             }}>
               {auctionImages.map((img, idx) => (
                 <div
@@ -320,34 +303,27 @@ export default function AuctionDetailPage() {
             <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 4px 0' }}>Category</p>
             <p style={{ fontWeight: 600, margin: 0 }}>{auction.category || '—'}</p>
           </div>
-          {auction.purchase_price && (
-            <div>
-              <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 4px 0' }}>Purchase Price</p>
-              <p style={{ fontWeight: 600, margin: 0 }}>${auction.purchase_price}</p>
-            </div>
-          )}
         </div>
 
         {/* Share Button */}
         <div style={{ marginBottom: 24 }}>
           <button
             onClick={handleShareAuction}
-            disabled={shareLoading}
             style={{
               width: '100%',
               padding: '12px 16px',
-              background: shareLoading ? '#e0e0e0' : '#f0f0f0',
+              background: '#f0f0f0',
               border: '1px solid #ddd',
               borderRadius: 4,
               fontSize: 14,
               fontWeight: 500,
-              cursor: shareLoading ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               transition: 'background 0.2s',
             }}
-            onMouseEnter={(e) => !shareLoading && (e.currentTarget.style.background = '#e0e0e0')}
-            onMouseLeave={(e) => !shareLoading && (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#e0e0e0'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#f0f0f0'}
           >
-            {shareLoading ? '⏳ Copying...' : '🔗 Share Auction Link'}
+            🔗 Share Auction Link
           </button>
         </div>
 
@@ -361,12 +337,12 @@ export default function AuctionDetailPage() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
             <span style={{ color: 'var(--muted)' }}>Starting Price:</span>
-            <span style={{ fontWeight: 600 }}>${auction.starting_price}</span>
+            <span style={{ fontWeight: 600 }}>{auction.starting_price}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid #e0d7ff' }}>
             <span style={{ fontWeight: 600 }}>Current Bid:</span>
             <span style={{ fontSize: 20, fontWeight: 700, color: '#8D86C9' }}>
-              ${currentBid}
+              {currentBid}
             </span>
           </div>
         </div>
@@ -404,7 +380,7 @@ export default function AuctionDetailPage() {
                   step="0.01"
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
-                  placeholder={`Min: $${
+                  placeholder={`Min: ${
                     auction.current_highest_bid
                       ? auction.current_highest_bid + 1
                       : auction.starting_price
@@ -413,10 +389,9 @@ export default function AuctionDetailPage() {
                   style={{ marginBottom: 4 }}
                 />
                 <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
-                  Minimum bid: $
-                  {auction.current_highest_bid
-                    ? auction.current_highest_bid + 1
-                    : auction.starting_price}
+                  Minimum bid: {auction.current_highest_bid
+                  ? auction.current_highest_bid + 1
+                  : auction.starting_price}
                 </p>
               </div>
               {bidError && <p style={{ color: '#c00', fontSize: 12, marginBottom: 12 }}>{bidError}</p>}
@@ -454,7 +429,7 @@ export default function AuctionDetailPage() {
                   {auction.winner_email}
                 </p>
                 <p style={{ margin: '0 0 12px 0', fontSize: 12, color: 'var(--muted)' }}>
-                  Winning bid: <strong style={{ color: '#8D86C9' }}>${auction.current_highest_bid}</strong>
+                  Winning bid: <strong style={{ color: '#8D86C9' }}>{auction.current_highest_bid}</strong>
                 </p>
               </>
             ) : (
@@ -491,7 +466,7 @@ export default function AuctionDetailPage() {
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '•'} {bid.bidder_email}
                     </p>
                   </div>
-                  <p style={{ margin: 0, fontWeight: 600, color: '#8D86C9' }}>${bid.amount}</p>
+                  <p style={{ margin: 0, fontWeight: 600, color: '#8D86C9' }}>{bid.amount}</p>
                 </div>
               ))}
             </div>
