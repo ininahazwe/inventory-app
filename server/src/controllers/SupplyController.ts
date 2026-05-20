@@ -14,7 +14,7 @@ export class SupplyController {
     create = asyncHandler(async (req: Request, res: Response) => {
         const user = req.user as AuthUser;
         const dto = CreateSupplySchema.parse(req.body);
-        const supply = await this.supplyService.createSupply(dto, user.uid, user.role);
+        const supply = await this.supplyService.createSupply(dto, String(user.uid), user.role);
         res.status(201).json(supply);
     });
 
@@ -34,14 +34,14 @@ export class SupplyController {
         const user = req.user as AuthUser;
         const id = parseInt(req.params.id as string);
         const dto = UpdateSupplySchema.parse(req.body);
-        const supply = await this.supplyService.updateSupply(id, dto, user.uid, user.role);
+        const supply = await this.supplyService.updateSupply(id, dto, String(user.uid), user.role);
         res.json(supply);
     });
 
     delete = asyncHandler(async (req: Request, res: Response) => {
         const user = req.user as AuthUser;
         const id = parseInt(req.params.id as string);
-        await this.supplyService.deleteSupply(id, user.uid, user.role);
+        await this.supplyService.deleteSupply(id, String(user.uid), user.role);
         res.json({ message: 'Supply deleted' });
     });
 }
