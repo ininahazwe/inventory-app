@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
 
       - name: Deploy to cPanel
         uses: appleboy/ssh-action@v1.0.3
