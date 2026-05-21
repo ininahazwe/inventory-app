@@ -67,7 +67,7 @@ export function createApp() {
     // SPA FALLBACK (must be before error handler)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    app.get('*', (req, res) => {
+    app.get('*', (req: express.Request, res: express.Response) => {
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');
