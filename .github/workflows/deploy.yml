@@ -75,11 +75,10 @@ jobs:
             console.log('✅ Environment injected into dist/index.html');
             INJECT_EOF
             
-            export VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}"
-            export VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}"
-            export VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}"
-            export VITE_API_URL="https://assets.mfwa.org/api"
-            
+            VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}" \
+            VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" \
+            VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" \
+            VITE_API_URL="https://assets.mfwa.org/api" \
             node /tmp/inject-env.js
 
             # ========== BACKEND DEPLOYMENT (TypeScript/Express) ==========
