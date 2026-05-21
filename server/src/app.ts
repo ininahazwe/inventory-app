@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import authRoutes from './routes/auth';
 import assetsRoutes from './routes/assets';
 import assignmentsRoutes from './routes/assignments';
@@ -29,6 +30,12 @@ export function createApp() {
     app.use(express.urlencoded({ extended: true }));
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // STATIC FILES (Frontend React build)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    app.use(express.static(path.join(__dirname, '../public')));
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC ROUTES (no auth)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -52,6 +59,14 @@ export function createApp() {
     app.use('/api/auctions', auctionsRouter);
 
     app.use('/api/audit', requireAuth, auditRoutes);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SPA FALLBACK (must be before error handler)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../public/index.html'));
+    });
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLER (must be last)
