@@ -33,7 +33,10 @@ export function createApp() {
     // STATIC FILES (Frontend React build)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    app.use(express.static(path.join(__dirname, '../public')));
+    app.use(express.static(path.join(__dirname, '../public'), {
+        maxAge: '1d',  // Cache les assets 1 jour (ils ont des hash uniques)
+        etag: false
+    }));
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC ROUTES (no auth)
@@ -65,6 +68,9 @@ export function createApp() {
     // ═══════════════════════════════════════════════════════════════════════════
 
     app.get('*', (req, res) => {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         res.sendFile(path.join(__dirname, '../public/index.html'));
     });
 
