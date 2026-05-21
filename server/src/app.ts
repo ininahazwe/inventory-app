@@ -67,7 +67,8 @@ export function createApp() {
     // SPA FALLBACK (must be before error handler)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    app.all(/.*/, (req, res) => {
+    // CORRECTION : Utilisation de (.*) pour éviter l'erreur de path-to-regexp v8+
+    app.all('(.*)', (req, res) => {
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');

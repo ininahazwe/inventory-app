@@ -75,6 +75,7 @@ jobs:
             console.log('✅ Environment injected into dist/index.html');
             INJECT_EOF
             
+            # CORRECTION : Variables d'environnement passées sur la même ligne pour exécution Node efficace
             VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}" \
             VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" \
             VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" \
@@ -127,7 +128,8 @@ jobs:
 
             # ========== PM2 RESTART ==========
             echo "🔄 Restarting PM2 process..."
-            pm2 restart assets-mgt --silent
+            # AJOUT : --update-env pour s'assurer que PM2 hérite des derniers changements d'environnement
+            pm2 restart assets-mgt --update-env --silent
             sleep 2
             echo "✅ PM2 process restarted"
 
