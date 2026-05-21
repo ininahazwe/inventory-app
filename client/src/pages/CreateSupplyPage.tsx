@@ -1,7 +1,8 @@
 // src/pages/CreateSupplyPage.tsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSupplies, type Supply } from '../hooks/useSupplies';
+import { api } from '../lib/apiClient';
+import Autocomplete from '../components/Autocomplete';
 import Layout from '../Layout';
 
 type AssignableUser = {
@@ -10,52 +11,53 @@ type AssignableUser = {
   role?: string;
 };
 
+interface SupplyInput {
+  name: string;
+  purchase_date: string;
+  cost: number;
+  brand?: string;
+  quantity: number;
+  receiver_uid: string;
+  category_id?: number;
+}
+
 export default function CreateSupplyPage() {
   const navigate = useNavigate();
-  const { createSupply, loading: suppliessLoading } = useSupplies();
 
   const [formData, setFormData] = useState({
     name: '',
-    purchase_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+    purchase_date: new Date().toISOString().split('T')[0],
     cost: '',
     brand: '',
     quantity: '1',
     receiver_uid: '',
+    categoryName: '',
   });
 
   const [users, setUsers] = useState<AssignableUser[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<AssignableUser[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
 
-  // Load users on mount
   useEffect(() => {
     loadUsers();
   }, []);
 
-  // Filter users based on search
   useEffect(() => {
     if (!userSearch.trim()) {
       setFilteredUsers(users);
     } else {
       const searchLower = userSearch.toLowerCase();
-      const filtered = users.filter(u =>
-        u.email.toLowerCase().includes(searchLower)
-      );
-      setFilteredUsers(filtered);
+      setFilteredUsers(users.filter(u => u.email.toLowerCase().includes(searchLower)));
     }
   }, [userSearch, users]);
 
   const loadUsers = async () => {
     try {
-      const token = localStorage.getItem('jwt_token');
-      const response = await fetch('http://localhost:3003/api/users/assignable', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const data = (await response.json()) as AssignableUser[];
+      const { data } = await api.get<AssignableUser[]>('/users/assignable');
       if (Array.isArray(data)) {
         setUsers(data);
         setFilteredUsers(data);
@@ -64,6 +66,34 @@ export default function CreateSupplyPage() {
       console.error('Failed to load users:', err);
     }
   };
+
+  // ✅ Fetch ONLY supply categories
+  async function fetchCategoryOptions(q: string) {
+    const query = new URLSearchParams();
+    query.append('type', 'supply');
+    if (q) query.append('q', q);
+
+    const { data } = await api.get<{ id: number; name: string; type: string }[]>(
+      `/categories?${query.toString()}`
+    );
+    return (data ?? []).map(d => d.name);
+  }
+
+  // ✅ Create/get category with type='supply'
+  async function getOrCreateCategoryId(name: string): Promise<number | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+
+    const { data, error } = await api.post<{ id: number }>(
+      '/categories',
+      {
+        name: trimmed,
+        type: 'supply'
+      }
+    );
+    if (error) throw new Error(error);
+    return data?.id ?? null;
+  }
 
   const handleSelectUser = (user: AssignableUser) => {
     setFormData(prev => ({ ...prev, receiver_uid: user.email }));
@@ -80,30 +110,36 @@ export default function CreateSupplyPage() {
     }
 
     try {
-      setLoading(true);
+      setCreateLoading(true);
       setError(null);
 
-      const success = await createSupply({
+      // ✅ Create category if needed
+      const category_id = await getOrCreateCategoryId(formData.categoryName);
+
+      // ✅ Build payload
+      const payload: SupplyInput = {
         name: formData.name,
         purchase_date: formData.purchase_date,
         cost: parseFloat(formData.cost),
         brand: formData.brand || undefined,
         quantity: parseInt(formData.quantity),
         receiver_uid: formData.receiver_uid,
-      } as Omit<Supply, 'id'>);
+        category_id: category_id || undefined,
+      };
 
-      if (success) {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/supplies');
-        }, 1500);
-      } else {
-        setError('Failed to create supply');
-      }
+      const { data: inserted, error } = await api.post<{ id: number }>('/supplies', payload);
+
+      if (error) throw new Error(error);
+      if (!inserted?.id) throw new Error('Failed to create supply');
+
+      setSuccess(true);
+      setTimeout(() => {
+        navigate('/supplies');
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create supply');
     } finally {
-      setLoading(false);
+      setCreateLoading(false);
     }
   };
 
@@ -154,6 +190,20 @@ export default function CreateSupplyPage() {
                   borderRadius: 4,
                   boxSizing: 'border-box',
                 }}
+              />
+            </label>
+          </div>
+
+          {/* ✅ Category Autocomplete */}
+          <div style={{ marginBottom: 20 }}>
+            <label>
+              <strong>Category</strong>
+              <Autocomplete
+                value={formData.categoryName}
+                onChange={(value) => setFormData(prev => ({ ...prev, categoryName: value }))}
+                fetchOptions={fetchCategoryOptions}
+                placeholder="Search/add category…"
+                className="field"
               />
             </label>
           </div>
@@ -257,9 +307,7 @@ export default function CreateSupplyPage() {
                     setDropdownOpen(true);
                   }}
                   onFocus={() => setDropdownOpen(true)}
-                  onBlur={() => {
-                    setTimeout(() => setDropdownOpen(false), 200);
-                  }}
+                  onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
                   style={{
                     width: '100%',
                     padding: 8,
@@ -294,7 +342,6 @@ export default function CreateSupplyPage() {
                           borderBottom: '1px solid #eee',
                           cursor: 'pointer',
                           background: formData.receiver_uid === user.email ? '#e3f2fd' : 'white',
-                          transition: 'background-color 0.1s',
                         }}
                         onMouseEnter={(e) => {
                           (e.currentTarget as HTMLElement).style.backgroundColor = formData.receiver_uid === user.email ? '#e3f2fd' : '#f9f9f9';
@@ -335,7 +382,7 @@ export default function CreateSupplyPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="submit"
-              disabled={loading || suppliessLoading}
+              disabled={createLoading}
               style={{
                 flex: 1,
                 padding: 12,
@@ -343,11 +390,11 @@ export default function CreateSupplyPage() {
                 color: 'white',
                 border: 'none',
                 borderRadius: 4,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1,
+                cursor: createLoading ? 'not-allowed' : 'pointer',
+                opacity: createLoading ? 0.6 : 1,
               }}
             >
-              {loading ? 'Creating...' : 'Create Supply'}
+              {createLoading ? 'Creating...' : 'Create Supply'}
             </button>
             <button
               type="button"

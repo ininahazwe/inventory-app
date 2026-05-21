@@ -6,20 +6,32 @@ import { logAudit } from './audit';
 
 const router = Router();
 
-// GET /api/supplies - List all supplies
+// GET /api/supplies - List all supplies with category filtering
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
+        const { category_id } = req.query;
+        let whereClause = '';
+        let params: any[] = [];
+
+        if (category_id) {
+            whereClause = 'WHERE s.category_id = ?';
+            params.push(parseInt(category_id as string));
+        }
+
         const [supplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-             LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
+                 ${whereClause}
              ORDER BY s.purchase_date DESC`,
-            []
+            params
         );
 
         // Calculate totals
         const [totalCostResult] = await db.execute(
-            `SELECT COALESCE(SUM(cost * quantity), 0) as total FROM supplies`,
-            []
+            `SELECT COALESCE(SUM(cost * quantity), 0) as total FROM supplies ${whereClause}`,
+            params
         );
         const totalCost = parseFloat((totalCostResult as any[])[0]?.total) || 0;
 
@@ -41,8 +53,10 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
         const id = parseInt(req.params.id as string);
 
         const [supplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-                                                            LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
              WHERE s.id = ?`,
             [id]
         );
@@ -62,7 +76,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const { name, purchase_date, cost, brand, quantity, receiver_uid } = req.body;
+        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id } = req.body;
 
         // Validation
         if (!name || !purchase_date || !cost || !quantity || !receiver_uid) {
@@ -86,18 +100,35 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             ? purchase_date.split('T')[0]
             : purchase_date;
 
+        // ✅ If category_id provided, verify it's a 'supply' type category
+        let validatedCategoryId = null;
+        if (category_id) {
+            const [catResult] = await db.execute(
+                `SELECT id, type FROM categories WHERE id = ? AND type = 'supply'`,
+                [category_id]
+            );
+
+            if ((catResult as any[]).length) {
+                validatedCategoryId = category_id;
+            } else {
+                return res.status(400).json({ error: 'Invalid or non-supply category' });
+            }
+        }
+
         const [result] = await db.execute(
-            `INSERT INTO supplies (name, purchase_date, cost, brand, quantity, receiver_uid, created_by_uid)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [name, cleanDate, cost, brand || null, quantity, userId, user.uid]
+            `INSERT INTO supplies (name, purchase_date, cost, brand, quantity, receiver_uid, category_id, created_by_uid)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name, cleanDate, cost, brand || null, quantity, userId, validatedCategoryId, user.uid]
         );
 
         const supplyId = (result as any).insertId;
 
-        // Get the created supply with receiver email
+        // Get the created supply with receiver email and category name
         const [supplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-                                                            LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
              WHERE s.id = ?`,
             [supplyId]
         );
@@ -123,8 +154,10 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
         // Get old state
         const [oldSupplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-             LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
              WHERE s.id = ?`,
             [id]
         );
@@ -135,7 +168,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
         const oldSupply = (oldSupplies as any[])[0];
 
-        const { name, purchase_date, cost, brand, quantity, receiver_uid } = req.body;
+        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id } = req.body;
 
         // Build update query
         const updates: string[] = [];
@@ -163,6 +196,10 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
         if (quantity !== undefined) {
             updates.push('quantity = ?');
             values.push(quantity);
+        }
+        if (category_id !== undefined) {
+            updates.push('category_id = ?');
+            values.push(category_id || null);
         }
         if (receiver_uid !== undefined) {
             // Lookup user by email
@@ -194,8 +231,10 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
         // Get new state
         const [newSupplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-                                                            LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
              WHERE s.id = ?`,
             [id]
         );
@@ -221,8 +260,10 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
         // Get old state
         const [supplies] = await db.execute(
-            `SELECT s.*, u.email as receiver_email FROM supplies s
-                                                            LEFT JOIN users u ON s.receiver_uid = u.id
+            `SELECT s.*, u.email as receiver_email, c.name as category_name
+             FROM supplies s
+                      LEFT JOIN users u ON s.receiver_uid = u.id
+                      LEFT JOIN categories c ON s.category_id = c.id
              WHERE s.id = ?`,
             [id]
         );
