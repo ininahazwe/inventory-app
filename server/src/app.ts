@@ -55,13 +55,18 @@ export function createApp() {
         etag: false
     }));
 
-    // SPA FALLBACK - Only for non-API routes
-    app.use((req, res, next) => {
-        // If it's an API route, skip SPA fallback (should have been caught by app.use('/api/...') above)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SPA FALLBACK (must be AFTER static files, BEFORE error handler)
+    // CRITICAL: Only fallback for non-API, non-static routes
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    app.use((req, res) => {
+        // If it's an API route that wasn't caught above, return 404 (don't serve SPA)
         if (req.path.startsWith('/api')) {
-            return next();  // Pass to error handler
+            return res.status(404).json({ error: 'API route not found', path: req.path });
         }
 
+        // For all other routes (SPA routes), serve index.html
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');
