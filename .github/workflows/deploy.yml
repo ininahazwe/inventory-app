@@ -118,6 +118,7 @@ jobs:
             rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public
             mkdir -p /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public
             cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/client/dist/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/
+            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/client/dist/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/
             echo "✅ Frontend deployed to /public"
 
             # ========== INSTALL BACKEND DEPENDENCIES ==========
