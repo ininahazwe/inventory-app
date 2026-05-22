@@ -13,6 +13,7 @@ import auditRoutes from './routes/audit';
 import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
+import healthRoutes from './routes/health';
 
 export function createApp() {
     const app = express();
@@ -41,7 +42,7 @@ export function createApp() {
     // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC ROUTES (no auth)
     // ═══════════════════════════════════════════════════════════════════════════
-
+    app.use('/api/health', healthRoutes);
     app.use('/api/auth', authRoutes);
     app.use('/api/categories', categoriesRoutes);
 
