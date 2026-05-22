@@ -19,7 +19,7 @@ export function createApp() {
     const app = express();
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MIDDLEWARE (CORS FIRST, before all routes)
+    // MIDDLEWARE (CORS FIRST)
     // ═══════════════════════════════════════════════════════════════════════════
 
     app.use(cors({
@@ -31,7 +31,23 @@ export function createApp() {
     app.use(express.urlencoded({ extended: true }));
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // STATIC FILES (Frontend React build)
+    // API ROUTES (BEFORE STATIC FILES - CRITICAL!)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    app.use('/api/health', healthRoutes);
+    app.use('/api/auth', authRoutes);
+    app.use('/api/categories', categoriesRoutes);
+    app.use('/api/assets', assetsRoutes);
+    app.use('/api/assignments', assignmentsRoutes);
+    app.use('/api/incidents', incidentsRoutes);
+    app.use('/api/users', usersRoutes);
+    app.use('/api/rpc', rpcRoutes);
+    app.use('/api/supplies', suppliesRoutes);
+    app.use('/api/auctions', auctionsRouter);
+    app.use('/api/audit', requireAuth, auditRoutes);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STATIC FILES (AFTER API ROUTES)
     // ═══════════════════════════════════════════════════════════════════════════
 
     app.use(express.static(path.join(__dirname, '../public'), {
@@ -40,35 +56,8 @@ export function createApp() {
     }));
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PUBLIC ROUTES (no auth)
+    // SPA FALLBACK (must be before error handler, after static files)
     // ═══════════════════════════════════════════════════════════════════════════
-    app.use('/api/health', healthRoutes);
-    app.use('/api/auth', authRoutes);
-    app.use('/api/categories', categoriesRoutes);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PROTECTED ROUTES (require auth)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    //app.use('/api/me', requireAuth, authRoutes);
-    app.use('/api/assets', assetsRoutes);
-    app.use('/api/assignments', assignmentsRoutes);
-    app.use('/api/incidents', incidentsRoutes);
-    app.use('/api/users', usersRoutes);  // ← /rpc/is_admin, /rpc/is_super_admin, etc.
-    app.use('/api/rpc', rpcRoutes);      // ← /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats
-
-    // Legacy/Business specific
-    app.use('/api/supplies', suppliesRoutes);
-
-    app.use('/api/auctions', auctionsRouter);
-
-    app.use('/api/audit', requireAuth, auditRoutes);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SPA FALLBACK (must be before error handler)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // CORRECTION : Utilisation de (.*) pour éviter l'erreur de path-to-regexp v8+
 
     app.use((req, res) => {
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
