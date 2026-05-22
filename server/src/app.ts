@@ -55,11 +55,13 @@ export function createApp() {
         etag: false
     }));
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SPA FALLBACK (must be before error handler, after static files)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // SPA FALLBACK - Only for non-API routes
+    app.use((req, res, next) => {
+        // If it's an API route, skip SPA fallback (should have been caught by app.use('/api/...') above)
+        if (req.path.startsWith('/api')) {
+            return next();  // Pass to error handler
+        }
 
-    app.use((req, res) => {
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');
