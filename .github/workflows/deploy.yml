@@ -23,16 +23,21 @@ jobs:
           script: |
             set -e
 
-            echo "=== 🚀 Starting deployment: inventory-app ==="
+            echo "=== 🚀 Starting deployment: assets-mfwa.org (assets-tool) ==="
 
+            # ========== DÉFINITIONS ==========
+            REPO_PATH="/home/${{ secrets.SSH_USER }}/repositories/inventory-app"
+            PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
+            
             # ========== GIT PULL ==========
-            cd /home/${{ secrets.SSH_USER }}/repositories/inventory-app
+            echo "📥 Pulling latest code..."
+            cd "$REPO_PATH"
             git pull origin main --quiet
             echo "✅ Git pulled successfully"
 
             # ========== FRONTEND BUILD ==========
             echo "🎨 Building frontend..."
-            cd /home/${{ secrets.SSH_USER }}/repositories/inventory-app/client
+            cd "$REPO_PATH/client"
             npm ci --quiet
             npm run build --quiet
             echo "✅ Frontend built"
@@ -75,80 +80,111 @@ jobs:
             console.log('✅ Environment injected into dist/index.html');
             INJECT_EOF
             
-            # CORRECTION : Variables d'environnement passées sur la même ligne pour exécution Node efficace
             VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}" \
             VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" \
             VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" \
             VITE_API_URL="https://assets.mfwa.org/api" \
             node /tmp/inject-env.js
 
-            # ========== BACKEND DEPLOYMENT (TypeScript/Express) ==========
-            echo "📦 Building & deploying backend..."
-            
-            # Build TypeScript
-            cd /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server
+            # ========== BACKEND BUILD ==========
+            echo "📦 Building backend..."
+            cd "$REPO_PATH/server"
             npm ci --quiet
             npm run build --quiet
             echo "✅ Backend compiled"
 
-            # Copy compiled dist to production
-            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/dist
-            mkdir -p /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/dist
-            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/dist/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/dist/
+            # ========== CLEANUP PROD (PHASE 1: REMOVE OLD) ==========
+            echo "🧹 Cleaning production directory..."
             
-            # Copy package files
-            cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/package.json /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package.json
-            cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/package-lock.json /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package-lock.json
-            
-            # Copy .env production (if exists)
-            if [ -f /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/.env.production ]; then
-              cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/server/.env.production /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/.env
-              echo "✅ .env copied"
+            # Stop PM2 process if exists
+            if pm2 list | grep -q "assets-tool"; then
+              echo "  🛑 Stopping assets-tool..."
+              pm2 stop assets-tool --silent || true
             fi
             
-            echo "✅ Backend files deployed"
+            # Remove old process from PM2
+            if pm2 list | grep -q "assets-tool"; then
+              echo "  🗑️ Removing assets-tool from PM2..."
+              pm2 delete assets-tool --silent || true
+            fi
+            
+            # Clean directories
+            echo "  📁 Removing old dist, public, node_modules..."
+            rm -rf "$PROD_PATH/dist"
+            rm -rf "$PROD_PATH/public"
+            rm -rf "$PROD_PATH/node_modules"
+            rm -rf "$PROD_PATH/logs"
+            
+            echo "✅ Production cleaned"
 
-            # ========== DEPLOY .HTACCESS ==========
-            echo "📄 Deploying .htaccess..."
-            cp /home/${{ secrets.SSH_USER }}/repositories/inventory-app/.htaccess /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/.htaccess
-            echo "✅ .htaccess deployed"
+            # ========== DEPLOY BACKEND ==========
+            echo "📤 Deploying backend files..."
+            mkdir -p "$PROD_PATH"
+            mkdir -p "$PROD_PATH/logs"
+            
+            cp -r "$REPO_PATH/server/dist" "$PROD_PATH/dist"
+            cp "$REPO_PATH/server/package.json" "$PROD_PATH/package.json"
+            cp "$REPO_PATH/server/package-lock.json" "$PROD_PATH/package-lock.json"
+            
+            # NOTE: .env is PRESERVED from production (not overwritten)
+            # Production secrets are managed separately:
+            # GMAIL_USER=yves.cri@gmail.com
+            # GMAIL_APP_PASSWORD=tttq work ktww cfok
+            # (Manually updated on prod server)
+            #
+            # If you need to update .env from repo in future:
+            # Uncomment the lines below and update server/.env.production
+            # if [ -f "$REPO_PATH/server/.env.production" ]; then
+            #   cp "$REPO_PATH/server/.env.production" "$PROD_PATH/.env"
+            #   echo "✅ .env.production copied"
+            # fi
+            echo "ℹ️  .env preserved from production (not overwritten)"
+            
+            echo "✅ Backend deployed"
 
-            # ========== DEPLOY FRONTEND TO /public ==========
-            echo "📁 Deploying frontend to /public..."
-            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public
-            mkdir -p /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public
-            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/client/dist/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/
-            cp -r /home/${{ secrets.SSH_USER }}/repositories/inventory-app/client/dist/* /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/
+            # ========== DEPLOY FRONTEND ==========
+            echo "📤 Deploying frontend files..."
+            mkdir -p "$PROD_PATH/public"
+            cp -r "$REPO_PATH/client/dist"/* "$PROD_PATH/public/"
             echo "✅ Frontend deployed to /public"
 
-            # ========== INSTALL BACKEND DEPENDENCIES ==========
-            echo "📦 Installing backend dependencies..."
-            cd /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org
+            # ========== INSTALL DEPENDENCIES ==========
+            echo "📦 Installing dependencies..."
+            cd "$PROD_PATH"
             npm install --omit=dev --quiet
-            echo "✅ Backend dependencies installed"
+            echo "✅ Dependencies installed"
 
-            # ========== PM2 RESTART ==========
-            echo "🔄 Restarting PM2 process..."
-            # AJOUT : --update-env pour s'assurer que PM2 hérite des derniers changements d'environnement
-            pm2 restart assets-mgt --update-env --silent
+            # ========== PM2 START (ASSETS-TOOL) ==========
+            echo "🚀 Starting PM2 process (assets-tool)..."
+            pm2 start "$PROD_PATH/dist/server.js" \
+              --name "assets-tool" \
+              --env "$PROD_PATH/.env" \
+              --watch false \
+              --max-memory-restart "500M" \
+              --error "$PROD_PATH/logs/error.log" \
+              --output "$PROD_PATH/logs/out.log" \
+              --silent
+            
             sleep 2
-            echo "✅ PM2 process restarted"
+            pm2 save --silent
+            echo "✅ PM2 process started and saved"
 
-            # ========== CLEAR PASSENGER CACHE ==========
-            echo "🧹 Clearing Passenger cache..."
-            touch /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/tmp/restart.txt 2>/dev/null || true
-            rm -rf /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/tmp/cache/* 2>/dev/null || true
-            echo "✅ Passenger cache cleared"
-
-            # ========== FINAL VALIDATION ==========
+            # ========== VALIDATION ==========
             echo "🔍 Validating deployment..."
-            [ -d /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/dist ] && echo "✅ Backend dist exists" || echo "❌ Backend dist missing"
-            [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/package.json ] && echo "✅ package.json exists" || echo "❌ package.json missing"
-            [ -d /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public ] && echo "✅ Frontend build exists" || echo "❌ Frontend build missing"
-            [ -f /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html ] && grep -q "window.__ENV__" /home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org/public/index.html && echo "✅ Environment variables injected" || echo "❌ Environment variables NOT injected"
-
-            # Vérifier le statut PM2
+            
+            # Check directories
+            [ -d "$PROD_PATH/dist" ] && echo "  ✅ Backend dist exists" || echo "  ❌ Backend dist missing"
+            [ -d "$PROD_PATH/public" ] && echo "  ✅ Frontend build exists" || echo "  ❌ Frontend build missing"
+            [ -f "$PROD_PATH/package.json" ] && echo "  ✅ package.json exists" || echo "  ❌ package.json missing"
+            [ -f "$PROD_PATH/.env" ] && echo "  ✅ .env exists" || echo "  ❌ .env missing"
+            [ -f "$PROD_PATH/public/index.html" ] && grep -q "window.__ENV__" "$PROD_PATH/public/index.html" && echo "  ✅ Environment variables injected" || echo "  ❌ Environment variables NOT injected"
+            
+            # Check PM2 status
             echo "📊 PM2 Status:"
-            pm2 status | grep assets-mgt || echo "⚠️ assets-mgt process not found"
+            pm2 list | grep -E "assets-tool|Name" || echo "  ⚠️ assets-tool not found"
+            
+            # Check logs for startup errors
+            echo "📋 Recent logs:"
+            [ -f "$PROD_PATH/logs/error.log" ] && tail -5 "$PROD_PATH/logs/error.log" || echo "  (no error logs yet)"
 
             echo "=== ✨ Deployment complete ==="
