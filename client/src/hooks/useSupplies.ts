@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { api } from '../lib/apiClient'; // ✅ USE APICLIENT
 
 export interface Supply {
   id: number;
@@ -32,30 +33,27 @@ export const useSupplies = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeader = () => {
-    const token = localStorage.getItem('jwt_token');
-    return { 'Authorization': `Bearer ${token}` };
-  };
-
+  // ✅ FETCH SUPPLIES (using apiClient)
   const fetchSupplies = useCallback(async (categoryId?: number) => {
     try {
       setLoading(true);
       setError(null);
 
-      let url = 'http://localhost:3003/api/supplies';
+      let path = '/supplies';
       if (categoryId) {
-        url += `?category_id=${categoryId}`;
+        path += `?category_id=${categoryId}`;
       }
 
-      const response = await fetch(url, {
-        headers: getAuthHeader(),
-      });
+      // ✅ Use apiClient instead of fetch
+      const { data, error: apiError } = await api.get<{
+        supplies: Supply[];
+        totalCost: number;
+      }>(path);
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch supplies');
+      if (apiError || !data) {
+        throw new Error(apiError || 'Failed to fetch supplies');
       }
 
-      const data = await response.json();
       setSupplies(data.supplies || []);
       setTotalCost(data.totalCost || 0);
     } catch (err) {
@@ -67,27 +65,22 @@ export const useSupplies = () => {
     }
   }, []);
 
-  // ✅ Accept SupplyInput (ce qu'on envoie au backend)
+  // ✅ CREATE SUPPLY (using apiClient)
   const createSupply = useCallback(async (supply: SupplyInput) => {
     try {
       setError(null);
 
-      const response = await fetch('http://localhost:3003/api/supplies', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeader(),
-        },
-        body: JSON.stringify(supply),
-      });
+      // ✅ Use apiClient instead of fetch
+      const { data, error: apiError } = await api.post<Supply>(
+        '/supplies',
+        supply
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create supply');
+      if (apiError || !data) {
+        throw new Error(apiError || 'Failed to create supply');
       }
 
-      const newSupply = await response.json();
-      setSupplies(prev => [newSupply, ...prev]);
+      setSupplies(prev => [data, ...prev]);
       await fetchSupplies(); // Refresh to get updated totals
       return true;
     } catch (err) {
@@ -98,26 +91,22 @@ export const useSupplies = () => {
     }
   }, [fetchSupplies]);
 
+  // ✅ UPDATE SUPPLY (using apiClient)
   const updateSupply = useCallback(async (id: number, updates: Partial<SupplyInput>) => {
     try {
       setError(null);
 
-      const response = await fetch(`http://localhost:3003/api/supplies/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeader(),
-        },
-        body: JSON.stringify(updates),
-      });
+      // ✅ Use apiClient instead of fetch
+      const { data, error: apiError } = await api.patch<Supply>(
+        `/supplies/${id}`,
+        updates
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update supply');
+      if (apiError || !data) {
+        throw new Error(apiError || 'Failed to update supply');
       }
 
-      const updated = await response.json();
-      setSupplies(prev => prev.map(s => s.id === id ? updated : s));
+      setSupplies(prev => prev.map(s => s.id === id ? data : s));
       await fetchSupplies(); // Refresh to get updated totals
       return true;
     } catch (err) {
@@ -128,17 +117,16 @@ export const useSupplies = () => {
     }
   }, [fetchSupplies]);
 
+  // ✅ DELETE SUPPLY (using apiClient)
   const deleteSupply = useCallback(async (id: number) => {
     try {
       setError(null);
 
-      const response = await fetch(`http://localhost:3003/api/supplies/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeader(),
-      });
+      // ✅ Use apiClient instead of fetch
+      const { error: apiError } = await api.delete<void>(`/supplies/${id}`);
 
-      if (!response.ok) {
-        throw new Error('Failed to delete supply');
+      if (apiError) {
+        throw new Error(apiError || 'Failed to delete supply');
       }
 
       setSupplies(prev => prev.filter(s => s.id !== id));
