@@ -305,7 +305,7 @@ jobs:
 
       # ========== STEP 7: SLACK NOTIFICATION (OPTIONAL) ==========
       - name: 📢 Slack notification
-        if: always()
+        if: always() && vars.SLACK_WEBHOOK != ''
         uses: slackapi/slack-github-action@v1.24.0
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
@@ -343,4 +343,3 @@ jobs:
                 }
               ]
             }
-        if: vars.SLACK_WEBHOOK != null
