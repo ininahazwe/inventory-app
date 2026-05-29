@@ -348,7 +348,7 @@ export default function AuctionDetailPage() {
         </div>
 
         {/* Bid Form */}
-        {isActive ? (
+        {isActive && new Date(auction.end_date) > new Date() ? (
           !isLoggedIn ? (
             <div style={{
               background: '#fff3cd',

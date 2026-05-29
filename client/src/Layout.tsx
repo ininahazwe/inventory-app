@@ -9,11 +9,14 @@ import logo from "./assets/mfwa-logo.png";
 import { Link } from 'react-router-dom';
 import { useToast } from './hooks/useToast';
 import ToastContainer from './components/ToastContainer';
+import {usePermissions} from "./hooks/usePermissions.ts";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toasts, removeToast } = useToast();
+
+  const { isSuperAdmin } = usePermissions();
 
   useEffect(() => {
     if (token.get()) {
@@ -49,7 +52,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="site-right">
             <Link to="/auctions" className="pill bordeaux">⏱︎ Auctions</Link>
-            <Link to="/supplies" className="pill green">📋︎ Supplies</Link>
+            {isSuperAdmin && (
+              <>
+                <Link to="/supplies" className="pill green">📋︎ Supplies</Link>
+              </>
+            )}
             {email ? (
               <button className="pill red" onClick={logout}>Log out</button>
             ) : (

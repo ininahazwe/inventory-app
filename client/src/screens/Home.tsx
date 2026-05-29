@@ -16,6 +16,7 @@ const ITEMS_PER_PAGE = 10;
 export default function Home({ onNew }: { onNew: () => void }) {
   const navigate = useNavigate();
   const { isSuperAdmin } = usePermissions();
+  const { isAssignee } = usePermissions();
   const [rows, setRows]           = useState<Row[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -79,6 +80,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
   return (
     <div>
+      {!isAssignee && (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -92,6 +94,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
           )}
         </div>
       </div>
+      )}
 
       <div className="filters">
         <input className="input" placeholder="Search by label, serial number, name, or email…" value={qLabel} onChange={e => setQLabel(e.target.value)} />
