@@ -127,9 +127,22 @@ jobs:
             [ -d "$PROD_PATH/public" ]             && echo "  ✅ public"        || { echo "  ❌ public missing";    ERRORS=$((ERRORS+1)); }
             [ -f "$PROD_PATH/.env" ]               && echo "  ✅ .env"          || { echo "  ❌ .env missing";      ERRORS=$((ERRORS+1)); }
             grep -q "window.__ENV__" "$PROD_PATH/public/index.html" \
-                                                   && echo "  ✅ __ENV__"       || { echo "  ❌ __ENV__ missing";   ERRORS=$((ERRORS+1)); }
-            pm2 list | grep -q "assets-tool.*online" \
-                                                   && echo "  ✅ PM2 online"    || { echo "  ❌ PM2 not online";    ERRORS=$((ERRORS+1)); }
+            && echo "  ✅ __ENV__"       || { echo "  ❌ __ENV__ missing";   ERRORS=$((ERRORS+1)); }
+    
+            # Validation PM2 améliorée et robuste via JSON (évite les pièges de formatage de tableau)
+            PM2_STATUS=$(pm2 jlist | node -e "
+            const list = JSON.parse(fs.readFileSync(0, 'utf-8'));
+            const app = list.find(p => p.name === 'assets-tool');
+            if (!app) { console.log('missing'); process.exit(0); }
+            console.log(app.pm2_env.status);
+            ")
+        
+            if [ "$PM2_STATUS" = "online" ]; then
+            echo "  ✅ PM2 online"
+            else
+            echo "  ❌ PM2 not online (Status actuel: $PM2_STATUS)"
+            ERRORS=$((ERRORS+1))
+            fi
 
             if [ $ERRORS -gt 0 ]; then
               echo "❌ Validation failed ($ERRORS errors)"
