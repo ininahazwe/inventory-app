@@ -84,8 +84,9 @@ jobs:
 
             mkdir -p "$PROD_PATH"
 
-            echo "🛑 Stopping PM2..."
-            pm2 stop assets-tool --silent || true
+            echo "🛑 Clearing old PM2 process..."
+            # On supprime complètement l'ancien enregistrement pour forcer un démarrage 100% neuf
+            pm2 delete assets-tool --silent || true
             sleep 1
 
             echo "📤 Deploying files..."
