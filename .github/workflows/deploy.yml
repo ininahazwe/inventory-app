@@ -140,6 +140,7 @@ jobs:
       - name: Test health endpoint
         id: health_test
         run: |
+          sleep 5
           for i in {1..5}; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" https://assets.mfwa.org/api/health)
             if [ "$CODE" = "200" ]; then echo "✅ Health OK"; exit 0; fi
