@@ -44,7 +44,8 @@ jobs:
             # ========== GIT PULL ==========
             echo "📥 Pulling latest code..."
             cd "$REPO_PATH"
-            git pull origin main --quiet
+            git fetch origin main --quiet
+            git reset --hard origin/main --quiet
             COMMIT_HASH=$(git rev-parse --short HEAD)
             echo "✅ Git pulled (commit: $COMMIT_HASH)"
 
