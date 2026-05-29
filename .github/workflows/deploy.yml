@@ -108,15 +108,16 @@ jobs:
             echo "✅ Dependencies installed"
 
             echo "🚀 Starting PM2..."
-            pm2 start "$PROD_PATH/dist/server.js" \
+            DOTENV_CONFIG_SILENT=true pm2 start "$PROD_PATH/dist/server.js" \
               --name "assets-tool" \
               --watch false \
               --max-memory-restart "500M" \
               --error "$PROD_PATH/logs/error.log" \
               --output "$PROD_PATH/logs/out.log" \
               --node-args="--require dotenv/config" \
+              --update-env \
               --silent
-            sleep 2
+            sleep 4
             pm2 save --silent
             echo "✅ PM2 started"
 
