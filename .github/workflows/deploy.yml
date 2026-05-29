@@ -11,11 +11,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # ========== STEP 1: CHECKOUT ==========
+
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # ========== STEP 2: DEPLOY TO PROD ==========
       - name: Deploy to cPanel
         id: deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -27,21 +26,17 @@ jobs:
           command_timeout: 600s
           script: |
             set -e
+            echo "=== Starting deployment ==="
 
-            echo "=== 🚀 Starting deployment: assets-mfwa.org (assets-tool) ==="
-
-            # ========== DÉFINITIONS ==========
             REPO_PATH="/home/${{ secrets.SSH_USER }}/repositories/inventory-app"
             PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
             BACKUP_PATH="/home/${{ secrets.SSH_USER }}/backups/assets-mfwa-$(date +%Y%m%d-%H%M%S)"
-            
-            # ========== BACKUP CURRENT STATE ==========
+
             echo "📦 Creating backup..."
             mkdir -p "$(dirname "$BACKUP_PATH")"
             cp -r "$PROD_PATH" "$BACKUP_PATH" 2>/dev/null || true
-            echo "✅ Backup created at $BACKUP_PATH"
+            echo "✅ Backup created"
 
-            # ========== GIT PULL ==========
             echo "📥 Pulling latest code..."
             cd "$REPO_PATH"
             git fetch origin main --quiet
@@ -49,301 +44,169 @@ jobs:
             COMMIT_HASH=$(git rev-parse --short HEAD)
             echo "✅ Git pulled (commit: $COMMIT_HASH)"
 
-            # ========== FRONTEND BUILD ==========
             echo "🎨 Building frontend..."
             cd "$REPO_PATH/client"
             npm ci --quiet
             npm run build --quiet
             echo "✅ Frontend built"
 
-            # ========== INJECT ENVIRONMENT VARIABLES ==========
             echo "🔧 Injecting environment variables..."
             cat > /tmp/inject-env.js << 'INJECT_EOF'
             const fs = require('fs');
-            const path = require('path');
-            
-            const distIndexPath = path.join('/home/${{ secrets.SSH_USER }}/repositories/inventory-app/client', 'dist', 'index.html');
-            
-            if (!fs.existsSync(distIndexPath)) {
-              console.error('❌ dist/index.html not found');
-              process.exit(1);
-            }
-            
+            const distIndexPath = '/home/${{ secrets.SSH_USER }}/repositories/inventory-app/client/dist/index.html';
+            if (!fs.existsSync(distIndexPath)) { console.error('dist/index.html not found'); process.exit(1); }
             const envVars = {
               VITE_GOOGLE_CLIENT_ID: process.env.VITE_GOOGLE_CLIENT_ID || '',
               VITE_CLOUDINARY_CLOUD_NAME: process.env.VITE_CLOUDINARY_CLOUD_NAME || '',
               VITE_CLOUDINARY_UPLOAD_PRESET: process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '',
               VITE_API_URL: process.env.VITE_API_URL || '',
             };
-            
-            const injectionScript = `<script>
-            window.__ENV__ = ${JSON.stringify(envVars, null, 2)};
-            console.log('✅ Environment injected:', window.__ENV__);
-            </script>`;
-            
+            const script = '<script>\nwindow.__ENV__ = ' + JSON.stringify(envVars, null, 2) + ';\n</script>';
             let html = fs.readFileSync(distIndexPath, 'utf-8');
-            const scriptIndex = html.indexOf('<script');
-            
-            if (scriptIndex === -1) {
-              console.error('❌ No <script> tag found');
-              process.exit(1);
-            }
-            
-            html = html.slice(0, scriptIndex) + injectionScript + '\n' + html.slice(scriptIndex);
+            const idx = html.indexOf('<script');
+            if (idx === -1) { console.error('No script tag found'); process.exit(1); }
+            html = html.slice(0, idx) + script + '\n' + html.slice(idx);
             fs.writeFileSync(distIndexPath, html, 'utf-8');
-            console.log('✅ Environment injected into dist/index.html');
+            console.log('Environment injected');
             INJECT_EOF
-            
             VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}" \
             VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" \
             VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" \
             VITE_API_URL="https://assets.mfwa.org/api" \
             node /tmp/inject-env.js
+            echo "✅ Environment injected"
 
-            # ========== BACKEND BUILD ==========
             echo "📦 Building backend..."
             cd "$REPO_PATH/server"
             npm ci --quiet
             npm run build --quiet
             echo "✅ Backend compiled"
 
-            # ========== ENSURE PROD DIR EXISTS ==========
             mkdir -p "$PROD_PATH"
-            # ========== STOP PM2 ==========
-            echo "🛑 Stopping PM2 process..."
+
+            echo "🛑 Stopping PM2..."
             pm2 stop assets-tool --silent || true
             sleep 1
-            echo "✅ PM2 stopped"
-            
-            # ========== DEPLOY BACKEND ==========
-            echo "📤 Deploying backend files..."
-            rm -rf "$PROD_PATH/dist"
-            rm -rf "$PROD_PATH/public"
-            rm -rf "$PROD_PATH/node_modules"
-            rm -rf "$PROD_PATH/logs"
-            
+
+            echo "📤 Deploying files..."
+            rm -rf "$PROD_PATH/dist" "$PROD_PATH/public" "$PROD_PATH/node_modules" "$PROD_PATH/logs"
             mkdir -p "$PROD_PATH/logs"
             cp -r "$REPO_PATH/server/dist" "$PROD_PATH/dist"
             cp "$REPO_PATH/server/package.json" "$PROD_PATH/package.json"
             cp "$REPO_PATH/server/package-lock.json" "$PROD_PATH/package-lock.json"
-            echo "✅ Backend deployed"
-            
-            # ========== DEPLOY FRONTEND ==========
-            echo "📤 Deploying frontend files..."
             mkdir -p "$PROD_PATH/public"
             cp -r "$REPO_PATH/client/dist"/* "$PROD_PATH/public/"
-            echo "✅ Frontend deployed"
-            
-            # ========== INSTALL DEPENDENCIES ==========
+            echo "✅ Files deployed"
+
+            echo "🔧 Writing .htaccess..."
+            printf 'RewriteEngine On\nRewriteRule ^(.*)$ http://127.0.0.1:3003/$1 [P,L]\n' > "$PROD_PATH/.htaccess"
+            echo "✅ .htaccess written"
+
             echo "📦 Installing dependencies..."
             cd "$PROD_PATH"
             npm install --omit=dev --quiet
             echo "✅ Dependencies installed"
-            
-            # ========== PM2 START ==========
-            echo "🚀 Starting PM2 process..."
+
+            echo "🚀 Starting PM2..."
             pm2 start "$PROD_PATH/dist/server.js" \
-            --name "assets-tool" \
-            --watch false \
-            --max-memory-restart "500M" \
-            --error "$PROD_PATH/logs/error.log" \
-            --output "$PROD_PATH/logs/out.log" \
-            --node-args="--require dotenv/config" \
-            --silent
-            
+              --name "assets-tool" \
+              --watch false \
+              --max-memory-restart "500M" \
+              --error "$PROD_PATH/logs/error.log" \
+              --output "$PROD_PATH/logs/out.log" \
+              --node-args="--require dotenv/config" \
+              --silent
             sleep 2
             pm2 save --silent
-            echo "✅ PM2 process started"
-            
-            # ========== VALIDATION ==========
-            echo "🔍 Validating deployment..."
-            
+            echo "✅ PM2 started"
+
+            echo "🔍 Validating..."
             ERRORS=0
-            
-            # Check files
-            if [ -d "$PROD_PATH/dist" ]; then
-            echo "  ✅ Backend dist exists"
-            else
-            echo "  ❌ Backend dist missing"
-            ERRORS=$((ERRORS + 1))
-            fi
-            
-            if [ -d "$PROD_PATH/public" ]; then
-            echo "  ✅ Frontend build exists"
-            else
-            echo "  ❌ Frontend build missing"
-            ERRORS=$((ERRORS + 1))
-            fi
-            
-            if [ -f "$PROD_PATH/.env" ]; then
-            echo "  ✅ .env exists"
-            else
-            echo "  ❌ .env missing"
-            ERRORS=$((ERRORS + 1))
-            fi
-            
-            if grep -q "window.__ENV__" "$PROD_PATH/public/index.html"; then
-            echo "  ✅ Environment variables injected"
-            else
-            echo "  ❌ Environment variables NOT injected"
-            ERRORS=$((ERRORS + 1))
-            fi
-            
-            # Check PM2 status
-            if pm2 list | grep -q "assets-tool.*online"; then
-            echo "  ✅ PM2 process online"
-            else
-            echo "  ❌ PM2 process not online"
-            ERRORS=$((ERRORS + 1))
-            fi
-            
-            # Check logs for errors
-            if [ -f "$PROD_PATH/logs/error.log" ] && grep -q "Error\|error\|ECONNREFUSED" "$PROD_PATH/logs/error.log"; then
-            echo "  ❌ Errors in PM2 logs"
-            tail -10 "$PROD_PATH/logs/error.log"
-            ERRORS=$((ERRORS + 1))
-            else
-            echo "  ✅ No errors in logs"
-            fi
-            
-            # Exit with status
+            [ -d "$PROD_PATH/dist" ]              && echo "  ✅ dist"         || { echo "  ❌ dist missing";      ERRORS=$((ERRORS+1)); }
+            [ -d "$PROD_PATH/public" ]             && echo "  ✅ public"        || { echo "  ❌ public missing";    ERRORS=$((ERRORS+1)); }
+            [ -f "$PROD_PATH/.env" ]               && echo "  ✅ .env"          || { echo "  ❌ .env missing";      ERRORS=$((ERRORS+1)); }
+            grep -q "window.__ENV__" "$PROD_PATH/public/index.html" \
+                                                   && echo "  ✅ __ENV__"       || { echo "  ❌ __ENV__ missing";   ERRORS=$((ERRORS+1)); }
+            pm2 list | grep -q "assets-tool.*online" \
+                                                   && echo "  ✅ PM2 online"    || { echo "  ❌ PM2 not online";    ERRORS=$((ERRORS+1)); }
+
             if [ $ERRORS -gt 0 ]; then
-            echo "❌ Validation failed with $ERRORS errors"
-            exit 1
-            else
+              echo "❌ Validation failed ($ERRORS errors)"
+              exit 1
+            fi
             echo "✅ All validations passed"
+            echo "=== ✨ Deploy complete (commit: $COMMIT_HASH) ==="
+
+      - name: Test health endpoint
+        id: health_test
+        run: |
+          for i in {1..5}; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" https://assets.mfwa.org/api/health)
+            if [ "$CODE" = "200" ]; then echo "✅ Health OK"; exit 0; fi
+            echo "⏳ Attempt $i/5 (HTTP $CODE), retrying..."
+            sleep 3
+          done
+          echo "❌ Health endpoint failed"; exit 1
+
+      - name: Test frontend
+        id: frontend_test
+        run: |
+          RESPONSE=$(curl -s https://assets.mfwa.org/)
+          echo "$RESPONSE" | grep -q "window.__ENV__" && echo "✅ __ENV__ present" || { echo "❌ __ENV__ missing"; exit 1; }
+          echo "$RESPONSE" | grep -q "Assets Management" && echo "✅ Title present" || { echo "❌ Title missing"; exit 1; }
+
+      - name: Success notification
+        if: success()
+        run: |
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "App: https://assets.mfwa.org"
+          echo "Commit: ${{ github.sha }}"
+
+      - name: Failure - Rollback
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
+            LATEST_BACKUP=$(ls -td /home/${{ secrets.SSH_USER }}/backups/assets-mfwa-* 2>/dev/null | head -1)
+            if [ -n "$LATEST_BACKUP" ] && [ -d "$LATEST_BACKUP" ]; then
+              echo "🔄 Rolling back to $LATEST_BACKUP"
+              pm2 stop assets-tool --silent || true
+              rm -rf "$PROD_PATH"
+              cp -r "$LATEST_BACKUP" "$PROD_PATH"
+              cd "$PROD_PATH"
+              pm2 start dist/server.js --name assets-tool --node-args="--require dotenv/config" --silent
+              sleep 2
+              echo "✅ Rollback complete"
+            else
+              echo "⚠️ No backup found — prod preserved as-is"
             fi
 
-            echo "=== ✨ Deployment complete (commit: $COMMIT_HASH) ==="
-            
-            # ========== STEP 3: TEST HEALTH ENDPOINT ==========
-            - name: Test health endpoint
-              id: health_test
-              run: |
-                echo "Testing health endpoint..."
-                for i in {1..5}; do
-                  RESPONSE=$(curl -s -w "\n%{http_code}" https://assets.mfwa.org/api/health)
-                  HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-                  BODY=$(echo "$RESPONSE" | head -1)
-            
-                  if [ "$HTTP_CODE" = "200" ]; then
-                    echo "✅ Health endpoint OK: $BODY"
-                    exit 0
-                  else
-                    echo "⏳ Attempt $i/5 failed (HTTP $HTTP_CODE), retrying..."
-                    sleep 3
-                  fi
-                done
-            
-                echo "❌ Health endpoint failed after 5 attempts"
-                exit 1
-            
-            # ========== STEP 4: TEST FRONTEND ==========
-            - name: Test frontend
-              id: frontend_test
-              run: |
-                echo "Testing frontend..."
-                RESPONSE=$(curl -s https://assets.mfwa.org/)
-            
-                if echo "$RESPONSE" | grep -q "window.__ENV__"; then
-                  echo "✅ Frontend loads with __ENV__"
-                else
-                  echo "❌ Frontend missing __ENV__"
-                  exit 1
-                fi
-            
-                if echo "$RESPONSE" | grep -q "Assets Management"; then
-                  echo "✅ Frontend contains app title"
-                else
-                  echo "❌ Frontend missing app title"
-                  exit 1
-                fi
-            
-            # ========== STEP 5: SUCCESS NOTIFICATION ==========
-            - name: 🎉 Success notification
-              if: success()
-              run: |
-                echo "=== ✨ DEPLOYMENT SUCCESSFUL ==="
-                echo "App: https://assets.mfwa.org"
-                echo "API: https://assets.mfwa.org/api/health"
-                echo "Commit: ${{ github.sha }}"
-                echo "Branch: ${{ github.ref_name }}"
-            
-            # ========== STEP 6: FAILURE NOTIFICATION + ROLLBACK ==========
-            - name: ⚠️ Failure - Rollback
-              if: failure()
-              uses: appleboy/ssh-action@v1.0.3
-              with:
-                host: ${{ secrets.SSH_HOST }}
-                username: ${{ secrets.SERVER_USERNAME }}
-                key: ${{ secrets.SSH_PRIVATE_KEY }}
-                script: |
-                  echo "❌ Deployment failed, rolling back..."
-            
-                  PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
-                  BACKUP_PATH="/home/${{ secrets.SSH_USER }}/backups/assets-mfwa-$(date +%Y%m%d -d '1 second ago')-*"
-            
-                  # Find the most recent backup
-                  LATEST_BACKUP=$(ls -td /home/${{ secrets.SSH_USER }}/backups/assets-mfwa-* 2>/dev/null | head -1)
-            
-                  if [ -n "$LATEST_BACKUP" ] && [ -d "$LATEST_BACKUP" ]; then
-                    echo "🔄 Restoring from backup: $LATEST_BACKUP"
-            
-                    # Stop PM2
-                    pm2 stop assets-tool --silent || true
-            
-                    # Safe restore: only rm prod AFTER confirming backup exists
-                    rm -rf "$PROD_PATH"
-                    cp -r "$LATEST_BACKUP" "$PROD_PATH"
-            
-                    # Restart PM2
-                    cd "$PROD_PATH"
-                    pm2 start dist/server.js --name assets-tool --silent
-                    sleep 2
-            
-                    echo "✅ Rollback completed from $LATEST_BACKUP"
-                  else
-                    echo "⚠️ No valid backup found — skipping rollback to avoid data loss"
-                    echo "⚠️ Prod directory preserved as-is"
-                  fi
-            
-            # ========== STEP 7: SLACK NOTIFICATION (OPTIONAL) ==========
-            - name: 📢 Slack notification
-              if: always() && vars.SLACK_WEBHOOK != ''
-              uses: slackapi/slack-github-action@v1.24.0
-              with:
-                webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-                payload: |
-                  {
-                    "text": "${{ job.status == 'success' && '✅ Deploy successful' || '❌ Deploy failed' }}",
-                    "blocks": [
-                      {
-                        "type": "section",
-                        "text": {
-                          "type": "mrkdwn",
-                          "text": "*${{ job.status == 'success' && '✅ Assets Management Deploy' || '❌ Deploy Failed' }}*\n`${{ github.ref_name }}` → `${{ github.sha }}`"
-                        }
-                      },
-                      {
-                        "type": "actions",
-                        "elements": [
-                          {
-                            "type": "button",
-                            "text": {
-                              "type": "plain_text",
-                              "text": "View App"
-                            },
-                            "url": "https://assets.mfwa.org"
-                          },
-                          {
-                            "type": "button",
-                            "text": {
-                              "type": "plain_text",
-                              "text": "View Logs"
-                            },
-                            "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                          }
-                        ]
-                      }
-                    ]
+      - name: Slack notification
+        if: always() && vars.SLACK_WEBHOOK != ''
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅ Deploy successful' || '❌ Deploy failed' }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*${{ job.status == 'success' && '✅ Assets Management' || '❌ Deploy Failed' }}*\n`${{ github.ref_name }}` → `${{ github.sha }}`"
                   }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    { "type": "button", "text": { "type": "plain_text", "text": "View App" }, "url": "https://assets.mfwa.org" },
+                    { "type": "button", "text": { "type": "plain_text", "text": "View Logs" }, "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" }
+                  ]
+                }
+              ]
+            }
