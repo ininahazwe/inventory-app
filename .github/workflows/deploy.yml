@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: 🚀 Complete Deploy - Assets Management
 
 on:
   push:
@@ -11,10 +11,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # ========== STEP 1: CHECKOUT ==========
       - name: Checkout code
         uses: actions/checkout@v5
 
+      # ========== STEP 2: DEPLOY TO PROD ==========
       - name: Deploy to cPanel
+        id: deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -30,12 +33,20 @@ jobs:
             # ========== DÉFINITIONS ==========
             REPO_PATH="/home/${{ secrets.SSH_USER }}/repositories/inventory-app"
             PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
+            BACKUP_PATH="/home/${{ secrets.SSH_USER }}/backups/assets-mfwa-$(date +%Y%m%d-%H%M%S)"
             
+            # ========== BACKUP CURRENT STATE ==========
+            echo "📦 Creating backup..."
+            mkdir -p "$(dirname "$BACKUP_PATH")"
+            cp -r "$PROD_PATH" "$BACKUP_PATH" 2>/dev/null || true
+            echo "✅ Backup created at $BACKUP_PATH"
+
             # ========== GIT PULL ==========
             echo "📥 Pulling latest code..."
             cd "$REPO_PATH"
             git pull origin main --quiet
-            echo "✅ Git pulled successfully"
+            COMMIT_HASH=$(git rev-parse --short HEAD)
+            echo "✅ Git pulled (commit: $COMMIT_HASH)"
 
             # ========== FRONTEND BUILD ==========
             echo "🎨 Building frontend..."
@@ -44,7 +55,7 @@ jobs:
             npm run build --quiet
             echo "✅ Frontend built"
 
-            # ========== INJECT ENVIRONMENT VARIABLES INTO dist/index.html ==========
+            # ========== INJECT ENVIRONMENT VARIABLES ==========
             echo "🔧 Injecting environment variables..."
             cat > /tmp/inject-env.js << 'INJECT_EOF'
             const fs = require('fs');
@@ -95,60 +106,30 @@ jobs:
             npm run build --quiet
             echo "✅ Backend compiled"
 
-            # ========== CLEANUP PROD (PHASE 1: REMOVE OLD) ==========
-            echo "🧹 Cleaning production directory..."
-            
-            # Stop PM2 process if exists
-            if pm2 list | grep -q "assets-tool"; then
-              echo "  🛑 Stopping assets-tool..."
-              pm2 stop assets-tool --silent || true
-            fi
-            
-            # Remove old process from PM2
-            if pm2 list | grep -q "assets-tool"; then
-              echo "  🗑️ Removing assets-tool from PM2..."
-              pm2 delete assets-tool --silent || true
-            fi
-            
-            # Clean directories
-            echo "  📁 Removing old dist, public, node_modules..."
+            # ========== STOP PM2 ==========
+            echo "🛑 Stopping PM2 process..."
+            pm2 stop assets-tool --silent || true
+            sleep 1
+            echo "✅ PM2 stopped"
+
+            # ========== DEPLOY BACKEND ==========
+            echo "📤 Deploying backend files..."
             rm -rf "$PROD_PATH/dist"
             rm -rf "$PROD_PATH/public"
             rm -rf "$PROD_PATH/node_modules"
             rm -rf "$PROD_PATH/logs"
             
-            echo "✅ Production cleaned"
-
-            # ========== DEPLOY BACKEND ==========
-            echo "📤 Deploying backend files..."
-            mkdir -p "$PROD_PATH"
             mkdir -p "$PROD_PATH/logs"
-            
             cp -r "$REPO_PATH/server/dist" "$PROD_PATH/dist"
             cp "$REPO_PATH/server/package.json" "$PROD_PATH/package.json"
             cp "$REPO_PATH/server/package-lock.json" "$PROD_PATH/package-lock.json"
-            
-            # NOTE: .env is PRESERVED from production (not overwritten)
-            # Production secrets are managed separately:
-            # GMAIL_USER=yves.cri@gmail.com
-            # GMAIL_APP_PASSWORD=tttq work ktww cfok
-            # (Manually updated on prod server)
-            #
-            # If you need to update .env from repo in future:
-            # Uncomment the lines below and update server/.env.production
-            # if [ -f "$REPO_PATH/server/.env.production" ]; then
-            #   cp "$REPO_PATH/server/.env.production" "$PROD_PATH/.env"
-            #   echo "✅ .env.production copied"
-            # fi
-            echo "ℹ️  .env preserved from production (not overwritten)"
-            
             echo "✅ Backend deployed"
 
             # ========== DEPLOY FRONTEND ==========
             echo "📤 Deploying frontend files..."
             mkdir -p "$PROD_PATH/public"
             cp -r "$REPO_PATH/client/dist"/* "$PROD_PATH/public/"
-            echo "✅ Frontend deployed to /public"
+            echo "✅ Frontend deployed"
 
             # ========== INSTALL DEPENDENCIES ==========
             echo "📦 Installing dependencies..."
@@ -156,8 +137,8 @@ jobs:
             npm install --omit=dev --quiet
             echo "✅ Dependencies installed"
 
-            # ========== PM2 START (ASSETS-TOOL) ==========
-            echo "🚀 Starting PM2 process (assets-tool)..."
+            # ========== PM2 START ==========
+            echo "🚀 Starting PM2 process..."
             pm2 start "$PROD_PATH/dist/server.js" \
               --name "assets-tool" \
               --env "$PROD_PATH/.env" \
@@ -169,24 +150,197 @@ jobs:
             
             sleep 2
             pm2 save --silent
-            echo "✅ PM2 process started and saved"
+            echo "✅ PM2 process started"
 
             # ========== VALIDATION ==========
             echo "🔍 Validating deployment..."
             
-            # Check directories
-            [ -d "$PROD_PATH/dist" ] && echo "  ✅ Backend dist exists" || echo "  ❌ Backend dist missing"
-            [ -d "$PROD_PATH/public" ] && echo "  ✅ Frontend build exists" || echo "  ❌ Frontend build missing"
-            [ -f "$PROD_PATH/package.json" ] && echo "  ✅ package.json exists" || echo "  ❌ package.json missing"
-            [ -f "$PROD_PATH/.env" ] && echo "  ✅ .env exists" || echo "  ❌ .env missing"
-            [ -f "$PROD_PATH/public/index.html" ] && grep -q "window.__ENV__" "$PROD_PATH/public/index.html" && echo "  ✅ Environment variables injected" || echo "  ❌ Environment variables NOT injected"
+            ERRORS=0
+            
+            # Check files
+            if [ -d "$PROD_PATH/dist" ]; then
+              echo "  ✅ Backend dist exists"
+            else
+              echo "  ❌ Backend dist missing"
+              ERRORS=$((ERRORS + 1))
+            fi
+            
+            if [ -d "$PROD_PATH/public" ]; then
+              echo "  ✅ Frontend build exists"
+            else
+              echo "  ❌ Frontend build missing"
+              ERRORS=$((ERRORS + 1))
+            fi
+            
+            if [ -f "$PROD_PATH/.env" ]; then
+              echo "  ✅ .env exists"
+            else
+              echo "  ❌ .env missing"
+              ERRORS=$((ERRORS + 1))
+            fi
+            
+            if grep -q "window.__ENV__" "$PROD_PATH/public/index.html"; then
+              echo "  ✅ Environment variables injected"
+            else
+              echo "  ❌ Environment variables NOT injected"
+              ERRORS=$((ERRORS + 1))
+            fi
             
             # Check PM2 status
-            echo "📊 PM2 Status:"
-            pm2 list | grep -E "assets-tool|Name" || echo "  ⚠️ assets-tool not found"
+            if pm2 list | grep -q "assets-tool.*online"; then
+              echo "  ✅ PM2 process online"
+            else
+              echo "  ❌ PM2 process not online"
+              ERRORS=$((ERRORS + 1))
+            fi
             
-            # Check logs for startup errors
-            echo "📋 Recent logs:"
-            [ -f "$PROD_PATH/logs/error.log" ] && tail -5 "$PROD_PATH/logs/error.log" || echo "  (no error logs yet)"
+            # Check logs for errors
+            if [ -f "$PROD_PATH/logs/error.log" ] && grep -q "Error\|error\|ECONNREFUSED" "$PROD_PATH/logs/error.log"; then
+              echo "  ❌ Errors in PM2 logs"
+              tail -10 "$PROD_PATH/logs/error.log"
+              ERRORS=$((ERRORS + 1))
+            else
+              echo "  ✅ No errors in logs"
+            fi
+            
+            # Exit with status
+            if [ $ERRORS -gt 0 ]; then
+              echo "❌ Validation failed with $ERRORS errors"
+              exit 1
+            else
+              echo "✅ All validations passed"
+            fi
 
-            echo "=== ✨ Deployment complete ==="
+            echo "=== ✨ Deployment complete (commit: $COMMIT_HASH) ==="
+
+      # ========== STEP 3: TEST HEALTH ENDPOINT ==========
+      - name: Test health endpoint
+        id: health_test
+        run: |
+          echo "Testing health endpoint..."
+          for i in {1..5}; do
+            RESPONSE=$(curl -s -w "\n%{http_code}" https://assets.mfwa.org/api/health)
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -1)
+          
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health endpoint OK: $BODY"
+              exit 0
+            else
+              echo "⏳ Attempt $i/5 failed (HTTP $HTTP_CODE), retrying..."
+              sleep 3
+            fi
+          done
+          
+          echo "❌ Health endpoint failed after 5 attempts"
+          exit 1
+
+      # ========== STEP 4: TEST FRONTEND ==========
+      - name: Test frontend
+        id: frontend_test
+        run: |
+          echo "Testing frontend..."
+          RESPONSE=$(curl -s https://assets.mfwa.org/)
+          
+          if echo "$RESPONSE" | grep -q "window.__ENV__"; then
+            echo "✅ Frontend loads with __ENV__"
+          else
+            echo "❌ Frontend missing __ENV__"
+            exit 1
+          fi
+          
+          if echo "$RESPONSE" | grep -q "Assets Management"; then
+            echo "✅ Frontend contains app title"
+          else
+            echo "❌ Frontend missing app title"
+            exit 1
+          fi
+
+      # ========== STEP 5: SUCCESS NOTIFICATION ==========
+      - name: 🎉 Success notification
+        if: success()
+        run: |
+          echo "=== ✨ DEPLOYMENT SUCCESSFUL ==="
+          echo "App: https://assets.mfwa.org"
+          echo "API: https://assets.mfwa.org/api/health"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+
+      # ========== STEP 6: FAILURE NOTIFICATION + ROLLBACK ==========
+      - name: ⚠️ Failure - Rollback
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "❌ Deployment failed, rolling back..."
+            
+            PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
+            BACKUP_PATH="/home/${{ secrets.SSH_USER }}/backups/assets-mfwa-$(date +%Y%m%d -d '1 second ago')-*"
+            
+            # Find the most recent backup
+            LATEST_BACKUP=$(ls -t $BACKUP_PATH 2>/dev/null | head -1)
+            
+            if [ -n "$LATEST_BACKUP" ]; then
+              echo "🔄 Restoring from backup: $LATEST_BACKUP"
+            
+              # Stop PM2
+              pm2 stop assets-tool --silent || true
+            
+              # Restore files
+              rm -rf "$PROD_PATH"
+              cp -r "$LATEST_BACKUP" "$PROD_PATH"
+            
+              # Restart PM2
+              cd "$PROD_PATH"
+              pm2 start dist/server.js --name assets-tool --env .env --silent
+              sleep 2
+            
+              echo "✅ Rollback completed"
+            else
+              echo "⚠️ No backup found for rollback"
+            fi
+
+      # ========== STEP 7: SLACK NOTIFICATION (OPTIONAL) ==========
+      - name: 📢 Slack notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅ Deploy successful' || '❌ Deploy failed' }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*${{ job.status == 'success' && '✅ Assets Management Deploy' || '❌ Deploy Failed' }}*\n`${{ github.ref_name }}` → `${{ github.sha }}`"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View App"
+                      },
+                      "url": "https://assets.mfwa.org"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Logs"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        if: vars.SLACK_WEBHOOK != null

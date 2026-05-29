@@ -10,7 +10,6 @@ import {
     getOutbidNotificationEmail,
     sendEmail
 } from "../services/gmailService";
-
 const router = Router();
 
 // Helper pour formater proprement les objets Date pour MySQL (YYYY-MM-DD HH:mm:ss)
@@ -386,6 +385,7 @@ router.post('/:id/bids', requireAuth, async (req: Request, res: Response) => {
         if (creatorEmail && creatorEmail !== bidderEmail) {
             const creatorEmail_payload = getCreatorNotificationEmail(
                 creatorEmail,
+                auction.creator_name || 'Creator',
                 auction.label,
                 bidderEmail,
                 bidAmount,
@@ -399,6 +399,7 @@ router.post('/:id/bids', requireAuth, async (req: Request, res: Response) => {
         // Email au bidder (confirmation)
         const bidderConfirmation = getBidderConfirmationEmail(
             bidderEmail,
+            (req as any).user?.name || 'Bidder',
             auction.label,
             bidAmount,
             auctionUrl
