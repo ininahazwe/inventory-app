@@ -188,3 +188,48 @@ export function getOutbidNotificationEmail(
         `,
     };
 }
+
+/**
+ * Email to the auction winner to notify them of their victory
+ */
+export function getWinnerNotificationEmail(
+    winnerEmail: string,
+    winnerName: string,
+    auctionLabel: string,
+    finalAmount: number,
+    auctionUrl: string
+): EmailPayload {
+    return {
+        to: winnerEmail,
+        subject: `🎉 Congratulations! You won the auction: ${auctionLabel}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: Arial, sans-serif;">
+              <h2 style="color: #4CAF50; text-align: center; margin-bottom: 24px;">🏆 Congratulations, ${winnerName}!</h2>
+              <p>Dear Bidder,</p>
+              <p>Great news! The auction has successfully ended, and <strong>you are the winning bidder</strong> for the following item:</p>
+              
+              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #8D86C9;">
+                  <p style="margin: 0 0 8px 0;"><strong>Item:</strong> ${auctionLabel}</p>
+                  <p style="margin: 0;"><strong>Your Winning Bid:</strong> ${finalAmount} GHS</p>
+              </div>
+              
+              <p>Please note that <strong>our team will contact you very shortly to finalize the transaction</strong> and arrange the next steps.</p>
+              <p>In the meantime, you can review the details of your won item by clicking the button below:</p>
+              
+              <div style="margin: 30px 0; text-align: center;">
+                  <a href="${auctionUrl}" style="
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #8D86C9;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                  ">View My Won Item</a>
+              </div>
+              
+              <p style="font-size: 13px; color: #6b7280; margin-top: 32px;">Thank you for your participation and happy bidding!</p>
+          </div>
+        `,
+    };
+}

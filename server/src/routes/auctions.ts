@@ -7,7 +7,7 @@ import { logAudit } from "./audit";
 import {
     getBidderConfirmationEmail,
     getCreatorNotificationEmail,
-    getOutbidNotificationEmail,
+    getOutbidNotificationEmail, getWinnerNotificationEmail,
     sendEmail
 } from "../services/gmailService";
 const router = Router();
@@ -438,5 +438,92 @@ router.post('/:id/bids', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/auctions/auto-close - Clôturer automatiquement les enchères expirées
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/auto-close', async (_req: Request, res: Response) => {
+    try {
+        logger.info("🔄 Reçu demande de clôture automatique des enchères expirées via Cron.");
+
+        // 1. Sélectionner les enchères actives dont la date de fin est dépassée
+        const [expiredAuctions] = await db.query(
+            `SELECT id, label FROM auctions WHERE status = 'active' AND end_date <= NOW()`
+        );
+
+        const auctionsToClose = expiredAuctions as any[];
+        let closedCount = 0;
+
+        if (auctionsToClose.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "Aucune enchère expirée à clôturer.",
+                closedCount: 0
+            });
+        }
+
+        // 2. Traiter chaque enchère expirée
+        for (const auction of auctionsToClose) {
+            // Trouver la mise la plus haute pour cette enchère
+            const [highestBids] = await db.query(
+                `SELECT b.user_uid, b.amount, u.email as bidder_email, u.name as bidder_name
+                 FROM bids b
+                          JOIN users u ON b.user_uid = u.uid
+                 WHERE b.auction_id = ?
+                 ORDER BY b.amount DESC LIMIT 1`,
+                [auction.id]
+            );
+
+            const bids = highestBids as any[];
+
+            if (bids.length > 0) {
+                const winnerUid = bids[0].user_uid;
+                const winnerEmail = bids[0].bidder_email;
+                const winnerName = bids[0].bidder_name || 'Winner';
+                const finalAmount = bids[0].amount;
+
+                // 1. Enregistrer le gagnant en base de données
+                await db.query(
+                    `UPDATE auctions SET status = 'ended', winner_uid = ? WHERE id = ?`,
+                    [winnerUid, auction.id]
+                );
+
+                // 2. Envoyer l'email en anglais uniquement au vainqueur
+                const auctionUrl = `${process.env.FRONTEND_URL || 'https://assets.mfwa.org'}/auctions/${auction.id}`;
+
+                const winnerEmailPayload = getWinnerNotificationEmail(
+                    winnerEmail,
+                    winnerName,
+                    auction.label,
+                    finalAmount,
+                    auctionUrl
+                );
+
+                sendEmail(winnerEmailPayload).catch(err =>
+                    logger.error(`Failed to send winner email for auction #${auction.id}`, err)
+                );
+
+                logger.info(`🏆 Auction #${auction.id} closed. Winner: ${winnerEmail} (${winnerUid})`);
+            } else {
+                // Clôture sans offres...
+                await db.query(`UPDATE auctions SET status = 'ended' WHERE id = ?`, [auction.id]);
+            }
+
+            closedCount++;
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${closedCount} enchère(s) clôturée(s) avec succès.`,
+            closedCount: closedCount
+        });
+
+    } catch (err) {
+        logger.error(`❌ Erreur lors du POST /auctions/auto-close:`, err as Error);
+        return res.status(500).json({
+            success: false,
+            error: "Erreur interne lors de la clôture des enchères"
+        });
+    }
+});
 
 export default router;
