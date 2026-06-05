@@ -1,3 +1,5 @@
+// src/main.tsx - COMPLET AVEC ROUTE PUBLIQUE
+
 import './env.ts';
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -10,7 +12,7 @@ import AssetDetailPage from "./pages/AssetDetailPage.tsx";
 import IncidentReportPage from "./pages/IncidentReportPage.tsx";
 import IncidentsPage from "./pages/IncidentsPage.tsx";
 import IncidentDetailPage from "./pages/IncidentDetailPage.tsx";
-import {ConfirmProvider} from "./components/ConfirmProvider.tsx";
+import { ConfirmProvider } from "./components/ConfirmProvider.tsx";
 import AuctionsPage from './pages/AuctionsPage';
 import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
 import AuctionDetailPage from "./pages/Auctiondetailpage.tsx";
@@ -18,8 +20,16 @@ import AssigneesPage from "./pages/AssigneesPage.tsx";
 import SuppliesPage from "./pages/SuppliesPage.tsx";
 import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
 import EditSupplyPage from "./pages/EditSupplyPage.tsx";
+import PublicAssetDetail from "./pages/PublicAssetPage.tsx";
 
 const router = createBrowserRouter([
+  // ✅ ROUTE PUBLIQUE - Accessible sans authentification
+  {
+    path: "/public/asset/:id",
+    element: <PublicAssetDetail />,
+  },
+
+  // ✅ ROUTES AUTHENTIFIÉES - Nécessitent AuthGateWrapper
   {
     element: <AuthGateWrapper />,
     children: [
@@ -37,8 +47,8 @@ const router = createBrowserRouter([
       { path: "/incidents", element: <IncidentsPage /> },
       { path: "/supplies/create", element: <CreateSupplyPage /> },
       { path: "/supplies/:id/edit", element: <EditSupplyPage /> },
-      { path: "/supplies", element: <SuppliesPage  /> },
-      { path: "/assignees", element: <AssigneesPage  /> },
+      { path: "/supplies", element: <SuppliesPage /> },
+      { path: "/assignees", element: <AssigneesPage /> },
     ],
   },
 ]);
