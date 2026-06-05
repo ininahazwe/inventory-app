@@ -3,6 +3,7 @@ import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
+import {AuthUser} from "../types/requests";
 
 const router = Router();
 
@@ -270,6 +271,67 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     } catch (err) {
         logger.error('PUT /assets/:id error:', err as Error);
         res.status(500).json({ error: 'Failed to update asset' });
+    }
+});
+
+// DELETE /api/assets/:id - Supprimer un asset
+// ✅ Requiert auth + admin
+
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = req.user as AuthUser;
+        const assetId = parseInt(req.params.id as string, 10);
+
+        if (isNaN(assetId)) {
+            return res.status(400).json({ error: 'Invalid asset ID' });
+        }
+
+        // 1. Vérifier que l'asset existe
+        const [assetData] = await db.query(
+            'SELECT id, label FROM assets WHERE id = ?',
+            [assetId]
+        );
+
+        if (!assetData || (assetData as any[]).length === 0) {
+            return res.status(404).json({ error: 'Asset not found' });
+        }
+
+        const asset = (assetData as any[])[0];
+
+        // 2. Vérifier qu'il n'y a pas d'enchères actives sur cet asset
+        const [auctionsCount] = await db.query(
+            'SELECT COUNT(*) as count FROM auctions WHERE asset_id = ? AND status = "active"',
+            [assetId]
+        );
+
+        const activeAuctionCount = (auctionsCount as any[])[0]?.count || 0;
+        if (activeAuctionCount > 0) {
+            return res.status(400).json({
+                error: `Cannot delete asset with ${activeAuctionCount} active auction(s)`
+            });
+        }
+
+        // 3. Supprimer l'asset
+        const [result] = await db.query('DELETE FROM assets WHERE id = ?', [assetId]);
+
+        // 4. Enregistrer l'audit
+        await logAudit(
+            user.uid.toString(),
+            'DELETE_ASSET',
+            `Deleted asset: ${asset.label}`,
+            assetId
+        );
+
+        logger.info(`Asset #${assetId} deleted by user ${user.uid}`, 'ASSETS');
+
+        return res.json({
+            success: true,
+            message: `Asset "${asset.label}" deleted successfully`
+        });
+
+    } catch (err) {
+        logger.error(`DELETE /assets/:id error:`, err as Error);
+        return res.status(500).json({ error: (err as Error).message });
     }
 });
 

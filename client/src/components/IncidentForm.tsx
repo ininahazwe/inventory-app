@@ -20,24 +20,20 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
     incidentType: 'damage',
     severity: 'medium',
     description: '',
-    location: '',
   });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.description.trim()) {
-      alert('Veuillez décrire l\'incident');
+      alert('Please describe the incident');
       return;
     }
 
@@ -46,8 +42,7 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
         assetId,
         formData.incidentType,
         formData.severity,
-        formData.description,
-        formData.location || undefined
+        formData.description
       );
       onCreated(incidentId);
     } catch (err) {
@@ -60,7 +55,7 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
       <div className="form-grid">
         {/* Asset Info - Read Only */}
         <div className="span-2">
-          <label className="label">Matériel concerné</label>
+          <label className="label">Asset</label>
           <div style={{
             padding: '10px 12px',
             backgroundColor: '#f4f1ee',
@@ -74,7 +69,7 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
 
         {/* Incident Type */}
         <div>
-          <label htmlFor="incidentType" className="label">Type d'incident</label>
+          <label htmlFor="incidentType" className="label">Incident Type</label>
           <select
             id="incidentType"
             name="incidentType"
@@ -82,17 +77,17 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
             onChange={handleChange}
             className="field"
           >
-            <option value="damage">Dommage</option>
-            <option value="loss">Perte</option>
-            <option value="malfunction">Dysfonctionnement</option>
-            <option value="theft">Vol</option>
-            <option value="other">Autre</option>
+            <option value="damage">Damage</option>
+            <option value="loss">Loss</option>
+            <option value="malfunction">Malfunction</option>
+            <option value="theft">Theft</option>
+            <option value="other">Other</option>
           </select>
         </div>
 
         {/* Severity */}
         <div>
-          <label htmlFor="severity" className="label">Sévérité</label>
+          <label htmlFor="severity" className="label">Severity</label>
           <select
             id="severity"
             name="severity"
@@ -100,34 +95,20 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
             onChange={handleChange}
             className="field"
           >
-            <option value="low">Faible</option>
-            <option value="medium">Moyen</option>
-            <option value="high">Élevé</option>
-            <option value="critical">Critique</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
           </select>
-        </div>
-
-        {/* Location */}
-        <div className="span-2">
-          <label htmlFor="location" className="label">Localisation (optionnel)</label>
-          <input
-            type="text"
-            id="location"
-            name="location"
-            placeholder="Office, Store, etc."
-            value={formData.location}
-            onChange={handleChange}
-            className="field"
-          />
         </div>
 
         {/* Description */}
         <div className="span-2">
-          <label htmlFor="description" className="label">Description de l'incident *</label>
+          <label htmlFor="description" className="label">Description *</label>
           <textarea
             id="description"
             name="description"
-            placeholder="Décrivez en détail ce qui s'est passé..."
+            placeholder="Describe what happened in detail..."
             value={formData.description}
             onChange={handleChange}
             className="field"
@@ -165,7 +146,7 @@ export const IncidentForm: React.FC<IncidentFormProps> = ({
           className="pill"
           disabled={loading}
         >
-          {loading ? 'Création...' : 'Signaler l\'incident'}
+          {loading ? 'Submitting...' : 'Report Incident'}
         </button>
       </div>
     </form>

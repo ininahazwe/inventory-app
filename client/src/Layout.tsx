@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { toasts, removeToast } = useToast();
 
-  const { isSuperAdmin } = usePermissions();
+  const { isAdmin } = usePermissions();
 
   useEffect(() => {
     if (token.get()) {
@@ -52,7 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="site-right">
             <Link to="/auctions" className="pill bordeaux">⏱︎ Auctions</Link>
-            {isSuperAdmin && (
+            {isAdmin && (
               <>
                 <Link to="/supplies" className="pill green">📋︎ Supplies</Link>
               </>

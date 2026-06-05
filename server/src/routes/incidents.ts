@@ -2,10 +2,16 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import {
+    sendEmail,
+    getIncidentCreatedAdminEmail,
+    getIncidentResolvedEmail,
+} from '../services/gmailService';
 
 const router = Router();
 
-// Middleware pour vérifier admin (utilisé dans les routes de modif)
+const FRONTEND_URL = process.env.FRONTEND_URL || '';
+
 const requireAdmin = (req: Request, res: Response, next: Function) => {
     const user = (req as any).user;
     if (!user || (user.role !== 'super_admin' && user.role !== 'admin')) {
@@ -31,9 +37,7 @@ router.patch('/:id/status', requireAuth, requireAdmin, async (req: Request, res:
         const resolvedAt = status === 'resolved' ? new Date() : null;
 
         const [result] = await db.query(
-            `UPDATE incidents
-             SET status = ?, resolved_at = ?
-             WHERE id = ?`,
+            `UPDATE incidents SET status = ?, resolved_at = ? WHERE id = ?`,
             [status, resolvedAt, id]
         );
 
@@ -42,6 +46,34 @@ router.patch('/:id/status', requireAuth, requireAdmin, async (req: Request, res:
         }
 
         logger.info(`Updated incident ${id} status to ${status}`, 'INCIDENTS');
+
+        // Email au déclarant quand l'incident est résolu
+        if (status === 'resolved' && resolvedAt) {
+            try {
+                const [rows] = await db.query(
+                    `SELECT i.reported_by_email, a.label as asset_label
+                     FROM incidents i
+                     LEFT JOIN assets a ON i.asset_id = a.id
+                     WHERE i.id = ?`,
+                    [id]
+                );
+                const incident = (rows as any[])[0];
+                if (incident?.reported_by_email) {
+                    const incidentUrl = `${FRONTEND_URL}/incidents/${id}`;
+                    const emailPayload = getIncidentResolvedEmail(
+                        incident.reported_by_email,
+                        incident.asset_label || `Asset #${id}`,
+                        resolvedAt,
+                        incidentUrl
+                    );
+                    await sendEmail(emailPayload);
+                }
+            } catch (emailErr) {
+                logger.error(`Failed to send resolved email for incident ${id}:`, emailErr as Error);
+                // Non-bloquant : on ne fail pas la requête pour ça
+            }
+        }
+
         return res.json({ success: true, status });
     } catch (err) {
         logger.error('PATCH /incidents/:id/status error:', err as Error);
@@ -59,7 +91,6 @@ router.patch('/:id/assign', requireAuth, requireAdmin, async (req: Request, res:
             return res.status(400).json({ error: 'assigned_to (email) required' });
         }
 
-        // Optionnel: vérifier que l'email existe dans la table users
         const [users] = await db.query('SELECT id FROM users WHERE email = ?', [assigned_to]);
         if (!(users as any[]).length) {
             return res.status(400).json({ error: 'User not found' });
@@ -131,7 +162,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
                 i.resolved_at,
                 i.notes
             FROM incidents i
-                     LEFT JOIN assets a ON i.asset_id = a.id
+            LEFT JOIN assets a ON i.asset_id = a.id
             ORDER BY i.created_at DESC
         `);
         logger.info(`Fetched incidents`, 'INCIDENTS');
@@ -161,7 +192,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
                 i.resolved_at,
                 i.notes
             FROM incidents i
-                     LEFT JOIN assets a ON i.asset_id = a.id
+            LEFT JOIN assets a ON i.asset_id = a.id
             WHERE i.id = ?
         `, [id]);
 
@@ -197,6 +228,37 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         const createdAt = new Date().toISOString();
 
         logger.info(`Created incident ${incidentId} for asset ${asset_id}`, 'INCIDENTS');
+
+        // Email aux super_admins
+        try {
+            const [adminRows] = await db.query(
+                `SELECT email FROM users WHERE role = 'super_admin'`
+            );
+            const adminEmails = (adminRows as any[]).map((u) => u.email).filter(Boolean);
+
+            if (adminEmails.length > 0) {
+                const [assetRows] = await db.query(
+                    `SELECT label FROM assets WHERE id = ?`,
+                    [asset_id]
+                );
+                const assetLabel = (assetRows as any[])[0]?.label || `Asset #${asset_id}`;
+                const incidentUrl = `${FRONTEND_URL}/incidents/${incidentId}`;
+
+                const emailPayload = getIncidentCreatedAdminEmail(
+                    adminEmails,
+                    email,
+                    assetLabel,
+                    incident_type || 'other',
+                    severity || 'medium',
+                    incidentUrl
+                );
+                await sendEmail(emailPayload);
+            }
+        } catch (emailErr) {
+            logger.error(`Failed to send admin notification for incident ${incidentId}:`, emailErr as Error);
+            // Non-bloquant
+        }
+
         return res.status(201).json({
             id: incidentId,
             asset_id,

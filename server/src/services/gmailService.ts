@@ -2,23 +2,19 @@
 import { google } from 'googleapis';
 import { logger } from "../middleware/logger";
 
-// Configuration des variables d'environnement (Identiques au premier projet)
 const SENDER_EMAIL = process.env.EMAIL_USER || '';
-const FRONTEND_URL = process.env.FRONTEND_URL || ''; // Ajuste si nécessaire pour l'URL des enchères
+const FRONTEND_URL = process.env.FRONTEND_URL || '';
 
-// Initialisation du client OAuth2 de Google
 const oAuth2Client = new google.auth.OAuth2(
     (process.env.CLIENT_ID || '').trim(),
     (process.env.CLIENT_SECRET || '').trim(),
     'https://developers.google.com/oauthplayground'
 );
 
-// Attribution du Refresh Token permanent
 oAuth2Client.setCredentials({
     refresh_token: (process.env.REFRESH_TOKEN || '').trim()
 });
 
-// Instance de l'API Gmail
 const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
 logger.info('Gmail REST API client initialized successfully', 'EMAIL');
@@ -29,15 +25,10 @@ interface EmailPayload {
     html: string;
 }
 
-/**
- * Envoi de mail via l'API REST de Google (Remplaçant de nodemailer)
- */
 export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     try {
-        // Gestion des envois groupés : si tableau, on joint par des virgules
         const formattedTo = Array.isArray(payload.to) ? payload.to.join(', ') : payload.to;
 
-        // Construction du message au format standard RFC 2822
         const messageParts = [
             `From: "The Auction Team" <${SENDER_EMAIL}>`,
             `To: ${formattedTo}`,
@@ -54,7 +45,6 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
 
         const message = messageParts.join('\r\n');
 
-        // Encodage Base64URL sécurisé requis par l'API Google
         const encodedMessage = Buffer.from(message)
             .toString('base64')
             .replace(/\+/g, '-')
@@ -76,9 +66,6 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     }
 }
 
-/**
- * Email à l'enchérisseur pour confirmer la mise
- */
 export function getBidderConfirmationEmail(
     bidderEmail: string,
     bidderName: string,
@@ -113,9 +100,6 @@ export function getBidderConfirmationEmail(
     };
 }
 
-/**
- * Email au créateur de l'enchère pour l'informer d'une nouvelle mise
- */
 export function getCreatorNotificationEmail(
     creatorEmail: string,
     creatorName: string,
@@ -152,9 +136,6 @@ export function getCreatorNotificationEmail(
     };
 }
 
-/**
- * Email aux autres enchérisseurs pour les informer d'une surenchère (Supporte les listes d'emails)
- */
 export function getOutbidNotificationEmail(
     emails: string | string[],
     auctionLabel: string,
@@ -189,9 +170,6 @@ export function getOutbidNotificationEmail(
     };
 }
 
-/**
- * Email to the auction winner to notify them of their victory
- */
 export function getWinnerNotificationEmail(
     winnerEmail: string,
     winnerName: string,
@@ -229,6 +207,115 @@ export function getWinnerNotificationEmail(
               </div>
               
               <p style="font-size: 13px; color: #6b7280; margin-top: 32px;">Thank you for your participation and happy bidding!</p>
+          </div>
+        `,
+    };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INCIDENT EMAILS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Email aux super_admins lors de la création d'un incident
+ */
+export function getIncidentCreatedAdminEmail(
+    adminEmails: string[],
+    reporterEmail: string,
+    assetLabel: string,
+    incidentType: string,
+    severity: string,
+    incidentUrl: string
+): EmailPayload {
+    const severityColor: Record<string, string> = {
+        low: '#22c55e',
+        medium: '#f59e0b',
+        high: '#ef4444',
+        critical: '#7f1d1d',
+    };
+    const color = severityColor[severity] || '#6b7280';
+
+    return {
+        to: adminEmails,
+        subject: `[Incident] New incident reported — ${assetLabel}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: Arial, sans-serif;">
+              <h2 style="color: #DC2626;">🚨 New Incident Reported</h2>
+              <p>A new incident has been declared and requires your attention.</p>
+
+              <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #DC2626;">
+                  <p style="margin: 0 0 8px 0;"><strong>Asset:</strong> ${assetLabel}</p>
+                  <p style="margin: 0 0 8px 0;"><strong>Type:</strong> ${incidentType}</p>
+                  <p style="margin: 0 0 8px 0;">
+                      <strong>Severity:</strong>
+                      <span style="color: ${color}; font-weight: bold; text-transform: uppercase;">${severity}</span>
+                  </p>
+                  <p style="margin: 0;"><strong>Reported by:</strong> ${reporterEmail}</p>
+              </div>
+
+              <div style="margin: 30px 0; text-align: center;">
+                  <a href="${incidentUrl}" style="
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #DC2626;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                  ">View Incident</a>
+              </div>
+
+              <p style="font-size: 13px; color: #6b7280;">Assets Management System</p>
+          </div>
+        `,
+    };
+}
+
+/**
+ * Email au déclarant quand son incident est marqué comme résolu
+ */
+export function getIncidentResolvedEmail(
+    reporterEmail: string,
+    assetLabel: string,
+    resolvedAt: Date,
+    incidentUrl: string
+): EmailPayload {
+    const formattedDate = resolvedAt.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+    return {
+        to: reporterEmail,
+        subject: `[Incident] Resolved — ${assetLabel}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: Arial, sans-serif;">
+              <h2 style="color: #16a34a;">✅ Incident Resolved</h2>
+              <p>The incident you reported has been marked as <strong>resolved</strong>.</p>
+
+              <div style="background-color: #f0fdf4; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #16a34a;">
+                  <p style="margin: 0 0 8px 0;"><strong>Asset:</strong> ${assetLabel}</p>
+                  <p style="margin: 0;"><strong>Resolved at:</strong> ${formattedDate}</p>
+              </div>
+
+              <p>You can review the full incident details using the button below.</p>
+
+              <div style="margin: 30px 0; text-align: center;">
+                  <a href="${incidentUrl}" style="
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #16a34a;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                  ">View Incident</a>
+              </div>
+
+              <p style="font-size: 13px; color: #6b7280;">Assets Management System</p>
           </div>
         `,
     };
