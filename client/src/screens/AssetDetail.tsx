@@ -132,7 +132,8 @@ export default function AssetDetail() {
   const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
   const qrDataUrl = useMemo(() => {
     if (!asset) return '';
-    const slug = asset.qr_slug || `asset/${asset.id}`;
+    //const slug = asset.qr_slug || `asset/${asset.id}`;
+    const slug = asset.qr_slug || `public/asset/${asset.id}`;
     return `${siteUrl}/${slug}`;
   }, [asset, siteUrl]);
 
