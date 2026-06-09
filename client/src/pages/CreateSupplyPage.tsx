@@ -57,7 +57,7 @@ export default function CreateSupplyPage() {
 
   const loadUsers = async () => {
     try {
-      const { data } = await api.get<AssignableUser[]>('/users/assignable');
+      const { data } = await api.get<AssignableUser[]>('/users/all');
       if (Array.isArray(data)) {
         setUsers(data);
         setFilteredUsers(data);

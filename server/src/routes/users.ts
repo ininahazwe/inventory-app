@@ -103,4 +103,26 @@ router.get('/assignable', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// ✅ GET /users/all - Retourne TOUS les utilisateurs (sans filtre rôle)
+router.get('/all', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const { q } = req.query;
+        let query = 'SELECT id, email, role FROM users ORDER BY email ASC LIMIT 100';
+        const params: any[] = [];
+
+        // Support recherche par email
+        if (q) {
+            query = 'SELECT id, email, role FROM users WHERE email LIKE ? ORDER BY email ASC LIMIT 100';
+            params.push(`%${q}%`);
+        }
+
+        const [results] = await db.query(query, params);
+        logger.info(`Fetched all users (no role filter)`, 'USERS');
+        return res.json(results || []);
+    } catch (err) {
+        logger.error('GET /users/all error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 export default router;
