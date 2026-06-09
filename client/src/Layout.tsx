@@ -47,7 +47,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="site-center">
-            <span className="site-title">IT INVENTORY</span>
+            <span className="site-title">ASSET & SUPPLY INVENTORY</span>
           </div>
 
           <div className="site-right">
