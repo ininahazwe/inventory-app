@@ -335,4 +335,31 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/assets/:id/overview - Route PUBLIQUE pour le scan de QR Code (Sans requireAuth)
+router.get('/:id/overview', async (req: Request, res: Response) => {
+    try {
+        const assetId = req.params.id;
+
+        // On ne sélectionne QUE les colonnes non-sensibles pour le public
+        const [assetData] = await db.query(
+            `SELECT a.id, a.label, a.serial_no, a.status, a.funder, a.created_at,
+                    c.name as category_name
+             FROM assets a
+             LEFT JOIN categories c ON a.category_id = c.id
+             WHERE a.id = ?`,
+            [assetId]
+        );
+
+        if (!assetData || (assetData as any[]).length === 0) {
+            return res.status(404).json({ error: 'Asset not found' });
+        }
+
+        const asset = (assetData as any[])[0];
+        return res.json(asset);
+
+    } catch (error) {
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 export default router;
