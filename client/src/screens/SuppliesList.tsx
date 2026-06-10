@@ -251,7 +251,7 @@ export const SuppliesList: React.FC = () => {
                 <th style={{ padding: '12px', textAlign: 'left' }}>Purchase Date</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Quantity</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Remaining</th>
-                <th style={{ padding: '12px', textAlign: 'left' }}>Cost</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Cost (GH₵)</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Brand</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Receiver</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
@@ -288,7 +288,7 @@ export const SuppliesList: React.FC = () => {
                   <td style={{ padding: '12px', textAlign: 'center', fontWeight: 500, color: getRemaining(supply.id) === 0 ? '#991b1b' : 'var(--ink)' }}>
                     {getRemaining(supply.id)}
                   </td>
-                  <td style={{ padding: '12px', fontWeight: 500 }}>GH₵ {parseFloat(String(supply.cost)).toFixed(2)}</td>
+                  <td style={{ padding: '12px', fontWeight: 500 }}>{parseFloat(String(supply.cost)).toFixed(2)}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
                     {supply.brand || '—'}
                   </td>
