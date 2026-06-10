@@ -21,7 +21,7 @@ import SuppliesPage from "./pages/SuppliesPage.tsx";
 import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
 import EditSupplyPage from "./pages/EditSupplyPage.tsx";
 import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
-import PublicAssetDetail from "./pages/PublicAssetDetail.tsx";
+import PublicAssetPage from "./pages/PublicAssetPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -30,7 +30,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/public/asset/:id",
-    element: <PublicAssetDetail />,
+    element: <PublicAssetPage />,
   },
 
   // ✅ ROUTES AUTHENTIFIÉES - Nécessitent AuthGateWrapper
