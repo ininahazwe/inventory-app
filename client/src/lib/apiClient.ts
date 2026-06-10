@@ -194,6 +194,7 @@ export const auth = {
 
       console.log('Initializing Google Sign-In...');
 
+      // ─── Dans export const auth = { initGoogle: ... } ───
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: async (response: { credential?: string }) => {
@@ -217,7 +218,12 @@ export const auth = {
 
             console.log('Auth successful, redirecting...');
             token.set(data.token);
-            window.location.href = '/';
+
+            // 🌟 CHANGEMENT ICI : On récupère l'URL mémorisée ou on va à la racine par défaut
+            const redirectTo = localStorage.getItem('after_login_redirect') || '/';
+            localStorage.removeItem('after_login_redirect'); // On nettoie le localStorage
+
+            window.location.href = redirectTo; // Redirection dynamique
           } catch (err) {
             console.error('Sign-in error:', err);
           }
