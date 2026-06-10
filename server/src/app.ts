@@ -9,6 +9,7 @@ import incidentsRoutes from './routes/incidents';
 import usersRoutes from './routes/users';
 import rpcRoutes from './routes/rpc';
 import suppliesRoutes from './routes/supplies';
+import supplyAssignmentsRoutes from './routes/supplyAssignments';
 import auditRoutes from './routes/audit';
 import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
@@ -39,6 +40,7 @@ export function createApp() {
     app.use('/api/categories', categoriesRoutes);
     app.use('/api/assets', assetsRoutes);
     app.use('/api/assignments', assignmentsRoutes);
+    app.use('/api/supply-assignments', supplyAssignmentsRoutes);
     app.use('/api/incidents', incidentsRoutes);
     app.use('/api/users', usersRoutes);
     app.use('/api/rpc', rpcRoutes);

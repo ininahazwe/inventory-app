@@ -1,6 +1,7 @@
 // src/screens/SuppliesList.tsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/apiClient';
 import { useSupplies } from '../hooks/useSupplies';
 import { useSupplyAssignments } from '../hooks/useSupplyAssignments';
 import { AssignSupplyModal } from '../components/AssignSupplyModal';
@@ -21,10 +22,36 @@ export const SuppliesList: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSupplyId, setDeleteSupplyId] = useState<number | null>(null);
   const [deleteSupplyName, setDeleteSupplyName] = useState<string>('');
+  const [assignments, setAssignments] = useState<any[]>([]);
 
   useEffect(() => {
     fetchSupplies();
+    loadAssignments();
   }, [fetchSupplies]);
+
+  // ✅ Load assignments to calculate remaining stock
+  const loadAssignments = async () => {
+    try {
+      const { data } = await api.get<any[]>('/supply-assignments?status=active');
+      if (Array.isArray(data)) {
+        setAssignments(data);
+      }
+    } catch (err) {
+      console.error('Failed to load assignments:', err);
+    }
+  };
+
+  // ✅ Calculate remaining stock
+  const getRemaining = (supplyId: number): number => {
+    const supply = supplies.find(s => s.id === supplyId);
+    if (!supply) return 0;
+
+    const assignedQty = assignments
+      .filter(a => a.supply_id === supplyId && a.status === 'active')
+      .reduce((sum, a) => sum + (a.quantity_assigned || 0), 0);
+
+    return Math.max(0, supply.quantity - assignedQty);
+  };
 
   const openDeleteConfirm = (id: number, name: string) => {
     setDeleteSupplyId(id);
@@ -223,6 +250,7 @@ export const SuppliesList: React.FC = () => {
                 <th style={{ padding: '12px', textAlign: 'left' }}>Category</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Purchase Date</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Quantity</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Remaining</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Cost</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Brand</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Receiver</th>
@@ -257,6 +285,9 @@ export const SuppliesList: React.FC = () => {
                     {formatDate(supply.purchase_date)}
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{supply.quantity}</td>
+                  <td style={{ padding: '12px', textAlign: 'center', fontWeight: 500, color: getRemaining(supply.id) === 0 ? '#991b1b' : 'var(--ink)' }}>
+                    {getRemaining(supply.id)}
+                  </td>
                   <td style={{ padding: '12px', fontWeight: 500 }}>GH₵ {parseFloat(String(supply.cost)).toFixed(2)}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
                     {supply.brand || '—'}

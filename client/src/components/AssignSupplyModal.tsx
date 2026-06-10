@@ -43,9 +43,40 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // ✅ Fetch assignments to calculate available stock
+  const [assignments, setAssignments] = useState<any[]>([]);
+
   useEffect(() => {
     loadUsers();
+    loadAssignments();
   }, []);
+
+  // ✅ Load all assignments to calculate stock
+  const loadAssignments = async () => {
+    try {
+      const { data } = await api.get<any[]>('/supply-assignments?status=active');
+      if (Array.isArray(data)) {
+        setAssignments(data);
+      }
+    } catch (err) {
+      console.error('Failed to load assignments:', err);
+    }
+  };
+
+  // ✅ Calculate available stock for a supply
+  const getAvailableStock = (supplyId: number): { assigned: number; available: number } => {
+    const supply = supplies.find(s => s.id === supplyId);
+    if (!supply) return { assigned: 0, available: 0 };
+
+    const assignedQty = assignments
+      .filter(a => a.supply_id === supplyId && a.status === 'active')
+      .reduce((sum, a) => sum + (a.quantity_assigned || 0), 0);
+
+    return {
+      assigned: assignedQty,
+      available: Math.max(0, supply.quantity - assignedQty),
+    };
+  };
 
   useEffect(() => {
     if (!supplySearch.trim()) {
@@ -83,6 +114,14 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
 
     if (!selectedSupply || !selectedUser || !assignedDate || !quantity) {
       setError('All fields are required');
+      return;
+    }
+
+    const stock = getAvailableStock(selectedSupply.id);
+    const qtyRequested = parseInt(quantity);
+
+    if (qtyRequested > stock.available) {
+      setError(`Only ${stock.available} units available. You requested ${qtyRequested}.`);
       return;
     }
 
@@ -181,34 +220,38 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
                 maxHeight: 150,
                 overflowY: 'auto',
               }}>
-                {filteredSupplies.map(supply => (
-                  <div
-                    key={supply.id}
-                    onClick={() => {
-                      setSelectedSupply(supply);
-                      setSupplySearch('');
-                    }}
-                    style={{
-                      padding: '8px',
-                      borderBottom: '1px solid #eee',
-                      cursor: 'pointer',
-                      background: selectedSupply?.id === supply.id ? '#e3f2fd' : 'white',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor =
-                        selectedSupply?.id === supply.id ? '#e3f2fd' : '#f9f9f9';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor =
-                        selectedSupply?.id === supply.id ? '#e3f2fd' : 'white';
-                    }}
-                  >
-                    <strong>{supply.name}</strong>
-                    <div style={{ fontSize: 12, color: '#666' }}>
-                      In stock: {supply.quantity}
+                {filteredSupplies.map(supply => {
+                  const stock = getAvailableStock(supply.id);
+                  return (
+                    <div
+                      key={supply.id}
+                      onClick={() => {
+                        setSelectedSupply(supply);
+                        setSupplySearch('');
+                      }}
+                      style={{
+                        padding: '8px',
+                        borderBottom: '1px solid #eee',
+                        cursor: stock.available === 0 ? 'not-allowed' : 'pointer',
+                        background: selectedSupply?.id === supply.id ? '#e3f2fd' : 'white',
+                        opacity: stock.available === 0 ? 0.5 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          selectedSupply?.id === supply.id ? '#e3f2fd' : stock.available === 0 ? 'white' : '#f9f9f9';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          selectedSupply?.id === supply.id ? '#e3f2fd' : 'white';
+                      }}
+                    >
+                      <strong>{supply.name}</strong>
+                      <div style={{ fontSize: 12, color: '#666' }}>
+                        Total: {supply.quantity} | Assigned: {stock.assigned} | Available: {stock.available}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {selectedSupply && (
@@ -218,7 +261,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
                 borderRadius: 4,
                 fontSize: 14,
               }}>
-                ✓ {selectedSupply.name} (Available: {selectedSupply.quantity})
+                ✓ {selectedSupply.name} — Total: {selectedSupply.quantity} | Available: {getAvailableStock(selectedSupply.id).available}
               </div>
             )}
           </div>
@@ -231,7 +274,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
             <input
               type="number"
               min="1"
-              max={selectedSupply?.quantity || 1}
+              max={selectedSupply ? getAvailableStock(selectedSupply.id).available : 1}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               style={{
@@ -242,6 +285,11 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
                 boxSizing: 'border-box',
               }}
             />
+            {selectedSupply && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                Available: {getAvailableStock(selectedSupply.id).available}
+              </div>
+            )}
           </div>
 
           {/* User Selection */}
