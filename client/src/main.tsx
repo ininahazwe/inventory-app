@@ -20,14 +20,14 @@ import AssigneesPage from "./pages/AssigneesPage.tsx";
 import SuppliesPage from "./pages/SuppliesPage.tsx";
 import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
 import EditSupplyPage from "./pages/EditSupplyPage.tsx";
-import PublicAssetDetail from "./pages/PublicAssetDetail.tsx";
-
+import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
+//import PublicAssetDetail from "./pages/PublicAssetDetail.tsx";
 
 const router = createBrowserRouter([
   // ✅ ROUTE PUBLIQUE - Accessible sans authentification
   {
-    path: "/public/asset/:id",
-    element: <PublicAssetDetail />,
+    path: "/:id/public",
+    element: <LegacyQrRedirect />,
   },
 
   // ✅ ROUTES AUTHENTIFIÉES - Nécessitent AuthGateWrapper

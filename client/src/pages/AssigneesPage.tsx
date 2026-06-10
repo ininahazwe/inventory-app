@@ -3,6 +3,7 @@ import React from "react";
 import { useEffect, useMemo, useState } from 'react';
 import { rpc } from '../lib/apiClient';
 import Layout from "../Layout.tsx";
+import Modal from "../components/Modal.tsx";
 
 const PAGE_SIZE = 10;
 
@@ -19,6 +20,9 @@ export default function AssigneesPage() {
   const [newRole, setNewRole] = useState<'user' | 'admin' | 'assignee'>('user');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
   const load = useMemo(() => async () => {
     setLoading(true);
@@ -53,10 +57,22 @@ export default function AssigneesPage() {
     else { setEditingUser(null); await load(); }
   };
 
-  const handleDeleteUser = async (userId: string, email: string) => {
-    if (!confirm(`Supprimer ${email} ? Action irréversible.`)) return;
-    const { error } = await rpc('delete_user', { p_user_id: userId });
+  const handleDeleteUser = (user: User) => {
+    setUserToDelete(user);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+    const { error } = await rpc('delete_user', { p_user_id: userToDelete.id });
     if (error) setError(error); else await load();
+    setDeleteConfirmOpen(false);
+    setUserToDelete(null);
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmOpen(false);
+    setUserToDelete(null);
   };
 
   // Filtrer et paginer
@@ -152,7 +168,7 @@ export default function AssigneesPage() {
                   ) : (
                     <>
                       <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user.id, user.email)}>Delete</button>
+                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user)}>Delete</button>
                     </>
                   )}
                 </div>
@@ -209,6 +225,13 @@ export default function AssigneesPage() {
           </div>
         )}
       </div>
+      <Modal open={deleteConfirmOpen} onClose={closeDeleteConfirm} title={`Delete: ${userToDelete?.email}`}>
+        <p>Are you sure you want to delete this user? This action cannot be undone.</p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="pill" style={{ background: '#bbb' }} onClick={closeDeleteConfirm}>Cancel</button>
+          <button className="pill" style={{ background: '#991b1b', color: '#fff' }} onClick={confirmDelete}>Delete</button>
+        </div>
+      </Modal>
     </Layout>
   );
 }

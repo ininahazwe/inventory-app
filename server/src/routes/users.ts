@@ -13,12 +13,36 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [users] = await db.query(
-            'SELECT id, email, role, created_at FROM users ORDER BY email'
+            'SELECT id, email, role, created_at, created_by FROM users ORDER BY email'
         );
         logger.info(`Fetched all users`, 'USERS');
         return res.json(users || []);
     } catch (err) {
         logger.error('GET /users error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+router.post('/', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { p_email, p_role } = req.body;
+        if (!p_email || !p_role) {
+            return res.status(400).json({ error: 'p_email et p_role requis' });
+        }
+
+        await db.query(
+            'INSERT INTO users (email, role, created_by) VALUES (?, ?, ?)',
+            [p_email, p_role, user.email]
+        );
+        logger.info(`User ${p_email} added with role ${p_role}`, 'USERS');
+        return res.json({ success: true });
+    } catch (err) {
+        logger.error('POST /users error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
 });
@@ -121,6 +145,45 @@ router.get('/all', requireAuth, async (req: Request, res: Response) => {
         return res.json(results || []);
     } catch (err) {
         logger.error('GET /users/all error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+router.post('/role', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { p_user_id, p_new_role } = req.body;
+        if (!p_user_id || !p_new_role) {
+            return res.status(400).json({ error: 'p_user_id et p_new_role requis' });
+        }
+
+        await db.query('UPDATE users SET role = ? WHERE id = ?', [p_new_role, p_user_id]);
+        logger.info(`Role changed for user ${p_user_id} → ${p_new_role}`, 'USERS');
+        return res.json({ success: true });
+    } catch (err) {
+        logger.error('PUT /users/change_role error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+router.post('/delete', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { p_user_id } = req.body;
+        if (!p_user_id) return res.status(400).json({ error: 'p_user_id requis' });
+
+        await db.query('DELETE FROM users WHERE id = ?', [p_user_id]);
+        logger.info(`User ${p_user_id} deleted`, 'USERS');
+        return res.json({ success: true });
+    } catch (err) {
+        logger.error('POST /users/delete error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
 });
