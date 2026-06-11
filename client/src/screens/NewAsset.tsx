@@ -41,8 +41,9 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
     setUploading(true);
     setUploadError(null);
     try {
-      const cloudName = (window as any).__ENV__?.VITE_CLOUDINARY_CLOUD_NAME || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = (window as any).__ENV__?.VITE_CLOUDINARY_UPLOAD_PRESET || import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      const cloudName = (window as any).__ENV__?.VITE_CLOUDINARY_CLOUD_NAME ?? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = (window as any).__ENV__?.VITE_CLOUDINARY_UPLOAD_PRESET ?? import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      console.log('cloudName:', (window as any).__ENV__?.VITE_CLOUDINARY_CLOUD_NAME);
       if (!cloudName || !uploadPreset) throw new Error('Cloudinary config missing');
       const fd = new FormData();
       fd.append('file', files[0]);
