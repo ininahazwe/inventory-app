@@ -35,9 +35,10 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'p_email et p_role requis' });
         }
 
+        const { v4: uuidv4 } = require('uuid');
         await db.query(
-            'INSERT INTO users (email, role, created_by) VALUES (?, ?, ?)',
-            [p_email, p_role, user.email]
+            'INSERT INTO users (id, email, role, created_by) VALUES (?, ?, ?, ?)',
+            [uuidv4(), p_email, p_role, user.email]
         );
         logger.info(`User ${p_email} added with role ${p_role}`, 'USERS');
         return res.json({ success: true });

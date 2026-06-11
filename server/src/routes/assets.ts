@@ -113,6 +113,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
                 a.notes,
                 a.funder,
                 a.qr_slug,
+                a.photo_url,
                 a.created_at,
                 asn.assignee_name,
                 asn.assignee_email,
@@ -144,7 +145,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 // POST /api/assets - Create new asset
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { label, serial_no, category_id, status, funder, purchase_price } = req.body;
+        const { label, serial_no, category_id, status, funder, purchase_price, photo_url } = req.body;
         const user = (req as any).user;
 
         if (!label) {
@@ -152,7 +153,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO assets (label, serial_no, category_id, status, funder, purchase_price)
+            `INSERT INTO assets (label, serial_no, category_id, status, funder, purchase_price, photo_url )
              VALUES (?, ?, ?, ?, ?, ?)`,
             [label, serial_no || null, category_id || null, status || 'in_stock', funder || null, purchase_price || null]
         );
@@ -199,6 +200,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
         purchase_price,
         supplier,
         funder,
+        photo_url,
         warranty_end,
         notes
     } = req.body;
@@ -239,6 +241,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
                 purchase_price = ?,
                 supplier = ?,
                 funder = ?,
+                photo_url = ?,
                 warranty_end = ?,
                 notes = ?
             WHERE id = ?
@@ -252,6 +255,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
             parsedPrice,
             supplier || null,
             funder || null,
+            photo_url || null,
             cleanWarrantyEnd,
             notes || null,
             assetId

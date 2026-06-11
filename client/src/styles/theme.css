@@ -81,6 +81,8 @@ tbody {background: #f7f7f7}
 .modal{
     width:auto; min-width: 34vw; max-width:92vw; background:#fff; border-radius: var(--radius-xl);
     padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    overflow-y: scroll;
+    height: 100vh;
 }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
 .modal-close{ background:transparent; border:0; font-size:22px; line-height:1; cursor:pointer; color:var(--muted) }

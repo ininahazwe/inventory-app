@@ -25,6 +25,7 @@ type Asset = {
   supplier: string | null;
   funder: string | null;
   warranty_end: string | null;
+  photo_url: string | null;
   qr_slug: string | null;
   notes: string | null;
   created_at: string;
@@ -110,6 +111,9 @@ export default function AssetDetail() {
   const [edWarrantyEnd, setEdWarrantyEnd]   = useState('');
   const [edNotes, setEdNotes]               = useState('');
   const [savingEdit, setSavingEdit]         = useState(false);
+  const [edPhotoUrl, setEdPhotoUrl]     = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [errEdit, setErrEdit]               = useState<string | null>(null);
 
   const sweep: Variants = {
@@ -242,6 +246,8 @@ export default function AssetDetail() {
     setEdNotes(asset.notes ?? '');
     setErrEdit(null);
     setEditOpen(true);
+    setEdPhotoUrl(asset.photo_url ?? null);
+    setPhotoUploadError(null);
   };
 
   async function fetchCategoryOptions(q: string) {
@@ -256,6 +262,28 @@ export default function AssetDetail() {
     if (error) throw new Error(error);
     return data?.id ?? null;
   }
+
+  const handleEditPhotoUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setPhotoUploading(true);
+    setPhotoUploadError(null);
+    try {
+      const cloudName = (window as any).__ENV__?.VITE_CLOUDINARY_CLOUD_NAME || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = (window as any).__ENV__?.VITE_CLOUDINARY_UPLOAD_PRESET || import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      if (!cloudName || !uploadPreset) throw new Error('Cloudinary config missing');
+      const fd = new FormData();
+      fd.append('file', files[0]);
+      fd.append('upload_preset', uploadPreset);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      setEdPhotoUrl(data.secure_url);
+    } catch (e) {
+      setPhotoUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,7 +314,8 @@ export default function AssetDetail() {
         supplier: edSupplier.trim() || null,
         funder: edFunder.trim() || null,
         warranty_end: edWarrantyEnd || null,
-        notes: edNotes.trim() || null
+        notes: edNotes.trim() || null,
+        photo_url: edPhotoUrl
       });
 
       if (error) throw new Error(error);
@@ -341,6 +370,11 @@ export default function AssetDetail() {
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {asset.status !== 'assigned' ? <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
               </div>
+              {asset.photo_url && (
+                <div style={{ marginTop: 12 }}>
+                  <img src={asset.photo_url} alt={asset.label} style={{ maxWidth: 200, maxHeight: 200, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line)' }} />
+                </div>
+              )}
             </div>
           </section>
 
@@ -404,6 +438,18 @@ export default function AssetDetail() {
             <div><label className="label">Supplier</label><input className="field" value={edSupplier} onChange={e => setEdSupplier(e.target.value)} /></div>
             <div><label className="label">Funder</label><input className="field" value={edFunder} onChange={e => setEdFunder(e.target.value)} /></div>
             <div className="span-2"><label className="label">Notes</label><textarea className="field" rows={3} value={edNotes} onChange={e => setEdNotes(e.target.value)} /></div>
+            <div className="span-2">
+              <label className="label">Photo (optional)</label>
+              <input type="file" accept="image/*" onChange={e => handleEditPhotoUpload(e.target.files)} disabled={photoUploading} />
+              {photoUploading && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>Uploading…</p>}
+              {photoUploadError && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'crimson' }}>❌ {photoUploadError}</p>}
+              {edPhotoUrl && (
+                <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+                  <img src={edPhotoUrl} alt="Preview" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--line)' }} />
+                  <button type="button" onClick={() => setEdPhotoUrl(null)} style={{ position: 'absolute', top: -8, right: -8, width: 22, height: 22, borderRadius: '50%', background: '#c00', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                </div>
+              )}
+            </div>
             {errEdit && <p className="span-2" style={{ color: 'crimson' }}>{errEdit}</p>}
             <div className="span-2 modal-actions">
               <button type="button" className="pill pill--muted" onClick={() => setEditOpen(false)} disabled={savingEdit}>Cancel</button>

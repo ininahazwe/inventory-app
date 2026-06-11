@@ -19,6 +19,10 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
   const [saving, setSaving]             = useState(false);
   const [err, setErr]                   = useState<string | null>(null);
 
+  const [photoUrl, setPhotoUrl]         = useState<string | null>(null);
+  const [uploading, setUploading]       = useState(false);
+  const [uploadError, setUploadError]   = useState<string | null>(null);
+
   async function fetchCategoryOptions(q: string) {
     const { data } = await api.get<{ name: string }[]>(`/categories${q ? `?q=${encodeURIComponent(q)}` : ''}`);
     return (data ?? []).map(d => d.name);
@@ -32,6 +36,28 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
     return data?.id ?? null;
   }
 
+  const handlePhotoUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const cloudName = (window as any).__ENV__?.VITE_CLOUDINARY_CLOUD_NAME || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = (window as any).__ENV__?.VITE_CLOUDINARY_UPLOAD_PRESET || import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      if (!cloudName || !uploadPreset) throw new Error('Cloudinary config missing');
+      const fd = new FormData();
+      fd.append('file', files[0]);
+      fd.append('upload_preset', uploadPreset);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      setPhotoUrl(data.secure_url);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setSaving(true);
     try {
@@ -43,11 +69,13 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
         purchase_price: purchasePrice ? Number(purchasePrice) : null,
         supplier: supplier.trim() || null, funder: funder || null,
         warranty_end: warrantyEnd || null, notes: notes.trim() || null,
+        photo_url: photoUrl,
       });
       if (error) throw new Error(error);
       if (!inserted?.id) throw new Error('ID non retourné');
       setLabel(''); setSerial(''); setCategoryName(''); setPurchasedAt('');
       setPurchasePrice(''); setSupplier(''); setFunder(''); setWarrantyEnd(''); setNotes('');
+      setPhotoUrl(null);
       onCreated?.();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Erreur lors de l'enregistrement.");
@@ -67,6 +95,20 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
       <div className="span-2"><label className="label">Funder (optional)</label><input className="field" value={funder} onChange={e => setFunder(e.target.value)} placeholder="e.g., EU" /></div>
       <div className="span-2"><label className="label">Supplier</label><input className="field" value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g., ABC Ltd." /></div>
       <div className="span-2"><label className="label">Notes</label><textarea className="field" rows={3} value={notes} onChange={e => setNotes(e.target.value)} /></div>
+
+      <div className="span-2">
+        <label className="label">Photo (optional)</label>
+        <input type="file" accept="image/*" onChange={e => handlePhotoUpload(e.target.files)} disabled={uploading} />
+        {uploading && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>Uploading…</p>}
+        {uploadError && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'crimson' }}>❌ {uploadError}</p>}
+        {photoUrl && (
+          <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+            <img src={photoUrl} alt="Preview" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--line)' }} />
+            <button type="button" onClick={() => setPhotoUrl(null)} style={{ position: 'absolute', top: -8, right: -8, width: 22, height: 22, borderRadius: '50%', background: '#c00', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+          </div>
+        )}
+      </div>
+
       {err && <p className="span-2" style={{ color: 'crimson' }}>{err}</p>}
       <div className="span-2 modal-actions">
         {onCancel && <button type="button" className="pill pill--muted" onClick={onCancel}>Cancel</button>}
