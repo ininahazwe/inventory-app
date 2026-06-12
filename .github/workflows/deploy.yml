@@ -6,6 +6,9 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  VITE_CLOUDINARY_CLOUD_NAME: ${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}
+  VITE_CLOUDINARY_UPLOAD_PRESET: ${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}
+  VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
 jobs:
   deploy:
@@ -24,6 +27,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           timeout: 600s
           command_timeout: 600s
+          envs: VITE_GOOGLE_CLIENT_ID,VITE_CLOUDINARY_CLOUD_NAME,VITE_CLOUDINARY_UPLOAD_PRESET
           script: |
             set -e
             echo "=== Starting deployment ==="
@@ -69,11 +73,9 @@ jobs:
             fs.writeFileSync(distIndexPath, html, 'utf-8');
             console.log('Environment injected');
             INJECT_EOF
-            VITE_GOOGLE_CLIENT_ID="${{ secrets.VITE_GOOGLE_CLIENT_ID }}" \
-            VITE_CLOUDINARY_CLOUD_NAME="${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" \
-            VITE_CLOUDINARY_UPLOAD_PRESET="${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" \
-            VITE_API_URL="https://assets.mfwa.org/api" \
-            node /tmp/inject-env.js
+            
+            # Correction ici : On passe juste VITE_API_URL, les autres sont déjà connues par SSH !
+            VITE_API_URL="https://assets.mfwa.org/api" node /tmp/inject-env.js
             echo "✅ Environment injected"
 
             echo "📦 Building backend..."
@@ -85,7 +87,6 @@ jobs:
             mkdir -p "$PROD_PATH"
 
             echo "🛑 Clearing old PM2 process..."
-            # On supprime complètement l'ancien enregistrement pour forcer un démarrage 100% neuf
             pm2 delete assets-tool --silent || true
             sleep 1
 
@@ -130,7 +131,6 @@ jobs:
             grep -q "window.__ENV__" "$PROD_PATH/public/index.html" \
             && echo "  ✅ __ENV__"       || { echo "  ❌ __ENV__ missing";   ERRORS=$((ERRORS+1)); }
             
-            # Validation PM2 améliorée et robuste via JSON (évite les pièges de formatage de tableau)
             PM2_STATUS=$(pm2 jlist | node -e "
             const list = JSON.parse(fs.readFileSync(0, 'utf-8'));
             const app = list.find(p => p.name === 'assets-tool');
