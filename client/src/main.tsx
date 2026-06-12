@@ -22,6 +22,7 @@ import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
 import EditSupplyPage from "./pages/EditSupplyPage.tsx";
 import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
 import PublicAssetPage from "./pages/PublicAssetPage.tsx";
+import LocationsPage from "./pages/LocationsPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -52,6 +53,7 @@ const router = createBrowserRouter([
       { path: "/supplies/create", element: <CreateSupplyPage /> },
       { path: "/supplies/:id/edit", element: <EditSupplyPage /> },
       { path: "/supplies", element: <SuppliesPage /> },
+      { path: "/locations", element: <LocationsPage /> },
       { path: "/assignees", element: <AssigneesPage /> },
     ],
   },

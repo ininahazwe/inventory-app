@@ -1,51 +1,58 @@
 // src/screens/AssignAsset.tsx
-import React from "react";
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/apiClient';
 import Autocomplete from '../components/Autocomplete';
 
-type AssignableUser = {
-  id: string;
-  email: string;
-};
+type AssignableUser = { id: string; email: string };
+type Location = { id: number; name: string; floor: string | null };
 
 export default function AssignAsset({ assetId, onDone }: { assetId: number; onDone?: () => void }) {
-  const [selectedUserId, setSelectedUserId]   = useState('');
+  // User
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedUserEmail, setSelectedUserEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [err, setErr]         = useState<string | null>(null);
 
-  // ✅ Récupère les users avec rôle 'assignee' depuis /users/assignable
+  // Location
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Charger toutes les localisations au mount
+  useEffect(() => {
+    api.get<Location[]>('/locations').then(({ data }) => {
+      if (data) setLocations(data);
+    });
+  }, []);
+
   async function fetchAssignableUsers(q: string) {
     const { data } = await api.get<AssignableUser[]>(
       `/users/assignable${q ? `?q=${encodeURIComponent(q)}` : ''}`
     );
-    return (data ?? []).map(u => u.email);  // Afficher l'email pour l'autocomplete
+    return (data ?? []).map(u => u.email);
   }
 
-  // ✅ Quand on sélectionne un email, remplir automatiquement l'ID
   const handleUserSelect = async (selectedEmail: string) => {
     setSelectedUserEmail(selectedEmail);
-
-    // Chercher l'ID correspondant
     const { data } = await api.get<AssignableUser[]>(
       `/users/assignable?q=${encodeURIComponent(selectedEmail)}`
     );
-
     if (data && data.length > 0) {
       const user = data.find(u => u.email === selectedEmail);
-      if (user?.id) {
-        setSelectedUserId(user.id);
-      }
+      if (user?.id) setSelectedUserId(user.id);
     }
   };
 
-  // ✅ POST avec assigned_user_id au lieu de assignee_name/email
+  const handleUserClear = () => {
+    setSelectedUserId('');
+    setSelectedUserEmail('');
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedUserId) {
-      setErr('Please select a user');
+    if (!selectedUserId && !selectedLocationId) {
+      setErr('Select a user, a location, or both');
       return;
     }
 
@@ -54,31 +61,71 @@ export default function AssignAsset({ assetId, onDone }: { assetId: number; onDo
 
     const { error } = await api.post('/assignments', {
       asset_id: assetId,
-      assigned_user_id: selectedUserId
+      assigned_user_id: selectedUserId || undefined,
+      location_id: selectedLocationId ? parseInt(selectedLocationId, 10) : undefined,
     });
 
     setLoading(false);
     if (error) { setErr(error); return; }
+
     setSelectedUserId('');
     setSelectedUserEmail('');
+    setSelectedLocationId('');
     onDone?.();
   };
 
   return (
-    <form onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 420, margin: 'auto' }}>
-      <label>Assign to user *</label>
-      <Autocomplete
-        value={selectedUserEmail}
-        onChange={setSelectedUserEmail}
-        onSelect={handleUserSelect}
-        fetchOptions={fetchAssignableUsers}
-        placeholder="Search by email…"
-      />
+    <form onSubmit={submit} style={{ display: 'grid', gap: 16, maxWidth: 420, margin: 'auto' }}>
 
-      <button className="pill green-light" disabled={loading || !selectedUserId}>
+      {/* ── Assign to user ── */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <label style={{ fontWeight: 600 }}>Assign to user</label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Autocomplete
+            value={selectedUserEmail}
+            onChange={(v) => { setSelectedUserEmail(v); if (!v) setSelectedUserId(''); }}
+            onSelect={handleUserSelect}
+            fetchOptions={fetchAssignableUsers}
+            placeholder="Search by email…"
+          />
+          {selectedUserId && (
+            <button
+              type="button"
+              onClick={handleUserClear}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 18 }}
+              title="Clear user"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {selectedUserId && (
+          <span style={{ fontSize: 12, color: '#16a34a' }}>✓ {selectedUserEmail}</span>
+        )}
+      </div>
+
+      {/* ── Assign to location ── */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <label style={{ fontWeight: 600 }}>Assign to location</label>
+        <select
+          className="field"
+          value={selectedLocationId}
+          onChange={(e) => setSelectedLocationId(e.target.value)}
+        >
+          <option value="">— Select a location —</option>
+          {locations.map(loc => (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}{loc.floor ? ` · ${loc.floor}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {err && <p style={{ color: 'crimson', margin: 0 }}>{err}</p>}
+
+      <button className="pill green-light" disabled={loading || (!selectedUserId && !selectedLocationId)}>
         {loading ? 'Assigning…' : 'Assign'}
       </button>
-      {err && <p style={{ color: 'crimson' }}>{err}</p>}
     </form>
   );
 }

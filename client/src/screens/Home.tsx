@@ -88,6 +88,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <>
               <button className="pill" onClick={() => navigate('/incidents')}>Incidents</button>
               <button className="pill" onClick={() => navigate('/assignees')}>👥 User Management</button>
+              <button className="pill" onClick={() => navigate('/locations')}>🏤 Locations</button>
               <button className="pill" onClick={() => setAuditOpen(true)}>📋 Audit Log</button>
               <button className="pill" onClick={onNew}>+ New asset</button>
             </>

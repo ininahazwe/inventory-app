@@ -4,6 +4,7 @@ import path from 'path';
 import authRoutes from './routes/auth';
 import assetsRoutes from './routes/assets';
 import assignmentsRoutes from './routes/assignments';
+import locationsRoutes from './routes/locations';
 import categoriesRoutes from './routes/categories';
 import incidentsRoutes from './routes/incidents';
 import usersRoutes from './routes/users';
@@ -40,6 +41,7 @@ export function createApp() {
     app.use('/api/categories', categoriesRoutes);
     app.use('/api/assets', assetsRoutes);
     app.use('/api/assignments', assignmentsRoutes);
+    app.use('/api/locations', locationsRoutes);
     app.use('/api/supply-assignments', supplyAssignmentsRoutes);
     app.use('/api/incidents', incidentsRoutes);
     app.use('/api/users', usersRoutes);
