@@ -50,7 +50,7 @@ export default function Autocomplete({
   };
 
   return (
-    <div className="autocomplete" ref={boxRef} style={{ position: "relative" }}>
+    <div className="autocomplete" ref={boxRef} style={{ position: "relative", width: "100%" }}>
       <input
         className={className || "field"}
         value={q}
