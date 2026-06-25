@@ -25,11 +25,13 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [assignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
+            `SELECT sa.*, s.name as supply_name, u.email as user_email,
+                    l.name as location_name, l.floor as location_floor
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
-             ${whereClause}
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN locations l ON sa.location_id = l.id
+                 ${whereClause}
              ORDER BY sa.assigned_at DESC`,
             params
         );
@@ -45,13 +47,15 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 // GET /api/supply-assignments/:id - Get single assignment
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
-        const id = parseInt(req.params.id as string);
+        const id = parseInt(String(req.params.id), 10);
 
         const [assignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
+            `SELECT sa.*, s.name as supply_name, u.email as user_email,
+                    l.name as location_name, l.floor as location_floor
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN locations l ON sa.location_id = l.id
              WHERE sa.id = ?`,
             [id]
         );
@@ -67,15 +71,19 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
-// POST /api/supply-assignments - Create new assignment
+// POST /api/supply-assignments - Create new assignment (user et/ou location)
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const { supply_id, assigned_user_id, quantity_assigned, assigned_at } = req.body;
+        const { supply_id, assigned_user_id, location_id, quantity_assigned, assigned_at } = req.body;
 
-        // Validation
-        if (!supply_id || !assigned_user_id || !quantity_assigned || !assigned_at) {
+        // Validation: supply_id, quantity_assigned, assigned_at requis
+        // + au moins assigned_user_id OU location_id
+        if (!supply_id || !quantity_assigned || !assigned_at) {
             return res.status(400).json({ error: 'Missing required fields' });
+        }
+        if (!assigned_user_id && !location_id) {
+            return res.status(400).json({ error: 'assigned_user_id or location_id is required' });
         }
 
         // Verify supply exists
@@ -90,17 +98,33 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
         const supply = (supplyResult as any[])[0];
 
-        // Verify user exists
-        const [userResult] = await db.execute(
-            'SELECT id, email FROM users WHERE id = ?',
-            [assigned_user_id]
-        );
+        let assignedUserEmail: string | null = null;
 
-        if (!(userResult as any[]).length) {
-            return res.status(404).json({ error: 'User not found' });
+        // Verify user exists (si fourni)
+        if (assigned_user_id) {
+            const [userResult] = await db.execute(
+                'SELECT id, email FROM users WHERE id = ?',
+                [assigned_user_id]
+            );
+
+            if (!(userResult as any[]).length) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            assignedUserEmail = (userResult as any[])[0].email;
         }
 
-        const assignedUser = (userResult as any[])[0];
+        // Verify location exists (si fourni)
+        if (location_id) {
+            const [locationResult] = await db.execute(
+                'SELECT id FROM locations WHERE id = ?',
+                [location_id]
+            );
+
+            if (!(locationResult as any[]).length) {
+                return res.status(404).json({ error: 'Location not found' });
+            }
+        }
 
         // Clean date
         const cleanDate = assigned_at.includes('T')
@@ -108,19 +132,29 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             : assigned_at;
 
         const [result] = await db.execute(
-            `INSERT INTO supply_assignments (supply_id, assignee_name, assignee_email, assigned_user_id, quantity_assigned, assigned_at, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'active')`,
-            [supply_id, assignedUser.email, assignedUser.email, assigned_user_id, quantity_assigned, cleanDate]
+            `INSERT INTO supply_assignments (supply_id, assignee_name, assignee_email, assigned_user_id, location_id, quantity_assigned, assigned_at, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+            [
+                supply_id,
+                assignedUserEmail,
+                assignedUserEmail,
+                assigned_user_id || null,
+                location_id || null,
+                quantity_assigned,
+                cleanDate
+            ]
         );
 
         const assignmentId = (result as any).insertId;
 
         // Get created assignment
         const [assignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
+            `SELECT sa.*, s.name as supply_name, u.email as user_email,
+                    l.name as location_name, l.floor as location_floor
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN locations l ON sa.location_id = l.id
              WHERE sa.id = ?`,
             [assignmentId]
         );
@@ -130,7 +164,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         // Audit log
         await logAudit(user.email, 'supply_assigned', 'supply_assignments', assignmentId, null, assignment);
 
-        logger.info(`Created supply assignment: ${supply.name} to ${assignedUser.email}`, 'SUPPLY_ASSIGNMENTS');
+        logger.info(`Created supply assignment: ${supply.name}`, 'SUPPLY_ASSIGNMENTS');
         return res.status(201).json(assignment);
     } catch (err) {
         logger.error('POST /supply-assignments error:', err as Error);
@@ -142,15 +176,14 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const id = parseInt(req.params.id as string);
+        const id = parseInt(String(req.params.id), 10);
         const { returned_at, status } = req.body;
 
-        // Get old state
         const [oldAssignments] = await db.execute(
             `SELECT sa.*, s.name as supply_name, u.email as user_email
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
              WHERE sa.id = ?`,
             [id]
         );
@@ -186,19 +219,19 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
             values
         );
 
-        // Get new state
         const [newAssignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
+            `SELECT sa.*, s.name as supply_name, u.email as user_email,
+                    l.name as location_name, l.floor as location_floor
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN locations l ON sa.location_id = l.id
              WHERE sa.id = ?`,
             [id]
         );
 
         const newAssignment = (newAssignments as any[])[0];
 
-        // Audit log
         await logAudit(user.email, 'supply_assignment_updated', 'supply_assignments', id, (oldAssignments as any[])[0], newAssignment);
 
         logger.info(`Updated supply assignment ${id}`, 'SUPPLY_ASSIGNMENTS');
@@ -213,14 +246,13 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const id = parseInt(req.params.id as string);
+        const id = parseInt(String(req.params.id), 10);
 
-        // Get old state
         const [assignments] = await db.execute(
             `SELECT sa.*, s.name as supply_name, u.email as user_email
              FROM supply_assignments sa
-             LEFT JOIN supplies s ON sa.supply_id = s.id
-             LEFT JOIN users u ON sa.assigned_user_id = u.id
+                      LEFT JOIN supplies s ON sa.supply_id = s.id
+                      LEFT JOIN users u ON sa.assigned_user_id = u.id
              WHERE sa.id = ?`,
             [id]
         );
@@ -233,7 +265,6 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
         await db.execute('DELETE FROM supply_assignments WHERE id = ?', [id]);
 
-        // Audit log
         await logAudit(user.email, 'supply_assignment_deleted', 'supply_assignments', id, oldAssignment, null);
 
         logger.info(`Deleted supply assignment ${id}`, 'SUPPLY_ASSIGNMENTS');

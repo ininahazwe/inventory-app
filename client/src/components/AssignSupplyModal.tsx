@@ -8,6 +8,12 @@ type User = {
   role?: string;
 };
 
+type Location = {
+  id: number;
+  name: string;
+  floor: string | null;
+};
+
 type Supply = {
   id: number;
   name: string;
@@ -29,6 +35,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
 
   const [selectedSupply, setSelectedSupply] = useState<Supply | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [assignedDate, setAssignedDate] = useState(new Date().toISOString().split('T')[0]);
   const [quantity, setQuantity] = useState<string>('1');
 
@@ -36,6 +43,8 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const [locations, setLocations] = useState<Location[]>([]);
 
   const [supplySearch, setSupplySearch] = useState('');
   const [filteredSupplies, setFilteredSupplies] = useState<Supply[]>(supplies);
@@ -48,6 +57,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
 
   useEffect(() => {
     loadUsers();
+    loadLocations();
     loadAssignments();
   }, []);
 
@@ -60,6 +70,18 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
       }
     } catch (err) {
       console.error('Failed to load assignments:', err);
+    }
+  };
+
+  // ✅ Load locations
+  const loadLocations = async () => {
+    try {
+      const { data } = await api.get<Location[]>('/locations');
+      if (Array.isArray(data)) {
+        setLocations(data);
+      }
+    } catch (err) {
+      console.error('Failed to load locations:', err);
     }
   };
 
@@ -108,12 +130,22 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
     }
   };
 
+  const handleClearUser = () => {
+    setSelectedUser(null);
+    setUserSearch('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!selectedSupply || !selectedUser || !assignedDate || !quantity) {
-      setError('All fields are required');
+    if (!selectedSupply || !assignedDate || !quantity) {
+      setError('Supply, quantity and date are required');
+      return;
+    }
+
+    if (!selectedUser && !selectedLocationId) {
+      setError('Select a user, a location, or both');
       return;
     }
 
@@ -130,7 +162,8 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
 
       const payload: SupplyAssignmentInput = {
         supply_id: selectedSupply.id,
-        assigned_user_id: selectedUser.id,
+        assigned_user_id: selectedUser?.id || undefined,
+        location_id: selectedLocationId ? parseInt(selectedLocationId, 10) : undefined,
         quantity_assigned: parseInt(quantity),
         assigned_at: assignedDate,
       };
@@ -141,6 +174,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
         // Reset form
         setSelectedSupply(null);
         setSelectedUser(null);
+        setSelectedLocationId('');
         setSupplySearch('');
         setUserSearch('');
         setQuantity('1');
@@ -295,26 +329,39 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
           {/* User Selection */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              Assign To *
+              Assign to user
             </label>
-            <input
-              type="text"
-              placeholder="Search by email..."
-              value={userSearch}
-              onChange={(e) => {
-                setUserSearch(e.target.value);
-                setDropdownOpen(true);
-              }}
-              onFocus={() => setDropdownOpen(true)}
-              onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: dropdownOpen ? '2px solid var(--brand)' : '1px solid #ddd',
-                borderRadius: 4,
-                boxSizing: 'border-box',
-              }}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="Search by email..."
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  setDropdownOpen(true);
+                  if (!e.target.value) setSelectedUser(null);
+                }}
+                onFocus={() => setDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  border: dropdownOpen ? '2px solid var(--brand)' : '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                }}
+              />
+              {selectedUser && (
+                <button
+                  type="button"
+                  onClick={handleClearUser}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 18 }}
+                  title="Clear user"
+                >
+                  ×
+                </button>
+              )}
+            </div>
 
             {dropdownOpen && filteredUsers.length > 0 && (
               <div style={{
@@ -366,6 +413,32 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
             )}
           </div>
 
+          {/* Location Selection */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
+              Assign to location
+            </label>
+            <select
+              value={selectedLocationId}
+              onChange={(e) => setSelectedLocationId(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                boxSizing: 'border-box',
+                background: 'white',
+              }}
+            >
+              <option value="">— Select a location —</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}{loc.floor ? ` · ${loc.floor}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Date */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
@@ -389,7 +462,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="submit"
-              disabled={loading || assignLoading}
+              disabled={loading || assignLoading || (!selectedUser && !selectedLocationId)}
               style={{
                 flex: 1,
                 padding: 12,
@@ -398,7 +471,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
                 border: 'none',
                 borderRadius: 4,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1,
+                opacity: (loading || (!selectedUser && !selectedLocationId)) ? 0.6 : 1,
                 fontWeight: 500,
               }}
             >
