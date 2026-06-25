@@ -9,13 +9,19 @@ const router = Router();
 // GET /api/supply-assignments - List all supply assignments with filtering
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { supply_id, status } = req.query;
+        const { supply_id, status, location_id } = req.query;
         let whereClause = '';
         let params: any[] = [];
 
         if (supply_id) {
             whereClause += 'WHERE sa.supply_id = ?';
             params.push(parseInt(supply_id as string));
+        }
+
+        if (location_id) {
+            whereClause += whereClause ? ' AND' : 'WHERE';
+            whereClause += ' sa.location_id = ?';
+            params.push(parseInt(location_id as string));
         }
 
         if (status) {

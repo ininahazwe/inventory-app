@@ -1,6 +1,7 @@
 // src/pages/LocationsPage.tsx
 import React from "react";
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
 import Layout from "../Layout.tsx";
 import Modal from "../components/Modal.tsx";
@@ -19,6 +20,7 @@ type FormState = { name: string; floor: string; description: string };
 const EMPTY_FORM: FormState = { name: '', floor: '', description: '' };
 
 export default function LocationsPage() {
+  const navigate = useNavigate();
   const [locations, setLocations] = useState<Location[]>([]);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -167,23 +169,25 @@ export default function LocationsPage() {
           <tr style={{ background: '#8D86C9' }}>
             <th>Name</th>
             <th style={{ width: 140 }}>Floor</th>
-            <th>Description</th>
             <th style={{ width: 180 }}></th>
           </tr>
           </thead>
           <tbody>
           {paginated.length === 0 ? (
             <tr>
-              <td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
+              <td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
                 {loading ? 'Loading…' : 'No locations found'}
               </td>
             </tr>
           ) : paginated.map(loc => (
-            <tr key={loc.id}>
+            <tr
+              key={loc.id}
+              onClick={() => navigate(`/locations/${loc.id}`)}
+              style={{ cursor: 'pointer' }}
+            >
               <td>{loc.name}</td>
               <td style={{ color: 'var(--muted)', fontSize: 13 }}>{loc.floor ?? '—'}</td>
-              <td style={{ color: 'var(--muted)', fontSize: 13 }}>{loc.description ?? '—'}</td>
-              <td>
+              <td onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => openEdit(loc)}>
                     Edit
