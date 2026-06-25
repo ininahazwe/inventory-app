@@ -7,6 +7,7 @@ export interface Supply {
   purchase_date: string;
   cost: number;
   brand?: string;
+  location?: string;
   quantity: number;
   receiver_uid?: string; // Email string from response
   receiver_email?: string; // Alternative field from response
