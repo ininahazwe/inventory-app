@@ -19,8 +19,8 @@ export default function AuditDashboard() {
     setLoading(true);
     const params = new URLSearchParams({ limit: '100', offset: '0' });
     if (filter !== 'all') params.set('entity_type', filter);
-    api.get<AuditEntry[]>(`/audit?${params}`).then(({ data, error }) => {
-      if (error) setError(error); else setEntries(data ?? []);
+    api.get<{ data: AuditEntry[] }>(`/audit?${params}`).then(({ data, error }) => {
+      if (error) setError(error); else setEntries(data?.data ?? []);
       setLoading(false);
     });
   }, [filter]);

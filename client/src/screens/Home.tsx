@@ -3,18 +3,16 @@ import React from "react";
 import { useEffect, useMemo, useState } from 'react';
 import { api, rpc } from '../lib/apiClient';
 import { usePermissions } from '../hooks/usePermissions';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Autocomplete from '../components/Autocomplete';
 import AssignAsset from './AssignAsset';
 import Modal from '../components/Modal';
 import InventoryStats from '../components/InventoryStats';
-import AuditDashboard from '../components/AuditDashboard';
 
 type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
-  const navigate = useNavigate();
   const { isSuperAdmin } = usePermissions();
   const { isAssignee } = usePermissions();
   const [rows, setRows]           = useState<Row[]>([]);
@@ -23,7 +21,6 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [qLabel, setQLabel]       = useState('');
   const [qCategory, setQCategory] = useState('');
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
-  const [auditOpen, setAuditOpen]                 = useState(false);
   const [assignOpen, setAssignOpen]               = useState(false);
   const [assignAssetId, setAssignAssetId]         = useState<number | null>(null);
   const [assignAssetLabel, setAssignAssetLabel]   = useState<string>('');
@@ -85,13 +82,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {isSuperAdmin && (
-            <>
-              <button className="pill" onClick={() => navigate('/incidents')}>Incidents</button>
-              <button className="pill" onClick={() => navigate('/assignees')}>👥 User Management</button>
-              <button className="pill" onClick={() => navigate('/locations')}>🏤 Locations</button>
-              <button className="pill" onClick={() => setAuditOpen(true)}>📋 Audit Log</button>
-              <button className="pill" onClick={onNew}>+ New asset</button>
-            </>
+            <button className="pill" onClick={onNew}>+ New asset</button>
           )}
         </div>
       </div>
@@ -143,13 +134,6 @@ export default function Home({ onNew }: { onNew: () => void }) {
         </div>
       </Modal>
 
-      {isSuperAdmin && (
-        <>
-          <Modal open={auditOpen} onClose={() => setAuditOpen(false)} title="📋 Audit Log">
-            <AuditDashboard />
-          </Modal>
-        </>
-      )}
       <InventoryStats refreshTrigger={statsRefreshTrigger} onCategoryFilter={setQCategory} selectedCategory={qCategory} />
     </div>
   );
