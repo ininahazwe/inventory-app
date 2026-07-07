@@ -6,6 +6,7 @@ import { useSupplies } from '../hooks/useSupplies';
 import { useSupplyAssignments } from '../hooks/useSupplyAssignments';
 import { AssignSupplyModal } from '../components/AssignSupplyModal';
 import Modal from '../components/Modal';
+import { SupplyTrendChart } from '../components/SupplyTrendChart';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -18,6 +19,7 @@ export const SuppliesList: React.FC = () => {
     new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0')
   );
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [overviewTab, setOverviewTab] = useState<'cost' | 'stock'>('cost');
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSupplyId, setDeleteSupplyId] = useState<number | null>(null);
@@ -98,7 +100,7 @@ export const SuppliesList: React.FC = () => {
     return dateStr === selectedDate;
   });
 
-  // ✅ Calculate stats by category
+  // ✅ Calculate stats by category (cost + remaining stock, same period/category filters)
   const statsByCategory = categories.map(cat => {
     const suppliesInCat = dateFilteredSupplies.filter(s => s.category_name === cat);
     const totalCostCat = suppliesInCat.reduce((sum, s) => {
@@ -106,6 +108,7 @@ export const SuppliesList: React.FC = () => {
       return sum + cost;
     }, 0);
     const totalQty = suppliesInCat.reduce((sum, s) => sum + (parseInt(String(s.quantity)) || 1), 0);
+    const remainingQty = suppliesInCat.reduce((sum, s) => sum + getRemaining(s.id), 0);
     const costPerUnit = totalQty > 0 ? totalCostCat / totalQty : 0;
 
     return {
@@ -114,11 +117,15 @@ export const SuppliesList: React.FC = () => {
       totalCost: totalCostCat,
       costPerUnit: costPerUnit,
       totalQty: totalQty,
+      remainingQty: remainingQty,
     };
   });
 
   // ✅ Sort by total cost descending
   const sortedStats = [...statsByCategory].sort((a, b) => b.totalCost - a.totalCost);
+
+  // ✅ Sort by remaining stock descending
+  const sortedByStock = [...statsByCategory].sort((a, b) => b.remainingQty - a.remainingQty);
 
   // ✅ Overall stats
   const overallStats = {
@@ -129,6 +136,8 @@ export const SuppliesList: React.FC = () => {
     }, 0),
     uniqueReceivers: new Set(dateFilteredSupplies.map(s => s.receiver_email).filter(Boolean)).size,
     uniqueCategories: sortedStats.filter(s => s.count > 0).length,
+    totalRemaining: dateFilteredSupplies.reduce((sum, s) => sum + getRemaining(s.id), 0),
+    depletedCategories: statsByCategory.filter(s => s.count > 0 && s.remainingQty === 0).length,
   };
 
   // ✅ Format date for display
@@ -351,53 +360,112 @@ export const SuppliesList: React.FC = () => {
             <h3 style={{ margin: '0 0 16px 0', color: 'var(--ink)', fontSize: '16px', fontWeight: 600 }}>
               Period Overview - {formatDateDisplay(selectedDate)} {selectedCategory && `(${selectedCategory})`}
             </h3>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '12px',
-            }}>
-              <div style={{ padding: '16px', background: '#f0f9ff', borderRadius: '8px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Total Cost</div>
-                <div style={{ fontSize: '24px', fontWeight: 600, color: '#1e40af' }}>
-                  GH₵ {overallStats.totalCost.toFixed(2)}
-                </div>
-              </div>
 
-              <div style={{ padding: '16px', background: '#fce7f3', borderRadius: '8px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Receivers</div>
-                <div style={{ fontSize: '24px', fontWeight: 600, color: '#be185d' }}>
-                  {overallStats.uniqueReceivers}
-                </div>
-              </div>
-
-              <div style={{ padding: '16px', background: '#fff7ed', borderRadius: '8px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Categories Used</div>
-                <div style={{ fontSize: '24px', fontWeight: 600, color: '#b45309' }}>
-                  {overallStats.uniqueCategories}
-                </div>
-              </div>
-
-              <div style={{ padding: '16px', background: '#f3e8ff', borderRadius: '8px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Supplies</div>
-                <div style={{ fontSize: '24px', fontWeight: 600, color: '#a21caf' }}>
-                  {overallStats.totalSupplies}
-                </div>
-              </div>
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: '1px solid var(--line)' }}>
+              {(['cost', 'stock'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setOverviewTab(tab)}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    border: 'none',
+                    borderBottom: overviewTab === tab ? '2px solid var(--brand)' : '2px solid transparent',
+                    background: 'transparent',
+                    color: overviewTab === tab ? 'var(--brand)' : 'var(--muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab === 'cost' ? 'Cost' : 'Stock Remaining'}
+                </button>
+              ))}
             </div>
+
+            {overviewTab === 'cost' ? (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '12px',
+              }}>
+                <div style={{ padding: '16px', background: '#f0f9ff', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Total Cost</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#1e40af' }}>
+                    GH₵ {overallStats.totalCost.toFixed(2)}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#fce7f3', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Receivers</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#be185d' }}>
+                    {overallStats.uniqueReceivers}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#fff7ed', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Categories Used</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#b45309' }}>
+                    {overallStats.uniqueCategories}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#f3e8ff', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Supplies</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#a21caf' }}>
+                    {overallStats.totalSupplies}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '12px',
+              }}>
+                <div style={{ padding: '16px', background: '#ecfdf5', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Remaining in Stock</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#15803d' }}>
+                    {overallStats.totalRemaining}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#fef2f2', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Depleted Categories</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#991b1b' }}>
+                    {overallStats.depletedCategories}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#fff7ed', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Categories Used</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#b45309' }}>
+                    {overallStats.uniqueCategories}
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', background: '#f3e8ff', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>Supplies</div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: '#a21caf' }}>
+                    {overallStats.totalSupplies}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Cost by Category */}
+          {/* Breakdown by Category (matches active tab) */}
           {!selectedCategory && sortedStats.filter(s => s.count > 0).length > 0 && (
             <div>
               <h3 style={{ margin: '0 0 16px 0', color: 'var(--ink)', fontSize: '16px', fontWeight: 600 }}>
-                Cost Breakdown by Category
+                {overviewTab === 'cost' ? 'Cost Breakdown by Category' : 'Stock Breakdown by Category'}
               </h3>
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                 gap: '12px',
               }}>
-                {sortedStats.filter(s => s.count > 0).map((stat, idx) => {
+                {(overviewTab === 'cost' ? sortedStats : sortedByStock).filter(s => s.count > 0).map((stat, idx) => {
                   const colors = [
                     { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' },
                     { bg: '#dcfce7', border: '#86efac', text: '#15803d' },
@@ -425,20 +493,26 @@ export const SuppliesList: React.FC = () => {
                         Items: <strong>{stat.count}</strong>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>
-                        Qty: <strong>{stat.totalQty}</strong>
+                        Qty Purchased: <strong>{stat.totalQty}</strong>
                       </div>
-                      {/*<div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>
-                        Cost/Unit: <strong>GH₵ {stat.costPerUnit.toFixed(2)}</strong>
-                      </div>*/}
-                      <div style={{ fontSize: '18px', fontWeight: 600, color: color.text }}>
-                        GH₵ {stat.totalCost.toFixed(2)}
-                      </div>
+                      {overviewTab === 'cost' ? (
+                        <div style={{ fontSize: '18px', fontWeight: 600, color: color.text }}>
+                          GH₵ {stat.totalCost.toFixed(2)}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '18px', fontWeight: 600, color: color.text }}>
+                          {stat.remainingQty} left
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
+
+          {/* Purchased vs Remaining Stock, by category */}
+          <SupplyTrendChart stats={statsByCategory} />
         </div>
       )}
 

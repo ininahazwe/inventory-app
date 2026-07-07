@@ -47,6 +47,48 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/supplies/search-names?q= - Suggest existing supply names (avoid duplicate naming)
+router.get('/search-names', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const q = ((req.query.q as string) || '').trim();
+        if (q.length < 3) {
+            return res.json([]);
+        }
+
+        // ✅ Group by name to get one suggestion per distinct name,
+        // keeping the category/brand combo used most often for that name
+        // (helps prevent the same supply being logged under different categories/brands).
+        const [rows] = await db.execute(
+            `SELECT s.name,
+                    s.category_id,
+                    c.name as category_name,
+                    s.brand,
+                    COUNT(*) as usage_count
+             FROM supplies s
+                      LEFT JOIN categories c ON s.category_id = c.id
+             WHERE s.name LIKE ?
+             GROUP BY s.name, s.category_id, c.name, s.brand
+             ORDER BY usage_count DESC, s.name ASC
+             LIMIT 20`,
+            [`%${q}%`]
+        );
+
+        // ✅ Keep only the top (most-used) category/brand combo per unique name
+        const seen = new Set<string>();
+        const suggestions = (rows as any[]).filter(r => {
+            const key = r.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).slice(0, 8);
+
+        return res.json(suggestions);
+    } catch (err) {
+        logger.error('GET /supplies/search-names error:', err as Error);
+        return res.status(500).json({ error: 'Failed to search supply names' });
+    }
+});
+
 // GET /api/supplies/:id - Get single supply
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {

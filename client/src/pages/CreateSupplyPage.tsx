@@ -11,6 +11,14 @@ type AssignableUser = {
   role?: string;
 };
 
+type SupplyNameSuggestion = {
+  name: string;
+  category_id: number | null;
+  category_name: string | null;
+  brand: string | null;
+  usage_count: number;
+};
+
 interface SupplyInput {
   name: string;
   purchase_date: string;
@@ -42,9 +50,49 @@ export default function CreateSupplyPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
 
+  // ✅ Existing-supply name suggestions (avoid logging the same supply under different names)
+  const [nameSuggestions, setNameSuggestions] = useState<SupplyNameSuggestion[]>([]);
+  const [nameDropdownOpen, setNameDropdownOpen] = useState(false);
+  const [matchedSupply, setMatchedSupply] = useState<SupplyNameSuggestion | null>(null);
+
   useEffect(() => {
     loadUsers();
   }, []);
+
+  // ✅ Query existing supply names after 3+ characters
+  useEffect(() => {
+    const trimmed = formData.name.trim();
+    setMatchedSupply(prev => (prev && prev.name.toLowerCase() === trimmed.toLowerCase() ? prev : null));
+
+    if (trimmed.length < 3) {
+      setNameSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<SupplyNameSuggestion[]>(
+          `/supplies/search-names?q=${encodeURIComponent(trimmed)}`
+        );
+        setNameSuggestions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to fetch supply name suggestions:', err);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [formData.name]);
+
+  const handleSelectNameSuggestion = (s: SupplyNameSuggestion) => {
+    setFormData(prev => ({
+      ...prev,
+      name: s.name,
+      categoryName: s.category_name || prev.categoryName,
+      brand: s.brand || prev.brand,
+    }));
+    setMatchedSupply(s);
+    setNameDropdownOpen(false);
+  };
 
   useEffect(() => {
     if (!userSearch.trim()) {
@@ -177,20 +225,69 @@ export default function CreateSupplyPage() {
           <div style={{ marginBottom: 20 }}>
             <label>
               <strong>Supply Name *</strong>
-              <input
-                type="text"
-                placeholder="e.g., Office Chairs"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: 8,
-                  marginTop: 8,
-                  border: '1px solid #ddd',
-                  borderRadius: 4,
-                  boxSizing: 'border-box',
-                }}
-              />
+              <div style={{ position: 'relative', marginTop: 8 }}>
+                <input
+                  type="text"
+                  placeholder="e.g., Office Chairs"
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, name: e.target.value }));
+                    setNameDropdownOpen(true);
+                  }}
+                  onFocus={() => { if (nameSuggestions.length) setNameDropdownOpen(true); }}
+                  onBlur={() => setTimeout(() => setNameDropdownOpen(false), 200)}
+                  style={{
+                    width: '100%',
+                    padding: 8,
+                    border: '1px solid #ddd',
+                    borderRadius: 4,
+                    boxSizing: 'border-box',
+                  }}
+                />
+
+                {nameDropdownOpen && nameSuggestions.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '1px solid #ddd',
+                    borderTop: 'none',
+                    borderRadius: '0 0 4px 4px',
+                    maxHeight: 220,
+                    overflowY: 'auto',
+                    zIndex: 10,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  }}>
+                    {nameSuggestions.map((s, i) => (
+                      <div
+                        key={`${s.name}-${i}`}
+                        onMouseDown={() => handleSelectNameSuggestion(s)}
+                        style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#f9f9f9'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'white'; }}
+                      >
+                        <strong>{s.name}</strong>
+                        <span style={{ color: '#666', marginLeft: 8, fontSize: 12 }}>
+                          {[s.category_name, s.brand].filter(Boolean).join(' · ') || 'no category/brand'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {matchedSupply && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#166534' }}>
+                  ✅ Existing supply matched — category/brand pre-filled from past entries ({matchedSupply.usage_count} prior record{matchedSupply.usage_count > 1 ? 's' : ''}). Adjust below if this purchase differs.
+                </div>
+              )}
+              {!matchedSupply && formData.name.trim().length >= 3 && nameSuggestions.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#b45309' }}>
+                  ⚠️ Similar supplies exist — pick one from the list to keep stats consistent, or continue if this is genuinely new.
+                </div>
+              )}
             </label>
           </div>
 
