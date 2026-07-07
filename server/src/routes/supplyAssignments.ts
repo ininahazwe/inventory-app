@@ -92,6 +92,11 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'assigned_user_id or location_id is required' });
         }
 
+        const qtyRequested = Number(quantity_assigned);
+        if (!Number.isInteger(qtyRequested) || qtyRequested < 1) {
+            return res.status(400).json({ error: 'quantity_assigned must be a positive integer' });
+        }
+
         // Verify supply exists
         const [supplyResult] = await db.execute(
             'SELECT id, name, quantity FROM supplies WHERE id = ?',
@@ -103,6 +108,20 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const supply = (supplyResult as any[])[0];
+
+        // Verify enough stock remains (total quantity minus currently active assignments)
+        const [activeResult] = await db.execute(
+            `SELECT COALESCE(SUM(quantity_assigned), 0) as active_qty
+             FROM supply_assignments
+             WHERE supply_id = ? AND status = 'active'`,
+            [supply_id]
+        );
+        const activeQty = Number((activeResult as any[])[0]?.active_qty || 0);
+        const available = Math.max(0, Number(supply.quantity) - activeQty);
+
+        if (qtyRequested > available) {
+            return res.status(400).json({ error: `Only ${available} units available` });
+        }
 
         let assignedUserEmail: string | null = null;
 
@@ -146,7 +165,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
                 assignedUserEmail,
                 assigned_user_id || null,
                 location_id || null,
-                quantity_assigned,
+                qtyRequested,
                 cleanDate
             ]
         );

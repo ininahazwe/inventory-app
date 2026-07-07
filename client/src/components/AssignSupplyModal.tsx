@@ -150,7 +150,12 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
     }
 
     const stock = getAvailableStock(selectedSupply.id);
-    const qtyRequested = parseInt(quantity);
+    const qtyRequested = parseInt(quantity, 10);
+
+    if (isNaN(qtyRequested) || qtyRequested < 1) {
+      setError('Quantity must be at least 1');
+      return;
+    }
 
     if (qtyRequested > stock.available) {
       setError(`Only ${stock.available} units available. You requested ${qtyRequested}.`);
@@ -164,13 +169,14 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
         supply_id: selectedSupply.id,
         assigned_user_id: selectedUser?.id || undefined,
         location_id: selectedLocationId ? parseInt(selectedLocationId, 10) : undefined,
-        quantity_assigned: parseInt(quantity),
+        quantity_assigned: qtyRequested,
         assigned_at: assignedDate,
       };
 
       const success = await createAssignment(payload);
 
       if (success) {
+        await loadAssignments(); // refresh local stock before form resets/closes
         // Reset form
         setSelectedSupply(null);
         setSelectedUser(null);
@@ -260,6 +266,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
                     <div
                       key={supply.id}
                       onClick={() => {
+                        if (stock.available === 0) return;
                         setSelectedSupply(supply);
                         setSupplySearch('');
                       }}
