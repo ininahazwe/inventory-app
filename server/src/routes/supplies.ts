@@ -3,6 +3,7 @@ import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
+import { recordMovement } from './supplyMovements';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
         // Calculate totals
         const [totalCostResult] = await db.execute(
-            `SELECT COALESCE(SUM(cost * quantity), 0) as total FROM supplies ${whereClause}`,
+            `SELECT COALESCE(SUM(cost), 0) as total FROM supplies s ${whereClause}`,
             params
         );
         const totalCost = parseFloat((totalCostResult as any[])[0]?.total) || 0;
@@ -118,11 +119,21 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id } = req.body;
+        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id, low_stock_threshold } = req.body;
 
         // Validation
         if (!name || !purchase_date || !cost || !quantity || !receiver_uid) {
             return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // ✅ Seuil d'alerte stock bas: optionnel, entier >= 0 si fourni
+        let cleanThreshold: number | null = null;
+        if (low_stock_threshold !== undefined && low_stock_threshold !== null && low_stock_threshold !== '') {
+            const t = parseInt(String(low_stock_threshold), 10);
+            if (!Number.isInteger(t) || t < 0) {
+                return res.status(400).json({ error: 'low_stock_threshold must be a non-negative integer' });
+            }
+            cleanThreshold = t;
         }
 
         // ✅ Lookup user by email (receiver_uid is the email from frontend)
@@ -157,15 +168,32 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             }
         }
 
-        const [result] = await db.execute(
-            `INSERT INTO supplies (name, purchase_date, cost, brand, quantity, receiver_uid, category_id, created_by_uid)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name, cleanDate, cost, brand || null, quantity, userId, validatedCategoryId, user.uid]
-        );
+        // ✅ Transaction: insert supply + écriture ledger atomiques. Si le ledger
+        // échoue, la supply n'est pas créée non plus — plus de désync silencieuse.
+        const supplyId = await db.transaction(async (tx) => {
+            const [result] = await tx.execute(
+                `INSERT INTO supplies (name, purchase_date, cost, brand, quantity, receiver_uid, category_id, created_by_uid, low_stock_threshold)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [name, cleanDate, cost, brand || null, quantity, userId, validatedCategoryId, user.uid, cleanThreshold]
+            );
 
-        const supplyId = (result as any).insertId;
+            const supplyId = (result as any).insertId;
 
-        // Get the created supply with receiver email and category name
+            await recordMovement({
+                supply_id: supplyId,
+                type: 'purchase',
+                qty: parseInt(String(quantity)),
+                movement_date: cleanDate,
+                ref_type: 'supply',
+                ref_id: supplyId,
+                notes: `Purchase: ${name}`,
+                created_by: user.email,
+            }, tx);
+
+            return supplyId;
+        });
+
+        // Get the created supply with receiver email and category name (lecture après commit)
         const [supplies] = await db.execute(
             `SELECT s.*, u.email as receiver_email, c.name as category_name
              FROM supplies s
@@ -210,7 +238,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
         const oldSupply = (oldSupplies as any[])[0];
 
-        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id } = req.body;
+        const { name, purchase_date, cost, brand, quantity, receiver_uid, category_id, low_stock_threshold } = req.body;
 
         // Build update query
         const updates: string[] = [];
@@ -243,6 +271,19 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
             updates.push('category_id = ?');
             values.push(category_id || null);
         }
+        if (low_stock_threshold !== undefined) {
+            if (low_stock_threshold === null || low_stock_threshold === '') {
+                updates.push('low_stock_threshold = ?');
+                values.push(null);
+            } else {
+                const t = parseInt(String(low_stock_threshold), 10);
+                if (!Number.isInteger(t) || t < 0) {
+                    return res.status(400).json({ error: 'low_stock_threshold must be a non-negative integer' });
+                }
+                updates.push('low_stock_threshold = ?');
+                values.push(t);
+            }
+        }
         if (receiver_uid !== undefined) {
             // Lookup user by email
             const [userResult] = await db.execute(
@@ -266,12 +307,36 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
         updates.push('updated_at = NOW()');
         values.push(id);
 
-        await db.execute(
-            `UPDATE supplies SET ${updates.join(', ')} WHERE id = ?`,
-            values
-        );
+        // ✅ Transaction: update supply + sync ledger atomiques
+        await db.transaction(async (tx) => {
+            await tx.execute(
+                `UPDATE supplies SET ${updates.join(', ')} WHERE id = ?`,
+                values
+            );
 
-        // Get new state
+            // ✅ Ledger: synchroniser le mouvement d'achat si quantité ou date modifiée
+            if (quantity !== undefined || purchase_date !== undefined) {
+                const [check] = await tx.execute(
+                    `SELECT quantity, purchase_date FROM supplies WHERE id = ?`,
+                    [id]
+                );
+                const updated = (check as any[])[0];
+                await tx.execute(
+                    `UPDATE supply_movements
+                     SET qty = ?, movement_date = ?
+                     WHERE ref_type = 'supply' AND ref_id = ? AND type = 'purchase'`,
+                    [
+                        parseInt(String(updated.quantity)),
+                        typeof updated.purchase_date === 'string' && updated.purchase_date.includes('T')
+                            ? updated.purchase_date.split('T')[0]
+                            : updated.purchase_date,
+                        id
+                    ]
+                );
+            }
+        });
+
+        // Get new state (lecture après commit)
         const [newSupplies] = await db.execute(
             `SELECT s.*, u.email as receiver_email, c.name as category_name
              FROM supplies s

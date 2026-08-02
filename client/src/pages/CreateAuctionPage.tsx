@@ -47,7 +47,7 @@ export default function CreateAuctionPage() {
   });
 
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [allAssets, setAllAssets] = useState<Asset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -59,37 +59,30 @@ export default function CreateAuctionPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Load all in_stock assets on mount
+  // ✅ Recherche serveur debouncée (plus de fetch unique limit=1000 + filtre client) —
+  // requête /assets?status=in_stock&label=<query>&limit=20 à chaque frappe.
   useEffect(() => {
-    loadAllAssets();
-  }, []);
+    const timer = setTimeout(() => {
+      searchAssets(assetSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [assetSearch]);
 
-  // Filter assets based on search
-  useEffect(() => {
-    if (!assetSearch.trim()) {
-      setAssets(allAssets);
-    } else {
-      const searchLower = assetSearch.toLowerCase();
-      const filtered = allAssets.filter(a =>
-        a.label.toLowerCase().includes(searchLower) ||
-        (a.serial_no && a.serial_no.toLowerCase().includes(searchLower)) ||
-        (a.category_name && a.category_name.toLowerCase().includes(searchLower))
-      );
-      setAssets(filtered);
-    }
-  }, [assetSearch, allAssets]);
-
-  const loadAllAssets = async () => {
+  const searchAssets = async (query: string) => {
+    setAssetsLoading(true);
     try {
+      const params = new URLSearchParams({ status: 'in_stock', limit: '20' });
+      if (query.trim()) params.set('label', query.trim());
       const { data: response, error: err } = await api.get<AssetsResponse>(
-        '/assets?status=in_stock&limit=1000'
+        `/assets?${params.toString()}`
       );
       if (!err && response?.data) {
-        setAllAssets(response.data);
         setAssets(response.data);
       }
     } catch (err) {
-      console.error('Failed to load assets:', err);
+      console.error('Failed to search assets:', err);
+    } finally {
+      setAssetsLoading(false);
     }
   };
 
@@ -283,7 +276,7 @@ export default function CreateAuctionPage() {
                 )}
 
                 {/* Show message if no results */}
-                {dropdownOpen && assetSearch && assets.length === 0 && (
+                {dropdownOpen && !assetsLoading && assets.length === 0 && (
                   <div style={{
                     position: 'absolute',
                     top: '100%',

@@ -1,12 +1,15 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/env';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'a3c91f805485a745645f1cb0125ddcdc9b28122088e4a2e00c209f087d0f4119';
-const JWT_EXPIRES_IN = '7d';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // POST /api/auth/google - Connexion Google
 router.post('/google', async (req: Request, res: Response) => {
@@ -16,12 +19,27 @@ router.post('/google', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No token provided' });
         }
 
-        const decoded = jwt.decode(token) as any;
-        if (!decoded) {
-            return res.status(400).json({ error: 'Invalid token format' });
+        // SECURITY: cryptographically verify the Google ID token
+        // (signature, issuer, audience, expiration). Never trust jwt.decode alone.
+        let email: string | undefined;
+        try {
+            const ticket = await googleClient.verifyIdToken({
+                idToken: token,
+                audience: GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            email = payload?.email;
+            if (!payload?.email_verified) {
+                return res.status(403).json({ error: 'Google email not verified' });
+            }
+        } catch (verifyErr) {
+            logger.error('Google token verification failed:', verifyErr as Error);
+            return res.status(401).json({ error: 'Invalid Google token' });
         }
 
-        const { email } = decoded;
+        if (!email) {
+            return res.status(400).json({ error: 'No email in Google token' });
+        }
 
         const [allowed] = await db.query(
             'SELECT id, email, role FROM users WHERE email = ?',
@@ -41,7 +59,7 @@ router.post('/google', async (req: Request, res: Response) => {
             role: dbUser.role
         };
 
-        const appToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+        const appToken = jwt.sign(tokenPayload, JWT_SECRET(), { expiresIn: JWT_EXPIRES_IN() } as jwt.SignOptions);
 
         logger.info(`User ${email} authenticated successfully with internal ID ${dbUser.id}`, 'AUTH');
 

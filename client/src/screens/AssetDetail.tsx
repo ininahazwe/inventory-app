@@ -10,6 +10,7 @@ import Autocomplete from '../components/Autocomplete';
 import AssignAsset from './AssignAsset';
 import LifecycleModal from '../components/LifecycleModal';
 import AuditLog from '../components/AuditLog';
+import AssetTimeline from '../components/AssetTimeline';
 import PublicAssetCard from './PublicAssetCard';
 import { IncidentForm } from '../components/IncidentForm';
 
@@ -29,6 +30,7 @@ type Asset = {
   qr_slug: string | null;
   notes: string | null;
   created_at: string;
+  total_repair_cost?: number;
 };
 type LifecycleAction = 'repair' | 'exit_repair' | 'retire';
 
@@ -225,9 +227,16 @@ export default function AssetDetail() {
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
     if (dateStr.includes('T')) return dateStr.split('T')[0];
     try {
+      // ✅ Repli pour formats inattendus uniquement (le flux normal passe par les
+      // branches YYYY-MM-DD / 'T' ci-dessus). Getters locaux plutôt que
+      // toISOString() pour ne pas ajouter un second décalage UTC par-dessus un
+      // parsing déjà ambigu.
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return '';
-      return d.toISOString().split('T')[0];
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     } catch {
       return '';
     }
@@ -251,14 +260,16 @@ export default function AssetDetail() {
   };
 
   async function fetchCategoryOptions(q: string) {
-    const { data } = await api.get<{ name: string }[]>(`/categories${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    const params = new URLSearchParams({ type: 'asset' });
+    if (q) params.append('q', q);
+    const { data } = await api.get<{ name: string }[]>(`/categories?${params.toString()}`);
     return (data ?? []).map(d => d.name);
   }
 
   async function getOrCreateCategoryId(name: string): Promise<number | null> {
     const trimmed = name.trim();
     if (!trimmed) return null;
-    const { data, error } = await api.post<{ id: number }>('/categories', { name: trimmed });
+    const { data, error } = await api.post<{ id: number }>('/categories', { name: trimmed, type: 'asset' });
     if (error) throw new Error(error);
     return data?.id ?? null;
   }
@@ -354,6 +365,10 @@ export default function AssetDetail() {
               <Info label="Supplier" value={asset.supplier || '—'} />
               <Info label="Warranty end" value={warrantyStatus.text} />
               <Info label="Funder" value={asset.funder || '—'} />
+              <Info
+                label="Total maintenance cost"
+                value={asset.total_repair_cost ? `GH₵${asset.total_repair_cost.toFixed(2)}` : '—'}
+              />
               {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
 
@@ -457,6 +472,11 @@ export default function AssetDetail() {
             </div>
           </form>
         </Modal>
+
+        <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
+          <h3 style={{ margin: '8px 0' }}>🕒 History</h3>
+          <AssetTimeline assetId={asset.id} />
+        </section>
 
         <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
           <h3 style={{ margin: '8px 0' }}>📋 Complete Audit History</h3>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/apiClient';
+import { todayDateString } from '../lib/dateHelpers';
 import { useSupplyAssignments, type SupplyAssignmentInput } from '../hooks/useSupplyAssignments';
 
 type User = {
@@ -36,7 +37,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
   const [selectedSupply, setSelectedSupply] = useState<Supply | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
-  const [assignedDate, setAssignedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [assignedDate, setAssignedDate] = useState(todayDateString());
   const [quantity, setQuantity] = useState<string>('1');
 
   const [users, setUsers] = useState<User[]>([]);
@@ -184,7 +185,7 @@ export const AssignSupplyModal: React.FC<AssignSupplyModalProps> = ({
         setSupplySearch('');
         setUserSearch('');
         setQuantity('1');
-        setAssignedDate(new Date().toISOString().split('T')[0]);
+        setAssignedDate(todayDateString());
         onAssigned?.();
         onClose();
       } else {

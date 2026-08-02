@@ -3,6 +3,8 @@ import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
+import { AppException, NotFoundException, BusinessException } from '../exceptions';
+import { todayDateString, currentMonthBounds } from '../utils/dateHelpers';
 
 const router = Router();
 
@@ -39,34 +41,42 @@ router.post('/return_asset', requireAuth, async (req: Request, res: Response) =>
             return res.status(400).json({ error: 'p_asset_id required' });
         }
 
-        // Get old state
-        const [oldAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        if (!(oldAsset as any[]).length) {
-            return res.status(404).json({ error: 'Asset not found' });
-        }
-        const oldValue = (oldAsset as any[])[0];
+        // ✅ Transaction: verrou (FOR UPDATE) sur l'asset + update assignment + update
+        // statut asset, atomiques. Empêche deux return_asset concurrents sur le même asset.
+        const { oldValue, newValue } = await db.transaction(async (tx) => {
+            const [oldAsset] = await tx.execute('SELECT * FROM assets WHERE id = ? FOR UPDATE', [p_asset_id]);
+            if (!(oldAsset as any[]).length) {
+                throw new NotFoundException('Asset not found');
+            }
+            const oldValue = (oldAsset as any[])[0];
 
-        // Update assignment
-        await db.query(
-            'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
-            ['returned', new Date().toISOString().split('T')[0], p_asset_id, 'active']
-        );
+            // ✅ Only an assigned asset can be returned (avoids silently resetting repair/auctioned/retired)
+            if (oldValue.status !== 'assigned') {
+                throw new BusinessException(`Asset is not assigned (status: ${oldValue.status})`);
+            }
 
-        // Update asset
-        await db.query('UPDATE assets SET status = ? WHERE id = ?', ['in_stock', p_asset_id]);
+            // Update assignment
+            await tx.execute(
+                'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
+                ['returned', todayDateString(), p_asset_id, 'active']
+            );
 
-        // Get new state
-        const [newAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const newValue = (newAsset as any[])[0];
+            // Update asset
+            await tx.execute('UPDATE assets SET status = ? WHERE id = ?', ['in_stock', p_asset_id]);
 
-        // Log audit
-        await auditLog(user.email, 'asset_returned', 'assets', p_asset_id, oldValue, newValue);
+            const [newAsset] = await tx.execute('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
+            return { oldValue, newValue: (newAsset as any[])[0] };
+        });
 
+        // Log audit (une seule fois)
         await logAudit(user.email, 'asset_returned', 'assets', p_asset_id, oldValue, newValue);
 
         logger.info(`Asset ${p_asset_id} returned to stock`, 'RPC');
         return res.json({ success: true });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('return_asset error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -82,40 +92,33 @@ router.post('/send_to_repair', requireAuth, async (req: Request, res: Response) 
             return res.status(400).json({ error: 'p_asset_id required' });
         }
 
-        // Validate asset
-        const [assetCheck] = await db.query(
-            'SELECT id, status FROM assets WHERE id = ?',
-            [p_asset_id]
-        );
+        // ✅ Transaction: verrou (FOR UPDATE) + update statut + lifecycle_events atomiques
+        const { oldValue, newValue } = await db.transaction(async (tx) => {
+            const [assetCheck] = await tx.execute('SELECT * FROM assets WHERE id = ? FOR UPDATE', [p_asset_id]);
+            if (!(assetCheck as any[]).length) {
+                throw new NotFoundException('Asset not found');
+            }
 
-        if (!(assetCheck as any[]).length) {
-            return res.status(404).json({ error: 'Asset not found' });
-        }
+            const oldValue = (assetCheck as any[])[0];
+            if (oldValue.status === 'repair') {
+                throw new BusinessException('Asset is already in repair');
+            }
+            if (oldValue.status === 'retired') {
+                throw new BusinessException('Cannot repair a retired asset');
+            }
 
-        const asset = (assetCheck as any[])[0];
-        if (asset.status === 'repair') {
-            return res.status(400).json({ error: 'Asset is already in repair' });
-        }
-        if (asset.status === 'retired') {
-            return res.status(400).json({ error: 'Cannot repair a retired asset' });
-        }
+            await tx.execute('UPDATE assets SET status = ? WHERE id = ?', ['repair', p_asset_id]);
 
-        // Get old state
-        const [oldAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const oldValue = (oldAsset as any[])[0];
+            const [newAsset] = await tx.execute('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
+            const newValue = (newAsset as any[])[0];
 
-        // Update status
-        await db.query('UPDATE assets SET status = ? WHERE id = ?', ['repair', p_asset_id]);
+            await tx.execute(
+                'INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by, status) VALUES (?, ?, ?, ?, ?)',
+                [p_asset_id, 'repair', p_notes || 'Sent for repair', user.email, 'open']
+            );
 
-        // Get new state
-        const [newAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const newValue = (newAsset as any[])[0];
-
-        // Log lifecycle event
-        await db.query(
-            'INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by, status) VALUES (?, ?, ?, ?, ?)',
-            [p_asset_id, 'repair', p_notes || 'Sent for repair', user.email, 'open']
-        );
+            return { oldValue, newValue };
+        });
 
         // Log audit
         await auditLog(user.email, 'asset_sent_to_repair', 'assets', p_asset_id, oldValue, newValue);
@@ -123,6 +126,9 @@ router.post('/send_to_repair', requireAuth, async (req: Request, res: Response) 
         logger.info(`Asset ${p_asset_id} sent to repair`, 'RPC');
         return res.json({ success: true, message: 'Asset sent for repair' });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('send_to_repair error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -138,21 +144,6 @@ router.post('/exit_repair', requireAuth, async (req: Request, res: Response) => 
             return res.status(400).json({ error: 'p_asset_id required' });
         }
 
-        // Validate asset
-        const [assetCheck] = await db.query(
-            'SELECT id, status FROM assets WHERE id = ?',
-            [p_asset_id]
-        );
-
-        if (!(assetCheck as any[]).length) {
-            return res.status(404).json({ error: 'Asset not found' });
-        }
-
-        const asset = (assetCheck as any[])[0];
-        if (asset.status !== 'repair') {
-            return res.status(400).json({ error: 'Asset is not in repair status' });
-        }
-
         // Validate cost
         let repairCost = null;
         if (p_cost !== null && p_cost !== undefined && p_cost !== '') {
@@ -163,28 +154,32 @@ router.post('/exit_repair', requireAuth, async (req: Request, res: Response) => 
             repairCost = parseFloat(repairCost.toFixed(2));
         }
 
-        // Get old state
-        const [oldAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const oldValue = (oldAsset as any[])[0];
+        // ✅ Transaction: verrou (FOR UPDATE) + update statut + lifecycle_events atomiques
+        const { oldValue, newValue } = await db.transaction(async (tx) => {
+            const [assetCheck] = await tx.execute('SELECT * FROM assets WHERE id = ? FOR UPDATE', [p_asset_id]);
+            if (!(assetCheck as any[]).length) {
+                throw new NotFoundException('Asset not found');
+            }
 
-        // Update status
-        await db.query('UPDATE assets SET status = ? WHERE id = ?', ['in_stock', p_asset_id]);
+            const oldValue = (assetCheck as any[])[0];
+            if (oldValue.status !== 'repair') {
+                throw new BusinessException('Asset is not in repair status');
+            }
 
-        // Get new state
-        const [newAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const newValue = (newAsset as any[])[0];
+            await tx.execute('UPDATE assets SET status = ? WHERE id = ?', ['in_stock', p_asset_id]);
 
-        // Build notes
-        let eventNotes = p_notes || 'Repair completed';
-        if (repairCost !== null) {
-            eventNotes += ` | Repair cost: $${repairCost.toFixed(2)}`;
-        }
+            const [newAsset] = await tx.execute('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
+            const newValue = (newAsset as any[])[0];
 
-        // Log lifecycle event
-        await db.query(
-            'INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by, status) VALUES (?, ?, ?, ?, ?)',
-            [p_asset_id, 'maintenance', eventNotes, user.email, 'resolved']
-        );
+            // ✅ Coût dans une colonne dédiée (plus concaténé dans notes) — agrégeable
+            // en SQL pour le total de maintenance par asset (retire vs repair).
+            await tx.execute(
+                'INSERT INTO lifecycle_events (asset_id, event_type, notes, cost, created_by, status) VALUES (?, ?, ?, ?, ?, ?)',
+                [p_asset_id, 'maintenance', p_notes || 'Repair completed', repairCost, user.email, 'resolved']
+            );
+
+            return { oldValue, newValue };
+        });
 
         // Log audit
         await auditLog(user.email, 'asset_repair_completed', 'assets', p_asset_id, oldValue, newValue);
@@ -196,6 +191,9 @@ router.post('/exit_repair', requireAuth, async (req: Request, res: Response) => 
             repair_cost: repairCost
         });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('exit_repair error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -211,43 +209,37 @@ router.post('/retire_asset', requireAuth, async (req: Request, res: Response) =>
             return res.status(400).json({ error: 'p_asset_id required' });
         }
 
-        // Validate asset
-        const [assetCheck] = await db.query(
-            'SELECT id, status FROM assets WHERE id = ?',
-            [p_asset_id]
-        );
+        // ✅ Transaction: verrou (FOR UPDATE) + update statut + clôture assignment +
+        // lifecycle_events atomiques
+        const { oldValue, newValue } = await db.transaction(async (tx) => {
+            const [assetCheck] = await tx.execute('SELECT * FROM assets WHERE id = ? FOR UPDATE', [p_asset_id]);
+            if (!(assetCheck as any[]).length) {
+                throw new NotFoundException('Asset not found');
+            }
 
-        if (!(assetCheck as any[]).length) {
-            return res.status(404).json({ error: 'Asset not found' });
-        }
+            const oldValue = (assetCheck as any[])[0];
+            if (oldValue.status === 'retired') {
+                throw new BusinessException('Asset is already retired');
+            }
 
-        const asset = (assetCheck as any[])[0];
-        if (asset.status === 'retired') {
-            return res.status(400).json({ error: 'Asset is already retired' });
-        }
+            await tx.execute('UPDATE assets SET status = ? WHERE id = ?', ['retired', p_asset_id]);
 
-        // Get old state
-        const [oldAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const oldValue = (oldAsset as any[])[0];
+            // Close assignment if active
+            await tx.execute(
+                'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
+                ['returned', todayDateString(), p_asset_id, 'active']
+            );
 
-        // Update status
-        await db.query('UPDATE assets SET status = ? WHERE id = ?', ['retired', p_asset_id]);
+            const [newAsset] = await tx.execute('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
+            const newValue = (newAsset as any[])[0];
 
-        // Close assignment if active
-        await db.query(
-            'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
-            ['returned', new Date().toISOString().split('T')[0], p_asset_id, 'active']
-        );
+            await tx.execute(
+                'INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by, status) VALUES (?, ?, ?, ?, ?)',
+                [p_asset_id, 'retired', p_notes || 'Withdrawn from service', user.email, 'resolved']
+            );
 
-        // Get new state
-        const [newAsset] = await db.query('SELECT * FROM assets WHERE id = ?', [p_asset_id]);
-        const newValue = (newAsset as any[])[0];
-
-        // Log lifecycle event
-        await db.query(
-            'INSERT INTO lifecycle_events (asset_id, event_type, notes, created_by, status) VALUES (?, ?, ?, ?, ?)',
-            [p_asset_id, 'retired', p_notes || 'Withdrawn from service', user.email, 'resolved']
-        );
+            return { oldValue, newValue };
+        });
 
         // Log audit
         await auditLog(user.email, 'asset_retired', 'assets', p_asset_id, oldValue, newValue);
@@ -255,6 +247,9 @@ router.post('/retire_asset', requireAuth, async (req: Request, res: Response) =>
         logger.info(`Asset ${p_asset_id} retired`, 'RPC');
         return res.json({ success: true, message: 'Asset permanently retired' });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('retire_asset error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -281,7 +276,38 @@ router.post('/get_asset_stats', requireAuth, async (req: Request, res: Response)
     }
 });
 
+// POST /api/rpc/get_dashboard_kpis - KPIs croisés pour la page d'accueil
+// (valeur du parc, coût supplies du mois, incidents ouverts, enchères actives)
+router.post('/get_dashboard_kpis', requireAuth, async (_req: Request, res: Response) => {
+    try {
+        const { from, to } = currentMonthBounds();
+
+        const [rows] = await db.query(
+            `SELECT
+                (SELECT COALESCE(SUM(purchase_price), 0) FROM assets WHERE status != 'retired') AS fleet_value,
+                (SELECT COALESCE(SUM(cost), 0) FROM supplies WHERE purchase_date BETWEEN ? AND ?) AS supplies_cost_month,
+                (SELECT COUNT(*) FROM incidents WHERE status IN ('open', 'in_progress')) AS open_incidents,
+                (SELECT COUNT(*) FROM auctions WHERE status = 'active') AS active_auctions
+            `,
+            [from, to]
+        );
+
+        const kpis = (rows as any[])[0];
+        logger.info('Fetched dashboard KPIs', 'RPC');
+        return res.json({
+            fleet_value: parseFloat(kpis.fleet_value) || 0,
+            supplies_cost_month: parseFloat(kpis.supplies_cost_month) || 0,
+            open_incidents: Number(kpis.open_incidents) || 0,
+            active_auctions: Number(kpis.active_auctions) || 0,
+            period: { from, to },
+        });
+    } catch (err) {
+        logger.error('get_dashboard_kpis error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 // ✅ Log all registered POST routes
-console.log('✅ RPC routes registered: /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats, /assignees_rename, /assignees_delete');
+console.log('✅ RPC routes registered: /return_asset, /send_to_repair, /exit_repair, /retire_asset, /get_asset_stats, /get_dashboard_kpis, /assignees_rename, /assignees_delete');
 
 export default router;

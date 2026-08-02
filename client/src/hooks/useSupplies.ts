@@ -13,6 +13,7 @@ export interface Supply {
   receiver_email?: string; // Alternative field from response
   category_id?: number;
   category_name?: string;
+  low_stock_threshold?: number | null;
   created_at: string;
   updated_at?: string;
 }
@@ -26,6 +27,7 @@ export interface SupplyInput {
   quantity: number;
   receiver_uid: string; // Email string
   category_id?: number;
+  low_stock_threshold?: number | null;
 }
 
 export const useSupplies = () => {

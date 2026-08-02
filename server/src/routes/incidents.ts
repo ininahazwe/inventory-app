@@ -6,6 +6,7 @@ import {
     sendEmail,
     getIncidentCreatedAdminEmail,
     getIncidentResolvedEmail,
+    getIncidentSLAReminderEmail,
 } from '../services/gmailService';
 
 const router = Router();
@@ -35,11 +36,20 @@ router.patch('/:id/status', requireAuth, requireAdmin, async (req: Request, res:
         }
 
         const resolvedAt = status === 'resolved' ? new Date() : null;
+        // Réouverture (open/in_progress): on relâche le verrou de relance SLA pour
+        // que le compteur puisse à nouveau alerter si l'incident traîne à nouveau.
+        const reopening = status === 'open' || status === 'in_progress';
 
-        const [result] = await db.query(
-            `UPDATE incidents SET status = ?, resolved_at = ? WHERE id = ?`,
-            [status, resolvedAt, id]
-        );
+        // 'closed' conserve resolved_at existant; 'open'/'in_progress' le remettent à NULL (réouverture)
+        const [result] = status === 'closed'
+            ? await db.query(
+                `UPDATE incidents SET status = ? WHERE id = ?`,
+                [status, id]
+            )
+            : await db.query(
+                `UPDATE incidents SET status = ?, resolved_at = ?${reopening ? ', sla_reminder_sent_at = NULL' : ''} WHERE id = ?`,
+                [status, resolvedAt, id]
+            );
 
         if ((result as any).affectedRows === 0) {
             return res.status(404).json({ error: 'Incident not found' });
@@ -277,5 +287,61 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         return res.status(500).json({ error: (err as Error).message });
     }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SLA: relance mail pour les incidents ouverts trop longtemps
+// Appelée par le scheduler interne (voir src/scheduler.ts) — pas de cron externe.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function checkIncidentSLA(): Promise<{ overdue: number; notified: number }> {
+    const slaDays = parseInt(process.env.INCIDENT_SLA_DAYS || '7', 10);
+
+    const [rows] = await db.query(
+        `SELECT i.id, i.asset_id, a.label AS asset_label, i.severity, i.status,
+                i.assigned_to, i.created_at
+         FROM incidents i
+                  LEFT JOIN assets a ON i.asset_id = a.id
+         WHERE i.status IN ('open', 'in_progress')
+           AND i.sla_reminder_sent_at IS NULL
+           AND i.created_at <= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+        [slaDays]
+    );
+    const overdue = rows as any[];
+    if (overdue.length === 0) {
+        return { overdue: 0, notified: 0 };
+    }
+
+    const [adminRows] = await db.query(`SELECT email FROM users WHERE role IN ('admin', 'super_admin')`);
+    const adminEmails = (adminRows as any[]).map(u => u.email).filter(Boolean);
+
+    let notified = 0;
+    for (const incident of overdue) {
+        try {
+            const recipients = Array.from(new Set([
+                ...(incident.assigned_to ? [incident.assigned_to] : []),
+                ...adminEmails,
+            ]));
+            if (recipients.length === 0) continue;
+
+            const incidentUrl = `${FRONTEND_URL}/incidents/${incident.id}`;
+            const daysOpen = Math.floor((Date.now() - new Date(incident.created_at).getTime()) / 86400000);
+
+            const payload = getIncidentSLAReminderEmail(
+                recipients,
+                incident.asset_label || `Asset #${incident.asset_id}`,
+                incident.severity,
+                daysOpen,
+                incidentUrl
+            );
+            await sendEmail(payload);
+            await db.query('UPDATE incidents SET sla_reminder_sent_at = NOW() WHERE id = ?', [incident.id]);
+            notified++;
+        } catch (err) {
+            logger.error(`SLA reminder failed for incident ${incident.id}:`, err as Error);
+        }
+    }
+
+    logger.info(`Incident SLA check: ${overdue.length} overdue, ${notified} notified`, 'INCIDENTS');
+    return { overdue: overdue.length, notified };
+}
 
 export default router;

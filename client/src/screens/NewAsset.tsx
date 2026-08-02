@@ -24,14 +24,16 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
   const [uploadError, setUploadError]   = useState<string | null>(null);
 
   async function fetchCategoryOptions(q: string) {
-    const { data } = await api.get<{ name: string }[]>(`/categories${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    const params = new URLSearchParams({ type: 'asset' });
+    if (q) params.append('q', q);
+    const { data } = await api.get<{ name: string }[]>(`/categories?${params.toString()}`);
     return (data ?? []).map(d => d.name);
   }
 
   async function getOrCreateCategoryId(name: string): Promise<number | null> {
     const trimmed = name.trim();
     if (!trimmed) return null;
-    const { data, error } = await api.post<{ id: number }>('/categories', { name: trimmed });
+    const { data, error } = await api.post<{ id: number }>('/categories', { name: trimmed, type: 'asset' });
     if (error) throw new Error(error);
     return data?.id ?? null;
   }

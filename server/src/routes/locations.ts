@@ -121,6 +121,18 @@ router.delete('/:id', requireAuth, requireSuperAdmin, async (req: Request, res: 
             });
         }
 
+        // Bloquer aussi si des fournitures y sont assignées (actives)
+        const [activeSupplyAssignments] = await db.query(
+            'SELECT COUNT(*) as count FROM supply_assignments WHERE location_id = ? AND status = "active"',
+            [id]
+        );
+        const supplyCount = (activeSupplyAssignments as any[])[0]?.count || 0;
+        if (supplyCount > 0) {
+            return res.status(400).json({
+                error: `Cannot delete location with ${supplyCount} active supply assignment(s). Return supplies first.`
+            });
+        }
+
         await db.query('DELETE FROM locations WHERE id = ?', [id]);
         logger.info(`Deleted location #${id}`, 'LOCATIONS');
         return res.json({ success: true });

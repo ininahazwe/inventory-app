@@ -7,13 +7,12 @@ export interface UserInfo {
   email: string;
   name: string;
   picture: string;
-  role: 'user' | 'admin' | 'super_admin' | 'assignee';
+  role: 'user' | 'admin' | 'super_admin';
 }
 
 export function usePermissions() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isUser, setIsUser] = useState(false);
-  const [isAssignee, setIsAssignee] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -24,7 +23,7 @@ export function usePermissions() {
         const { data, error } = await auth.getUser();
 
         if (!error && data) {
-          const userRole = data.role as 'user' | 'admin' | 'super_admin' | 'assignee';
+          const userRole = data.role as 'user' | 'admin' | 'super_admin';
 
           setUserInfo({
             id: data.id,
@@ -37,8 +36,7 @@ export function usePermissions() {
           // Set permissions based on role
           setIsSuperAdmin(userRole === 'super_admin');
           setIsAdmin(userRole === 'admin' || userRole === 'super_admin');
-          setIsAssignee(userRole === 'assignee');
-          setIsUser(userRole === 'user' || userRole === 'assignee'); // assignee can also be treated as user
+          setIsUser(userRole === 'user');
         }
       } catch (err) {
         console.error('Permission check error:', err);
@@ -53,7 +51,6 @@ export function usePermissions() {
   return {
     userInfo,
     isUser,
-    isAssignee,
     isAdmin,
     isSuperAdmin,
     loading,

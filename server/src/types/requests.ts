@@ -5,7 +5,7 @@
 export interface AuthUser {
     uid: number;           // Modifié : ID numérique de la base de données (ex: 1, 2, 3)
     email: string;         // Email obligatoire
-    role: 'user' | 'admin' | 'super_admin' | 'accountant';
+    role: 'user' | 'admin' | 'super_admin';
     iat?: number;
     exp?: number;
 }

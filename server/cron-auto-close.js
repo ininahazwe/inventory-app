@@ -1,4 +1,11 @@
 /**
+ * ⚠️ DEPRECATED — plus nécessaire depuis l'ajout du scheduler interne
+ * (src/scheduler.ts, node-schedule tourne dans le process du serveur).
+ * Ce script externe peut être désinstallé de votre cron système/host.
+ * Laissé en place uniquement comme filet de sécurité si le process serveur
+ * tourne sans scheduler (ex: ancien déploiement) — sans danger à garder actif
+ * en double (auto-close est idempotent : ne fait rien si aucune enchère n'a expiré).
+ *
  * Cron task: Auto-close expired auctions
  * Runs every hour at :00
  * Calls POST /api/auctions/auto-close on assets.mfwa.org

@@ -3,6 +3,9 @@ import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
+import { recordMovement, deleteMovementsByRef } from './supplyMovements';
+import { AppException, NotFoundException, BusinessException } from '../exceptions';
+import { todayDateString } from '../utils/dateHelpers';
 
 const router = Router();
 
@@ -97,32 +100,6 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'quantity_assigned must be a positive integer' });
         }
 
-        // Verify supply exists
-        const [supplyResult] = await db.execute(
-            'SELECT id, name, quantity FROM supplies WHERE id = ?',
-            [supply_id]
-        );
-
-        if (!(supplyResult as any[]).length) {
-            return res.status(404).json({ error: 'Supply not found' });
-        }
-
-        const supply = (supplyResult as any[])[0];
-
-        // Verify enough stock remains (total quantity minus currently active assignments)
-        const [activeResult] = await db.execute(
-            `SELECT COALESCE(SUM(quantity_assigned), 0) as active_qty
-             FROM supply_assignments
-             WHERE supply_id = ? AND status = 'active'`,
-            [supply_id]
-        );
-        const activeQty = Number((activeResult as any[])[0]?.active_qty || 0);
-        const available = Math.max(0, Number(supply.quantity) - activeQty);
-
-        if (qtyRequested > available) {
-            return res.status(400).json({ error: `Only ${available} units available` });
-        }
-
         let assignedUserEmail: string | null = null;
 
         // Verify user exists (si fourni)
@@ -156,23 +133,67 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             ? assigned_at.split('T')[0]
             : assigned_at;
 
-        const [result] = await db.execute(
-            `INSERT INTO supply_assignments (supply_id, assignee_name, assignee_email, assigned_user_id, location_id, quantity_assigned, assigned_at, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-            [
+        // ✅ Transaction avec verrou (FOR UPDATE) sur la ligne supply: sérialise les
+        // assignations concurrentes sur la même fourniture pour empêcher la survente
+        // (deux requêtes simultanées passant toutes les deux le contrôle "available").
+        const { supply, assignmentId } = await db.transaction(async (tx) => {
+            const [supplyResult] = await tx.execute(
+                'SELECT id, name, quantity FROM supplies WHERE id = ? FOR UPDATE',
+                [supply_id]
+            );
+
+            if (!(supplyResult as any[]).length) {
+                throw new NotFoundException('Supply not found');
+            }
+
+            const supply = (supplyResult as any[])[0];
+
+            // Stock restant = quantité totale - assignations actives (vu dans la même transaction)
+            const [activeResult] = await tx.execute(
+                `SELECT COALESCE(SUM(quantity_assigned), 0) as active_qty
+                 FROM supply_assignments
+                 WHERE supply_id = ? AND status = 'active'`,
+                [supply_id]
+            );
+            const activeQty = Number((activeResult as any[])[0]?.active_qty || 0);
+            const available = Math.max(0, Number(supply.quantity) - activeQty);
+
+            if (qtyRequested > available) {
+                throw new BusinessException(`Only ${available} units available`);
+            }
+
+            const [result] = await tx.execute(
+                `INSERT INTO supply_assignments (supply_id, assignee_name, assignee_email, assigned_user_id, location_id, quantity_assigned, assigned_at, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+                [
+                    supply_id,
+                    assignedUserEmail,
+                    assignedUserEmail,
+                    assigned_user_id || null,
+                    location_id || null,
+                    qtyRequested,
+                    cleanDate
+                ]
+            );
+
+            const assignmentId = (result as any).insertId;
+
+            // ✅ Ledger: sortie de stock, même transaction — si ça échoue, tout est annulé
+            await recordMovement({
                 supply_id,
-                assignedUserEmail,
-                assignedUserEmail,
-                assigned_user_id || null,
-                location_id || null,
-                qtyRequested,
-                cleanDate
-            ]
-        );
+                type: 'issue',
+                qty: -qtyRequested,
+                movement_date: cleanDate,
+                ref_type: 'supply_assignment',
+                ref_id: assignmentId,
+                notes: `Issued to ${assignedUserEmail || `location #${location_id}`}`,
+                created_by: user.email,
+            }, tx);
 
-        const assignmentId = (result as any).insertId;
+            return { supply, assignmentId };
+        });
 
-        // Get created assignment
+        // Get created assignment (lecture après commit)
         const [assignments] = await db.execute(
             `SELECT sa.*, s.name as supply_name, u.email as user_email,
                     l.name as location_name, l.floor as location_floor
@@ -192,6 +213,9 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         logger.info(`Created supply assignment: ${supply.name}`, 'SUPPLY_ASSIGNMENTS');
         return res.status(201).json(assignment);
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('POST /supply-assignments error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -203,19 +227,6 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
         const user = (req as any).user;
         const id = parseInt(String(req.params.id), 10);
         const { returned_at, status } = req.body;
-
-        const [oldAssignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
-             FROM supply_assignments sa
-                      LEFT JOIN supplies s ON sa.supply_id = s.id
-                      LEFT JOIN users u ON sa.assigned_user_id = u.id
-             WHERE sa.id = ?`,
-            [id]
-        );
-
-        if (!(oldAssignments as any[]).length) {
-            return res.status(404).json({ error: 'Assignment not found' });
-        }
 
         const updates: string[] = [];
         const values: any[] = [];
@@ -237,12 +248,49 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No fields to update' });
         }
 
-        values.push(id);
+        // ✅ Transaction: lecture (FOR UPDATE) + update + écriture ledger atomiques.
+        // Empêche un double "return" concurrent de créditer le ledger deux fois.
+        const oldAssignment = await db.transaction(async (tx) => {
+            const [oldAssignments] = await tx.execute(
+                `SELECT sa.*, s.name as supply_name, u.email as user_email
+                 FROM supply_assignments sa
+                          LEFT JOIN supplies s ON sa.supply_id = s.id
+                          LEFT JOIN users u ON sa.assigned_user_id = u.id
+                 WHERE sa.id = ?
+                 FOR UPDATE`,
+                [id]
+            );
 
-        await db.execute(
-            `UPDATE supply_assignments SET ${updates.join(', ')} WHERE id = ?`,
-            values
-        );
+            if (!(oldAssignments as any[]).length) {
+                throw new NotFoundException('Assignment not found');
+            }
+
+            const oldAssignment = (oldAssignments as any[])[0];
+
+            await tx.execute(
+                `UPDATE supply_assignments SET ${updates.join(', ')} WHERE id = ?`,
+                [...values, id]
+            );
+
+            // ✅ Ledger: retour en stock (uniquement transition active -> returned)
+            if (oldAssignment.status === 'active' && status === 'returned') {
+                const returnDate = returned_at
+                    ? (returned_at.includes('T') ? returned_at.split('T')[0] : returned_at)
+                    : todayDateString();
+                await recordMovement({
+                    supply_id: oldAssignment.supply_id,
+                    type: 'return',
+                    qty: oldAssignment.quantity_assigned,
+                    movement_date: returnDate,
+                    ref_type: 'supply_assignment',
+                    ref_id: id,
+                    notes: `Returned by ${oldAssignment.assignee_email || 'unknown'}`,
+                    created_by: user.email,
+                }, tx);
+            }
+
+            return oldAssignment;
+        });
 
         const [newAssignments] = await db.execute(
             `SELECT sa.*, s.name as supply_name, u.email as user_email,
@@ -257,11 +305,14 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
         const newAssignment = (newAssignments as any[])[0];
 
-        await logAudit(user.email, 'supply_assignment_updated', 'supply_assignments', id, (oldAssignments as any[])[0], newAssignment);
+        await logAudit(user.email, 'supply_assignment_updated', 'supply_assignments', id, oldAssignment, newAssignment);
 
         logger.info(`Updated supply assignment ${id}`, 'SUPPLY_ASSIGNMENTS');
         return res.json(newAssignment);
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('PATCH /supply-assignments/:id error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
@@ -273,28 +324,40 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
         const user = (req as any).user;
         const id = parseInt(String(req.params.id), 10);
 
-        const [assignments] = await db.execute(
-            `SELECT sa.*, s.name as supply_name, u.email as user_email
-             FROM supply_assignments sa
-                      LEFT JOIN supplies s ON sa.supply_id = s.id
-                      LEFT JOIN users u ON sa.assigned_user_id = u.id
-             WHERE sa.id = ?`,
-            [id]
-        );
+        // ✅ Transaction: lecture + delete + purge ledger atomiques
+        const oldAssignment = await db.transaction(async (tx) => {
+            const [assignments] = await tx.execute(
+                `SELECT sa.*, s.name as supply_name, u.email as user_email
+                 FROM supply_assignments sa
+                          LEFT JOIN supplies s ON sa.supply_id = s.id
+                          LEFT JOIN users u ON sa.assigned_user_id = u.id
+                 WHERE sa.id = ?
+                 FOR UPDATE`,
+                [id]
+            );
 
-        if (!(assignments as any[]).length) {
-            return res.status(404).json({ error: 'Assignment not found' });
-        }
+            if (!(assignments as any[]).length) {
+                throw new NotFoundException('Assignment not found');
+            }
 
-        const oldAssignment = (assignments as any[])[0];
+            const oldAssignment = (assignments as any[])[0];
 
-        await db.execute('DELETE FROM supply_assignments WHERE id = ?', [id]);
+            await tx.execute('DELETE FROM supply_assignments WHERE id = ?', [id]);
+
+            // ✅ Ledger: purger les mouvements liés (issue + return éventuels)
+            await deleteMovementsByRef('supply_assignment', id, tx);
+
+            return oldAssignment;
+        });
 
         await logAudit(user.email, 'supply_assignment_deleted', 'supply_assignments', id, oldAssignment, null);
 
         logger.info(`Deleted supply assignment ${id}`, 'SUPPLY_ASSIGNMENTS');
         return res.json({ message: 'Assignment deleted' });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('DELETE /supply-assignments/:id error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }

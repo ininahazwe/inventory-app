@@ -1,6 +1,7 @@
 // src/pages/EditSupplyPage.tsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { api } from '../lib/apiClient';
 import { useSupplies } from '../hooks/useSupplies';
 import Layout from '../Layout';
 
@@ -22,6 +23,7 @@ export default function EditSupplyPage() {
     brand: '',
     quantity: '1',
     receiver_uid: '',
+    lowStockThreshold: '',
   });
 
   const [users, setUsers] = useState<AssignableUser[]>([]);
@@ -51,27 +53,30 @@ export default function EditSupplyPage() {
     }
   }, [userSearch, users]);
 
+  // Normalise une date ISO (avec T) vers YYYY-MM-DD pour input type=date
+  const toDateInput = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '';
+    return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  };
+
   const loadSupply = async () => {
     try {
-      const token = localStorage.getItem('jwt_token');
-      const response = await fetch(`http://localhost:3003/api/supplies/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const supply = await response.json();
+      const { data: supply, error: apiError } = await api.get<any>(`/supplies/${id}`);
 
-      if (supply.error) {
-        setError(supply.error);
+      if (apiError || !supply) {
+        setError(apiError || 'Failed to load supply');
         setLoading(false);
         return;
       }
 
       setFormData({
         name: supply.name || '',
-        purchase_date: supply.purchase_date || '',
+        purchase_date: toDateInput(supply.purchase_date),
         cost: supply.cost?.toString() || '',
         brand: supply.brand || '',
         quantity: supply.quantity?.toString() || '1',
         receiver_uid: supply.receiver_email || '',
+        lowStockThreshold: supply.low_stock_threshold != null ? String(supply.low_stock_threshold) : '',
       });
       setUserSearch(supply.receiver_email || '');
       setLoading(false);
@@ -84,11 +89,8 @@ export default function EditSupplyPage() {
 
   const loadUsers = async () => {
     try {
-      const token = localStorage.getItem('jwt_token');
-      const response = await fetch('http://localhost:3003/api/users/assignable', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const data = (await response.json()) as AssignableUser[];
+      // /users/all: cohérent avec CreateSupplyPage (receiver peut avoir n'importe quel rôle)
+      const { data } = await api.get<AssignableUser[]>('/users/all');
       if (Array.isArray(data)) {
         setUsers(data);
         setFilteredUsers(data);
@@ -123,6 +125,7 @@ export default function EditSupplyPage() {
         brand: formData.brand || undefined,
         quantity: parseInt(formData.quantity),
         receiver_uid: formData.receiver_uid,
+        low_stock_threshold: formData.lowStockThreshold ? parseInt(formData.lowStockThreshold) : null,
       } as any);
 
       if (success) {
@@ -281,6 +284,31 @@ export default function EditSupplyPage() {
                   boxSizing: 'border-box',
                 }}
               />
+            </label>
+          </div>
+
+          {/* ✅ Seuil d'alerte stock bas */}
+          <div style={{ marginBottom: 20 }}>
+            <label>
+              <strong>Low Stock Alert At</strong>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g., 5 (leave empty for no alert)"
+                value={formData.lowStockThreshold}
+                onChange={(e) => setFormData(prev => ({ ...prev, lowStockThreshold: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  marginTop: 8,
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
+                Alert shown on the Stock tab when remaining stock drops to or below this number.
+              </div>
             </label>
           </div>
 

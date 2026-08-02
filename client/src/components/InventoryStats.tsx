@@ -1,7 +1,13 @@
 // src/components/InventoryStats.tsx
 import React from "react";
 import { useEffect, useState } from 'react';
-import { api } from '../lib/apiClient';
+import { api, rpc } from '../lib/apiClient';
+
+// ✅ Parse sûr: MySQL renvoie parfois les SUM/COUNT en string. Retourne 0 si NaN.
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
 
 type StatsData = {
   total: number;           // All assets (including retired)
@@ -37,35 +43,30 @@ export default function InventoryStats({
 
   useEffect(() => {
     setLoading(true);
-    api.get<{ id: number; status: string; category_name: string | null }[]>(
-      '/assets?limit=1000'
-    ).then(({ data }) => {
-      // ✅ Extract data from paginated response or direct array
-      const rows = (data as unknown as { data: typeof data; count: number })?.data ?? data ?? [];
 
-      // ✅ Count by status
-      const statusCounts = (rows as { status: string }[]).reduce(
-        (acc, a) => {
-          acc[a.status] = (acc[a.status] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      );
+    // ✅ Agrégation SQL côté serveur — plus de fetch limité à 1000 lignes recalculé en JS.
+    Promise.all([
+      rpc<{ total: number; in_stock: number; assigned: number; repair: number; retired: number }>('get_asset_stats'),
+      api.get<{ id: number; name: string; type: string; assets_count: number }[]>('/categories?type=asset'),
+    ]).then(([statsRes, catsRes]) => {
+      const s = statsRes.data;
+      const cats = catsRes.data ?? [];
 
-      // ✅ Count by category
-      const catMap = new Map<string, number>();
-      (rows as { category_name: string | null }[]).forEach(a => {
-        const c = a.category_name || 'No category';
-        catMap.set(c, (catMap.get(c) || 0) + 1);
-      });
-
-      // ✅ Calculate stats
-      const inStockCount = statusCounts.in_stock || 0;
-      const assignedCount = statusCounts.assigned || 0;
-      const repairCount = statusCounts.repair || 0;
-      const retiredCount = statusCounts.retired || 0;
-      const totalCount = (rows as unknown[]).length;
+      const totalCount = num(s?.total);
+      const inStockCount = num(s?.in_stock);
+      const assignedCount = num(s?.assigned);
+      const repairCount = num(s?.repair);
+      const retiredCount = num(s?.retired);
       const availableCount = inStockCount + assignedCount + repairCount; // Exclude retired
+
+      const categorized = cats
+        .map(c => ({ name: c.name, count: num(c.assets_count) }))
+        .filter(c => c.count > 0);
+      const categorizedTotal = categorized.reduce((sum, c) => sum + c.count, 0);
+      const uncategorized = totalCount - categorizedTotal;
+      if (uncategorized > 0) {
+        categorized.push({ name: 'No category', count: uncategorized });
+      }
 
       setStats({
         total: totalCount,
@@ -74,9 +75,7 @@ export default function InventoryStats({
         assigned: assignedCount,
         repair: repairCount,
         retired: retiredCount,
-        categories: Array.from(catMap.entries())
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count),
+        categories: categorized.sort((a, b) => b.count - a.count),
       });
       setLoading(false);
     });

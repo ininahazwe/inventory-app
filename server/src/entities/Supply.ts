@@ -31,7 +31,7 @@ export interface UpdateSupplyRequest {
 
 export interface SupplyListResponse {
     supplies: Supply[];
-    totalCost: number;               // SUM(cost * quantity)
+    totalCost: number;               // SUM(cost) — cost is the total paid for the line (not unit price)
     totalQuantity: number;           // SUM(quantity)
     totalItems: number;              // COUNT
 }

@@ -1,5 +1,6 @@
 // src/components/CategoryManagerTyped.tsx
 import React, { useState } from 'react';
+import { api } from '../lib/apiClient';
 
 interface CategoryManagerTypedProps {
   type: 'asset' | 'supply';
@@ -23,22 +24,13 @@ export const CategoryManagerTyped: React.FC<CategoryManagerTypedProps> = ({ type
       setError(null);
       setSuccess(false);
 
-      const token = localStorage.getItem('jwt_token');
-      const response = await fetch('http://localhost:3003/api/categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: newCategory.trim(),
-          type: type, // ✅ Pass type
-        }),
+      const { error: apiError } = await api.post('/categories', {
+        name: newCategory.trim(),
+        type: type, // ✅ Pass type
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create category');
+      if (apiError) {
+        throw new Error(apiError || 'Failed to create category');
       }
 
       setSuccess(true);

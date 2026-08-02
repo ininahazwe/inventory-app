@@ -57,11 +57,16 @@ export default function LocationDetailPage() {
 
   useEffect(() => { load(); }, [id]);
 
+  // ✅ assigned_at est une colonne DATE ('YYYY-MM-DD'). Affichage forcé en UTC
+  // pour ne pas dépendre du fuseau du navigateur (sinon risque d'afficher le
+  // jour précédent pour un fuseau à offset négatif).
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
+    const [y, m, d] = dateString.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('fr-FR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: 'UTC',
     });
   };
 

@@ -68,6 +68,7 @@ const rpcRouteMap: Record<string, { method: 'GET' | 'POST'; path: (params: any) 
   'is_email_allowed': { method: 'GET', path: (p) => `/users/is_email_allowed?email=${encodeURIComponent(p?.email || '')}` },
   'is_current_admin': { method: 'GET', path: () => '/me/is-admin' },
   'get_asset_stats': { method: 'POST', path: () => '/rpc/get_asset_stats' },
+  'get_dashboard_kpis': { method: 'POST', path: () => '/rpc/get_dashboard_kpis' },
 
   // ✅ Asset RPCs (POST)
   'return_asset': { method: 'POST', path: () => '/rpc/return_asset' },

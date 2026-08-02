@@ -272,6 +272,60 @@ export function getIncidentCreatedAdminEmail(
 }
 
 /**
+ * Relance SLA: incident resté ouvert/in_progress plus longtemps que le seuil
+ * configuré (INCIDENT_SLA_DAYS). Envoyée une seule fois par période d'ouverture
+ * (voir incidents.sla_reminder_sent_at).
+ */
+export function getIncidentSLAReminderEmail(
+    recipients: string[],
+    assetLabel: string,
+    severity: string,
+    daysOpen: number,
+    incidentUrl: string
+): EmailPayload {
+    const severityColor: Record<string, string> = {
+        low: '#22c55e',
+        medium: '#f59e0b',
+        high: '#ef4444',
+        critical: '#7f1d1d',
+    };
+    const color = severityColor[severity] || '#6b7280';
+
+    return {
+        to: recipients,
+        subject: `[Incident] SLA overdue (${daysOpen}d) — ${assetLabel}`,
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: Arial, sans-serif;">
+              <h2 style="color: #b45309;">⏰ Incident SLA Overdue</h2>
+              <p>The following incident has been open for <strong>${daysOpen} day${daysOpen === 1 ? '' : 's'}</strong> without resolution.</p>
+
+              <div style="background-color: #fffbeb; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #b45309;">
+                  <p style="margin: 0 0 8px 0;"><strong>Asset:</strong> ${assetLabel}</p>
+                  <p style="margin: 0;">
+                      <strong>Severity:</strong>
+                      <span style="color: ${color}; font-weight: bold; text-transform: uppercase;">${severity}</span>
+                  </p>
+              </div>
+
+              <div style="margin: 30px 0; text-align: center;">
+                  <a href="${incidentUrl}" style="
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #b45309;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                  ">View Incident</a>
+              </div>
+
+              <p style="font-size: 13px; color: #6b7280;">Assets Management System</p>
+          </div>
+        `,
+    };
+}
+
+/**
  * Email au déclarant quand son incident est marqué comme résolu
  */
 export function getIncidentResolvedEmail(

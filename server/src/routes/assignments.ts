@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { AppException, NotFoundException, BusinessException } from '../exceptions';
+import { todayDateString } from '../utils/dateHelpers';
 
 const router = Router();
 
@@ -39,6 +41,7 @@ router.get('/assignees', requireAuth, async (req: Request, res: Response) => {
         let countQuery = `
             SELECT COUNT(DISTINCT a.assigned_user_id) as total
             FROM assignments a
+                     LEFT JOIN users u ON a.assigned_user_id = u.id
             WHERE a.status = 'active' AND a.assigned_user_id IS NOT NULL
         `;
         const countParams: any[] = [];
@@ -107,31 +110,47 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             }
         }
 
-        // Clore l'assignment actif précédent
-        await db.query(
-            'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
-            ['returned', new Date().toISOString().split('T')[0], asset_id, 'active']
-        );
+        // ✅ Transaction: verrou (FOR UPDATE) sur l'asset + clôture assignment précédent +
+        // insert nouveau + update statut asset, atomiques. Empêche deux assignations
+        // concurrentes de créer deux assignments actifs sur le même asset.
+        const assignedAtDate = todayDateString();
+        const insertId = await db.transaction(async (tx) => {
+            const [assetCheck] = await tx.execute('SELECT id, status FROM assets WHERE id = ? FOR UPDATE', [asset_id]);
+            if (!(assetCheck as any[]).length) {
+                throw new NotFoundException('Asset not found');
+            }
+            const assetStatus = (assetCheck as any[])[0].status;
+            if (assetStatus === 'retired' || assetStatus === 'auctioned') {
+                throw new BusinessException(`Cannot assign an asset with status '${assetStatus}'`);
+            }
 
-        const assignedAtDate = new Date().toISOString().split('T')[0];
-        const [result] = await db.query(
-            `INSERT INTO assignments (asset_id, assignee_name, assignee_email, assigned_user_id, location_id, status, assigned_at)
-             VALUES (?, ?, ?, ?, ?, 'active', ?)`,
-            [
-                asset_id,
-                userEmail,
-                userEmail,
-                assigned_user_id || null,
-                location_id || null,
-                assignedAtDate
-            ]
-        );
+            // Clore l'assignment actif précédent
+            await tx.execute(
+                'UPDATE assignments SET status = ?, returned_at = ? WHERE asset_id = ? AND status = ?',
+                ['returned', assignedAtDate, asset_id, 'active']
+            );
 
-        await db.query('UPDATE assets SET status = ? WHERE id = ?', ['assigned', asset_id]);
+            const [result] = await tx.execute(
+                `INSERT INTO assignments (asset_id, assignee_name, assignee_email, assigned_user_id, location_id, status, assigned_at)
+                 VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+                [
+                    asset_id,
+                    userEmail,
+                    userEmail,
+                    assigned_user_id || null,
+                    location_id || null,
+                    assignedAtDate
+                ]
+            );
+
+            await tx.execute('UPDATE assets SET status = ? WHERE id = ?', ['assigned', asset_id]);
+
+            return (result as any).insertId;
+        });
 
         logger.info(`Created assignment for asset ${asset_id}`, 'ASSIGNMENTS');
         return res.status(201).json({
-            id: (result as any).insertId,
+            id: insertId,
             asset_id,
             assigned_user_id: assigned_user_id || null,
             location_id: location_id || null,
@@ -139,6 +158,9 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             status: 'active'
         });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('POST /assignments error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }

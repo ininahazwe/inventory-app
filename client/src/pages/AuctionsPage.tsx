@@ -195,7 +195,7 @@ export default function AuctionsPage() {
     <Layout>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
-          <h2 style={{ margin: 0, letterSpacing: 0.2 }}>🔨 Enchères</h2>
+          <h2 style={{ margin: 0, letterSpacing: 0.2 }}>🔨 Auctions</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             {isSuperAdmin && (
               <button className="pill" onClick={() => navigate('/auctions/create')}>

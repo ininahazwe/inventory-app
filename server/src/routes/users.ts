@@ -35,6 +35,17 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'p_email et p_role requis' });
         }
 
+        const VALID_ROLES = ['user', 'admin', 'super_admin'];
+        if (!VALID_ROLES.includes(p_role)) {
+            return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` });
+        }
+
+        // Empêcher les doublons d'email
+        const [existing] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [p_email]);
+        if ((existing as any[]).length > 0) {
+            return res.status(409).json({ error: 'A user with this email already exists' });
+        }
+
         const { v4: uuidv4 } = require('uuid');
         await db.query(
             'INSERT INTO users (id, email, role, created_by) VALUES (?, ?, ?, ?)',
@@ -107,15 +118,17 @@ router.get('/is_email_allowed', async (req: Request, res: Response) => {
     }
 });
 
-// GET /users/assignable - Autocomplete pour les assignations (filtre par rôle 'assignee')
+// GET /users/assignable - Autocomplete pour les assignations
+// (le rôle 'assignee' n'existe plus: tout utilisateur peut recevoir du matériel;
+//  "assignee" est désormais un statut dérivé = avoir au moins un assignment actif)
 router.get('/assignable', requireAuth, async (req: Request, res: Response) => {
     try {
         const { q } = req.query;
-        let query = 'SELECT id, email FROM users WHERE role = ? ORDER BY email ASC LIMIT 50';
-        const params: any[] = ['assignee'];
+        let query = 'SELECT id, email FROM users ORDER BY email ASC LIMIT 50';
+        const params: any[] = [];
 
         if (q) {
-            query = 'SELECT id, email FROM users WHERE role = ? AND email LIKE ? ORDER BY email ASC LIMIT 50';
+            query = 'SELECT id, email FROM users WHERE email LIKE ? ORDER BY email ASC LIMIT 50';
             params.push(`%${q}%`);
         }
 
@@ -161,6 +174,11 @@ router.post('/role', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'p_user_id et p_new_role requis' });
         }
 
+        const VALID_ROLES = ['user', 'admin', 'super_admin'];
+        if (!VALID_ROLES.includes(p_new_role)) {
+            return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` });
+        }
+
         await db.query('UPDATE users SET role = ? WHERE id = ?', [p_new_role, p_user_id]);
         logger.info(`Role changed for user ${p_user_id} → ${p_new_role}`, 'USERS');
         return res.json({ success: true });
@@ -179,6 +197,11 @@ router.post('/delete', requireAuth, async (req: Request, res: Response) => {
 
         const { p_user_id } = req.body;
         if (!p_user_id) return res.status(400).json({ error: 'p_user_id requis' });
+
+        // Interdit de supprimer son propre compte
+        if (String(p_user_id) === String(user.uid)) {
+            return res.status(400).json({ error: 'Cannot delete your own account' });
+        }
 
         await db.query('DELETE FROM users WHERE id = ?', [p_user_id]);
         logger.info(`User ${p_user_id} deleted`, 'USERS');

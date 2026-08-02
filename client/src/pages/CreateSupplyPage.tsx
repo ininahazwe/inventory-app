@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
+import { todayDateString } from '../lib/dateHelpers';
 import Autocomplete from '../components/Autocomplete';
 import Layout from '../Layout';
 
@@ -27,6 +28,7 @@ interface SupplyInput {
   quantity: number;
   receiver_uid: string;
   category_id?: number;
+  low_stock_threshold?: number;
 }
 
 export default function CreateSupplyPage() {
@@ -34,12 +36,13 @@ export default function CreateSupplyPage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    purchase_date: new Date().toISOString().split('T')[0],
+    purchase_date: todayDateString(),
     cost: '',
     brand: '',
     quantity: '1',
     receiver_uid: '',
     categoryName: '',
+    lowStockThreshold: '',
   });
 
   const [users, setUsers] = useState<AssignableUser[]>([]);
@@ -173,6 +176,7 @@ export default function CreateSupplyPage() {
         quantity: parseInt(formData.quantity),
         receiver_uid: formData.receiver_uid,
         category_id: category_id || undefined,
+        low_stock_threshold: formData.lowStockThreshold ? parseInt(formData.lowStockThreshold) : undefined,
       };
 
       const { data: inserted, error } = await api.post<{ id: number }>('/supplies', payload);
@@ -387,6 +391,31 @@ export default function CreateSupplyPage() {
                   boxSizing: 'border-box',
                 }}
               />
+            </label>
+          </div>
+
+          {/* ✅ Seuil d'alerte stock bas */}
+          <div style={{ marginBottom: 20 }}>
+            <label>
+              <strong>Low Stock Alert At</strong>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g., 5 (leave empty for no alert)"
+                value={formData.lowStockThreshold}
+                onChange={(e) => setFormData(prev => ({ ...prev, lowStockThreshold: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  marginTop: 8,
+                  border: '1px solid #ddd',
+                  borderRadius: 4,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
+                Alert shown on the Stock tab when remaining stock drops to or below this number.
+              </div>
             </label>
           </div>
 

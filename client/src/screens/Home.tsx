@@ -8,13 +8,15 @@ import Autocomplete from '../components/Autocomplete';
 import AssignAsset from './AssignAsset';
 import Modal from '../components/Modal';
 import InventoryStats from '../components/InventoryStats';
+import DashboardKPIs from '../components/DashboardKPIs';
+import { exportToXlsx } from '../lib/exportXlsx';
+import { exportToPdf } from '../lib/exportPdf';
 
 type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
   const { isSuperAdmin } = usePermissions();
-  const { isAssignee } = usePermissions();
   const [rows, setRows]           = useState<Row[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -27,6 +29,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [returnOpen, setReturnOpen]               = useState(false);
   const [returnAssetId, setReturnAssetId]         = useState<number | null>(null);
   const [returnAssetLabel, setReturnAssetLabel]   = useState<string>('');
+  const [exporting, setExporting]                 = useState(false);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -45,9 +48,38 @@ export default function Home({ onNew }: { onNew: () => void }) {
   useEffect(() => { setCurrentPage(1); }, [qLabel, qCategory]);
 
   async function fetchCategoryOptions(q: string) {
-    const { data } = await api.get<{ name: string }[]>(`/categories${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    const params = new URLSearchParams({ type: 'asset' });
+    if (q) params.append('q', q);
+    const { data } = await api.get<{ name: string }[]>(`/categories?${params.toString()}`);
     return (data ?? []).map(d => d.name);
   }
+
+  const exportInventory = async (format: 'xlsx' | 'pdf') => {
+    setExporting(true);
+    try {
+      // ✅ Export = jeu complet filtré (pas juste la page affichée) — on refait
+      // le même appel que `load()` mais avec un limit large, sans re-paginer.
+      const params = new URLSearchParams({ page: '1', limit: '100000' });
+      if (qCategory) params.set('category_name', qCategory);
+      if (qLabel.trim()) params.set('label', qLabel.trim());
+      const { data } = await api.get<{ data: Row[] }>(`/assets?${params}`);
+      const all = (data as any)?.data ?? [];
+      const tableRows = all.map((r: Row) => ({
+        Name: r.label,
+        'Serial No': r.serial_no || '',
+        Category: r.category_name || '',
+        Status: r.status,
+        Funder: r.funder || '',
+        'Assigned To': r.assignee_name || '',
+        'Assigned Email': r.assignee_email || '',
+      }));
+      const filename = `inventory-${new Date().toISOString().slice(0, 10)}`;
+      if (format === 'xlsx') exportToXlsx(`${filename}.xlsx`, 'Inventory', tableRows);
+      else exportToPdf(`${filename}.pdf`, 'Inventory', tableRows);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const openAssign = (id: number, label: string) => { setAssignAssetId(id); setAssignAssetLabel(label); setAssignOpen(true); };
   const closeAssign = () => { setAssignOpen(false); setAssignAssetId(null); setAssignAssetLabel(''); };
@@ -77,16 +109,22 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
   return (
     <div>
-      {!isAssignee && (
+      <DashboardKPIs />
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="pill" onClick={() => exportInventory('xlsx')} disabled={exporting}>
+            {exporting ? 'Exporting…' : '⬇ XLSX'}
+          </button>
+          <button className="pill" onClick={() => exportInventory('pdf')} disabled={exporting}>
+            {exporting ? 'Exporting…' : '⬇ PDF'}
+          </button>
           {isSuperAdmin && (
             <button className="pill" onClick={onNew}>+ New asset</button>
           )}
         </div>
       </div>
-      )}
 
       <div className="filters">
         <input className="input" placeholder="Search by label, serial number, name, or email…" value={qLabel} onChange={e => setQLabel(e.target.value)} />

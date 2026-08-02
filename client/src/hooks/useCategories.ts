@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { api } from '../lib/apiClient';
 
 export interface Category {
   id: number;
@@ -19,8 +20,6 @@ export const useCategories = (type?: 'asset' | 'supply') => {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('jwt_token');
-      let url = 'http://localhost:3003/api/categories';
       const params = new URLSearchParams();
 
       if (type) {
@@ -30,19 +29,13 @@ export const useCategories = (type?: 'asset' | 'supply') => {
         params.append('q', searchTerm);
       }
 
-      if (params.toString()) {
-        url += '?' + params.toString();
+      const path = '/categories' + (params.toString() ? `?${params.toString()}` : '');
+      const { data, error: apiError } = await api.get<Category[]>(path);
+
+      if (apiError || !data) {
+        throw new Error(apiError || 'Failed to load categories');
       }
 
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load categories');
-      }
-
-      const data = (await response.json()) as Category[];
       setCategories(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load categories';

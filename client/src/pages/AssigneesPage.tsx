@@ -7,7 +7,7 @@ import Modal from "../components/Modal.tsx";
 
 const PAGE_SIZE = 10;
 
-type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin' | 'assignee'; created_at: string; created_by_email: string | null; };
+type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin'; created_at: string; created_by_email: string | null; };
 
 export default function AssigneesPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -17,7 +17,7 @@ export default function AssigneesPage() {
 
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<'user' | 'admin' | 'assignee'>('user');
+  const [newRole, setNewRole] = useState<'user' | 'admin'>('user');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,10 +119,9 @@ export default function AssigneesPage() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Rôle</label>
-            <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin' | 'assignee')} disabled={adding}>
+            <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin')} disabled={adding}>
               <option value="user">User</option>
               <option value="admin">Admin</option>
-              <option value="assignee">Assignee</option>
             </select>
           </div>
           <button className="pill" type="submit" disabled={adding}>{adding ? '…' : '+ Ajouter'}</button>
@@ -152,7 +151,6 @@ export default function AssigneesPage() {
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                     <option value="super_admin">Super Admin</option>
-                    <option value="assignee">Assignee</option>
                   </select>
                 ) : <span style={{ textTransform: 'capitalize' }}>{user.role}</span>}
               </td>

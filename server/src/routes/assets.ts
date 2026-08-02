@@ -18,11 +18,16 @@ const cleanDate = (dateStr: any): string | null => {
     // ISO format with time
     if (dateStr.includes('T')) return dateStr.split('T')[0];
 
-    // Try to parse
+    // ✅ Repli pour formats inattendus uniquement. Getters locaux plutôt que
+    // toISOString() pour ne pas ajouter un second décalage UTC par-dessus un
+    // parsing déjà ambigu.
     try {
         const d = new Date(dateStr);
         if (isNaN(d.getTime())) return null;
-        return d.toISOString().split('T')[0];
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     } catch {
         return null;
     }
@@ -31,7 +36,7 @@ const cleanDate = (dateStr: any): string | null => {
 // GET /api/assets - List all assets with pagination
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 10, category_name, label } = req.query;
+        const { page = 1, limit = 10, category_name, label, status } = req.query;
         const pageNum = parseInt(page as string) || 1;
         const pageSize = parseInt(limit as string) || 10;
         const offset = (pageNum - 1) * pageSize;
@@ -40,14 +45,21 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         let params: any[] = [];
 
         if (label) {
-            whereConditions.push(`(a.label LIKE ? OR a.serial_no LIKE ? OR asn.assignee_name LIKE ? OR asn.assignee_email LIKE ?)`);
+            whereConditions.push(`(a.label LIKE ? OR a.serial_no LIKE ? OR c.name LIKE ? OR asn.assignee_name LIKE ? OR asn.assignee_email LIKE ?)`);
             const searchTerm = `%${label}%`;
-            params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+            params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
         }
 
         if (category_name) {
             whereConditions.push('c.name = ?');
             params.push(category_name);
+        }
+
+        // ✅ Filtre statut — était documenté/appelé par le frontend (ex: ?status=in_stock)
+        // mais silencieusement ignoré ici, donc jamais réellement filtré côté serveur.
+        if (status) {
+            whereConditions.push('a.status = ?');
+            params.push(status);
         }
 
         const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
@@ -135,6 +147,15 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
             assetObj.purchase_price = parseFloat(assetObj.purchase_price);
         }
 
+        // ✅ Coût total de maintenance (colonne dédiée, agrégeable) — aide à la
+        // décision retire vs repair (ex: coût cumulé qui dépasse la valeur d'achat).
+        const [costResult] = await db.query(
+            `SELECT COALESCE(SUM(cost), 0) AS total_repair_cost
+             FROM lifecycle_events WHERE asset_id = ? AND event_type = 'maintenance'`,
+            [id]
+        );
+        assetObj.total_repair_cost = parseFloat((costResult as any[])[0]?.total_repair_cost) || 0;
+
         return res.json(assetObj);
     } catch (err) {
         logger.error(`GET /assets/:id error:`, err as Error);
@@ -145,7 +166,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 // POST /api/assets - Create new asset
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { label, serial_no, category_id, status, funder, purchase_price, photo_url } = req.body;
+        const { label, serial_no, category_id, status, funder, purchase_price, photo_url, purchased_at, warranty_end, supplier, notes } = req.body;
         const user = (req as any).user;
 
         if (!label) {
@@ -153,9 +174,21 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO assets (label, serial_no, category_id, status, funder, purchase_price, photo_url )
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [label, serial_no || null, category_id || null, status || 'in_stock', funder || null, purchase_price || null]
+            `INSERT INTO assets (label, serial_no, category_id, status, funder, purchase_price, photo_url, purchased_at, warranty_end, supplier, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                label,
+                serial_no || null,
+                category_id || null,
+                status || 'in_stock',
+                funder || null,
+                purchase_price || null,
+                photo_url || null,
+                cleanDate(purchased_at),
+                cleanDate(warranty_end),
+                supplier || null,
+                notes || null
+            ]
         );
 
         const assetId = (result as any).insertId;
@@ -320,10 +353,12 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
         // 4. Enregistrer l'audit
         await logAudit(
-            user.uid.toString(),
-            'DELETE_ASSET',
-            `Deleted asset: ${asset.label}`,
-            assetId
+            (user as any).email || user.uid.toString(),
+            'asset_deleted',
+            'assets',
+            assetId,
+            asset,
+            null
         );
 
         logger.info(`Asset #${assetId} deleted by user ${user.uid}`, 'ASSETS');
@@ -336,6 +371,135 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     } catch (err) {
         logger.error(`DELETE /assets/:id error:`, err as Error);
         return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// ✅ Libellés lisibles pour les event_type de lifecycle_events (repair/maintenance/
+// retired sont écrits par rpc.ts ; assigned/returned/other peuvent venir de données
+// historiques antérieures à la table `assignments`).
+const LIFECYCLE_LABELS: Record<string, string> = {
+    repair: 'Sent for repair',
+    maintenance: 'Repair completed',
+    retired: 'Retired',
+    assigned: 'Assigned',
+    returned: 'Returned to stock',
+};
+
+// GET /api/assets/:id/timeline - Historique unifié (assignments + réparations +
+// incidents + enchères), fusionné et trié par date décroissante. Les données
+// existaient déjà, dispersées sur 4 tables — pas de nouvelle table, juste l'agrégation.
+router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const assetId = parseInt(req.params.id as string, 10);
+        if (isNaN(assetId)) {
+            return res.status(400).json({ error: 'Invalid asset ID' });
+        }
+
+        const [assetCheck] = await db.execute('SELECT id FROM assets WHERE id = ?', [assetId]);
+        if (!(assetCheck as any[]).length) {
+            return res.status(404).json({ error: 'Asset not found' });
+        }
+
+        const [assignmentRows] = await db.execute(
+            `SELECT id, assignee_name, assignee_email, assigned_at, returned_at, status, created_at
+             FROM assignments WHERE asset_id = ? ORDER BY created_at DESC`,
+            [assetId]
+        );
+
+        const [lifecycleRows] = await db.execute(
+            `SELECT id, event_type, event_date, notes, cost, created_at, created_by, status, resolved_at
+             FROM lifecycle_events WHERE asset_id = ? ORDER BY created_at DESC`,
+            [assetId]
+        );
+
+        const [incidentRows] = await db.execute(
+            `SELECT id, incident_type, title, severity, description, status, reported_by_email, created_at, resolved_at
+             FROM incidents WHERE asset_id = ? ORDER BY created_at DESC`,
+            [assetId]
+        );
+
+        const [auctionRows] = await db.execute(
+            `SELECT a.id, a.starting_price, a.current_highest_bid, a.status, a.created_at, a.end_date, a.winner_uid,
+                    u.email AS winner_email,
+                    (SELECT COUNT(*) FROM bids b WHERE b.auction_id = a.id) AS bid_count
+             FROM auctions a
+                      LEFT JOIN users u ON a.winner_uid = u.id
+             WHERE a.asset_id = ? ORDER BY a.created_at DESC`,
+            [assetId]
+        );
+
+        type TimelineEvent = {
+            type: string;
+            at: string;
+            title: string;
+            detail: string;
+            status?: string | null;
+            source_id: number;
+        };
+
+        const events: TimelineEvent[] = [];
+
+        for (const r of assignmentRows as any[]) {
+            const who = r.assignee_name || r.assignee_email || 'user';
+            events.push({
+                type: 'assignment',
+                at: new Date(r.assigned_at || r.created_at).toISOString(),
+                title: r.status === 'active' ? `Assigned to ${who}` : `Assignment ended (${who})`,
+                detail: [
+                    `Assigned to ${who}`,
+                    r.assigned_at ? `from ${r.assigned_at}` : null,
+                    r.returned_at ? `to ${r.returned_at}` : (r.status === 'active' ? '(ongoing)' : null),
+                ].filter(Boolean).join(' '),
+                status: r.status,
+                source_id: r.id,
+            });
+        }
+
+        for (const r of lifecycleRows as any[]) {
+            const cost = r.cost != null ? Number(r.cost) : null;
+            events.push({
+                type: r.event_type || 'lifecycle',
+                at: new Date(r.event_date || r.created_at).toISOString(),
+                title: LIFECYCLE_LABELS[r.event_type] || r.event_type || 'Lifecycle event',
+                detail: [r.notes, cost != null ? `Cost: GH₵${cost.toFixed(2)}` : null].filter(Boolean).join(' — '),
+                status: r.status,
+                source_id: r.id,
+            });
+        }
+
+        for (const r of incidentRows as any[]) {
+            events.push({
+                type: 'incident',
+                at: new Date(r.created_at).toISOString(),
+                title: r.title || `Incident: ${r.incident_type}`,
+                detail: [r.description, r.severity ? `Severity: ${r.severity}` : null].filter(Boolean).join(' — '),
+                status: r.status,
+                source_id: r.id,
+            });
+        }
+
+        for (const r of auctionRows as any[]) {
+            const highest = r.current_highest_bid != null ? `GH₵${Number(r.current_highest_bid).toFixed(2)}` : '—';
+            events.push({
+                type: 'auction',
+                at: new Date(r.created_at).toISOString(),
+                title: `Auction ${r.status}`,
+                detail: [
+                    `Starting GH₵${Number(r.starting_price).toFixed(2)}`,
+                    `highest bid ${highest} (${r.bid_count} bid${r.bid_count === 1 ? '' : 's'})`,
+                    r.winner_email ? `won by ${r.winner_email}` : null,
+                ].filter(Boolean).join(', '),
+                status: r.status,
+                source_id: r.id,
+            });
+        }
+
+        events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+        return res.json({ asset_id: assetId, events });
+    } catch (err) {
+        logger.error('GET /assets/:id/timeline error:', err as Error);
+        return res.status(500).json({ error: 'Failed to fetch asset timeline' });
     }
 });
 
