@@ -682,6 +682,7 @@ export const SuppliesList: React.FC = () => {
               </div>
               <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
+
                 <tr style={{ backgroundColor: 'var(--brand)', color: '#fff' }}>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Date</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Supply</th>
