@@ -8,6 +8,7 @@ import "./styles/theme.css";
 import "./styles/incidents.css";
 import AuthGateWrapper from "./AuthGateWrapper.tsx";
 import HomePage from "./pages/HomePage.tsx";
+import InventoryPage from "./pages/InventoryPage.tsx";
 import AssetDetailPage from "./pages/AssetDetailPage.tsx";
 import IncidentReportPage from "./pages/IncidentReportPage.tsx";
 import IncidentsPage from "./pages/IncidentsPage.tsx";
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
     element: <AuthGateWrapper />,
     children: [
       { path: "/", element: <HomePage /> },
+      { path: "/inventory", element: <InventoryPage /> },
 
       // Routes spécifiques d'abord
       { path: "/auctions/create", element: <CreateAuctionPage /> },

@@ -94,6 +94,7 @@ tbody {background: #f7f7f7}
     margin:28px auto;
     padding:14px;
     background: #F1ECEC;
+    min-height: 100vh;
 }
 .shell-inner{
     position:relative;
@@ -118,9 +119,9 @@ tbody {background: #f7f7f7}
     height:78px; /* +2px */
     /*background:#242038;*/
     border-radius: 0 0 40px 40px;
-    display:grid;
-    grid-template-columns:1fr auto 1fr;
+    display:flex;
     align-items:center;
+    justify-content: space-between;
     gap:16px;
     padding:0 18px;
     overflow:hidden;
@@ -129,7 +130,7 @@ tbody {background: #f7f7f7}
 /* colonnes */
 .site-left{ display:flex; align-items:center; gap:10px; }
 .site-center{ display:flex; justify-content:center; }
-.site-right{ display:flex; justify-content:flex-end; }
+.site-right{ display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
 
 /* logo pastille */
 .brand-dot{
@@ -159,33 +160,39 @@ tbody {background: #f7f7f7}
 
 .pill{
     border:0; cursor:pointer;
-    background:var(--brand); color:#fff;
-    padding:12px 16px; border-radius: 999px;
+    padding:12px 18px; border-radius: 999px;
     transition: background .2s ease, transform .08s ease;
     font-size: 0.8em;
     text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    color: #1a1a1a;
 
   &.padding{
     padding:0 !important;
   }
 
-  &.red{
-        background: #8D86C9;
+  &.color1{
+        background: rgb(226, 224, 242);
     }
-  &.bordeaux{
-    background: #6d071a;
+  &.color2{
+    background: rgb(220, 234, 230);
   }
-  &.green{
-      background: #213547;
+  &.color3{
+      background: rgb(244, 222, 224);
   }
-  &.blue{
-    background: royalblue;
+  &.color4{
+    background: rgb(246, 228, 199);
   }
-  &.green-light{
-      background: #9067C6;
+  &.admin{
+      color: #FFFFFF;
   }
 }
-.pill:hover{ background: var(--brand-2); }
+.pill:hover{ color: gray; }
 
 
 /* ===== Form inside modal ===== */
@@ -317,4 +324,14 @@ tbody {background: #f7f7f7}
       display: none;
     }
   }
+}
+
+/* ===== Hub — section tiles ===== */
+.section-tile:focus-visible {
+    outline: 3px solid var(--ink);
+    outline-offset: -6px;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .7), 0 10px 24px rgba(36,32,56,.10);
+}
+@media (prefers-reduced-motion: reduce) {
+    .section-tile { transition: none !important; }
 }

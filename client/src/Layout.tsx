@@ -2,7 +2,7 @@ import React from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { auth, token } from "./lib/apiClient";
 import "./styles/theme.css";
 import "./styles/login.css";
@@ -13,6 +13,7 @@ import ToastContainer from './components/ToastContainer';
 import {usePermissions} from "./hooks/usePermissions.ts";
 import Modal from './components/Modal';
 import AuditDashboard from './components/AuditDashboard';
+import { GoogleSignInButton } from './components/GoogleSignInButton';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
@@ -21,6 +22,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const adminBtnRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  // The hub (/) repeats these same four destinations as its grid of tiles —
+  // showing them again in the header would just be noise there. Kept out of
+  // usePermissions/role logic on purpose: this is a route-based display
+  // choice, not a permission.
+  const isHub = location.pathname === '/';
   const { toasts, removeToast } = useToast();
 
   const { isAdmin, isSuperAdmin } = usePermissions();
@@ -32,8 +39,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
-
-  const login = () => auth.signInWithGoogle();
 
   const logout = async () => {
     await auth.signOut();
@@ -53,17 +58,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="site-center">
-            <span className="site-title">ASSET & SUPPLY INVENTORY</span>
-          </div>
-
           <div className="site-right">
-            <Link to="/auctions" className="pill bordeaux">⏱︎ Auctions</Link>
-            {isAdmin && (
-              <Link to="/supplies" className="pill green">📋︎ Supplies</Link>
-            )}
-            {isAdmin && (
-              <Link to="/incidents" className="pill">🛠︎ Incidents</Link>
+            {!isHub && (
+              <>
+                <Link to="/inventory" className="pill color1">🖥︎ Inventory</Link>
+                <Link to="/auctions" className="pill color2">⏱︎ Auctions</Link>
+                {isAdmin && (
+                  <Link to="/supplies" className="pill color3">📋︎ Supplies</Link>
+                )}
+                {isAdmin && (
+                  <Link to="/incidents" className="pill color4">🛠︎ Incidents</Link>
+                )}
+              </>
             )}
             {isSuperAdmin && (
               <div
@@ -77,7 +83,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 onMouseLeave={() => setAdminMenuOpen(false)}
               >
                 <button
-                  className="pill"
+                  className="pill admin"
                   onClick={() => {
                     const rect = adminBtnRef.current?.getBoundingClientRect();
                     if (rect) setMenuPos({ top: rect.bottom, right: window.innerWidth - rect.right });
@@ -89,9 +95,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             )}
             {email ? (
-              <button className="pill red" onClick={logout}>Log out</button>
+              <button className="pill admin" onClick={logout}>Log out</button>
             ) : (
-              <button className="pill green" onClick={login}>Login</button>
+              <GoogleSignInButton width={160} />
             )}
           </div>
         </div>
@@ -130,10 +136,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             gap: 4,
           }}
         >
-          <Link to="/locations" className="pill" style={{ textAlign: 'left' }} onClick={() => setAdminMenuOpen(false)}>🏤 Locations</Link>
-          <Link to="/assignees" className="pill" style={{ textAlign: 'left' }} onClick={() => setAdminMenuOpen(false)}>👥 User Management</Link>
+          <Link to="/locations" className="pill admin" style={{ textAlign: 'left' }} onClick={() => setAdminMenuOpen(false)}>🏤 Locations</Link>
+          <Link to="/assignees" className="pill admin" style={{ textAlign: 'left' }} onClick={() => setAdminMenuOpen(false)}>👥 User Management</Link>
           <button
-            className="pill"
+            className="pill admin"
             style={{ textAlign: 'left' }}
             onClick={() => { setAdminMenuOpen(false); setAuditOpen(true); }}
           >

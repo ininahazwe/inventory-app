@@ -2,9 +2,10 @@ import React from "react";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api, auth, token } from "../lib/apiClient";
+import { api, token } from "../lib/apiClient";
 import Modal from "../components/Modal";
 import { IncidentForm } from "../components/IncidentForm"; // 📋 Import de ton formulaire d'incident
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
 
 type PublicAsset = {
   id: number;
@@ -52,20 +53,18 @@ export default function PublicAssetCard() {
         setShowIncidentForm(true); // Si déjà connecté, on ouvre directement le modal d'incident
         return;
       }
+      // 🌟 Sauvegarde de l'état actuel avant de partir chez Google. Posé ici,
+      // à l'ouverture du modal, et non plus dans un handler de clic sur le
+      // bouton Google : ce bouton est désormais rendu par Google lui-même
+      // (voir GoogleSignInButton) et son clic n'exécute plus notre code.
+      localStorage.setItem("after_login_redirect", window.location.pathname);
+      localStorage.setItem("pending_incident_asset_id", id || "");
       setAuthModalOpen(true);
     } catch (error) {
       console.error("Error checking session:", error);
     } finally {
       setAuthLoading(false);
     }
-  };
-
-  const handleGoogleAuth = () => {
-    setAuthLoading(true);
-    // 🌟 Sauvegarde de l'état actuel avant de partir chez Google
-    localStorage.setItem("after_login_redirect", window.location.pathname);
-    localStorage.setItem("pending_incident_asset_id", id || "");
-    auth.signInWithGoogle();
   };
 
   const getStatusLabel = (status: string) => ({
@@ -125,9 +124,9 @@ export default function PublicAssetCard() {
       <Modal open={authModalOpen} onClose={() => setAuthModalOpen(false)} title="Se connecter" closeOnBackdrop={!authLoading}>
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ color: "var(--muted)", marginBottom: 20 }}>Login to report an incident for this asset.</p>
-          <button onClick={handleGoogleAuth} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", background: "#1f2937", color: "#fff", marginBottom: 12 }}>
-            {authLoading ? "Connexion…" : "Continuer avec Google"}
-          </button>
+          <div style={{ marginBottom: 12 }}>
+            <GoogleSignInButton />
+          </div>
           <button onClick={() => setAuthModalOpen(false)} disabled={authLoading} className="pill" style={{ width: "100%", padding: "12px 20px", background: "#bbb" }}>
             Cancel
           </button>

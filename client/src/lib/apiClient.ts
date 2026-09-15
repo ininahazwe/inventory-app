@@ -198,6 +198,12 @@ export const auth = {
       // ─── Dans export const auth = { initGoogle: ... } ───
       window.google.accounts.id.initialize({
         client_id: clientId,
+        // FedCM: Chrome phased out the third-party-cookie path these flows relied
+        // on, which made both One Tap and the rendered button behave
+        // inconsistently depending on browser/profile state. Opting in here is
+        // additive and forward-compatible.
+        use_fedcm_for_prompt: true,
+        use_fedcm_for_button: true,
         callback: async (response: { credential?: string }) => {
           console.log('Google callback received:', !!response.credential);
 
@@ -237,24 +243,34 @@ export const auth = {
     return googleInitPromise;
   },
 
-  signInWithGoogle: async (): Promise<void> => {
+  // Mounts Google's own rendered button into `el`. Deterministic by
+  // construction: it's a real interactive element Google draws (inside its
+  // own iframe), not a `prompt()` call whose display Google may suppress
+  // (session cooldown after a dismissal, no active Google session in the
+  // browser, third-party-cookie/FedCM state). Callers own placement/timing —
+  // e.g. render once a modal is open, since the container must exist in the
+  // DOM first.
+  renderGoogleButton: async (
+    el: HTMLElement | null,
+    opts: { width?: number } = {}
+  ): Promise<void> => {
     await auth.initGoogle();
 
-    if (!window.google) {
-      console.error('Google SDK not loaded');
+    if (!window.google || !el) {
+      console.error('Google SDK not loaded, or no container to render into');
       return;
     }
 
-    console.log('Rendering Google Sign-In button...');
+    // Defensive: clears any previously rendered button (e.g. a React effect
+    // re-running under StrictMode) before drawing a new one in the same slot.
+    el.innerHTML = '';
 
-    window.google.accounts.id.renderButton(
-      document.getElementById('google-signin-button') || document.body,
-      { theme: 'outline', size: 'large' }
-    );
-
-    // Also show the One Tap prompt
-    window.google.accounts.id.prompt((notification) => {
-      console.log('One Tap notification:', notification);
+    window.google.accounts.id.renderButton(el, {
+      theme: 'outline',
+      size: 'large',
+      shape: 'pill',
+      text: 'continue_with',
+      ...(opts.width ? { width: opts.width } : {}),
     });
   },
 
@@ -282,6 +298,8 @@ declare global {
         id: {
           initialize: (config: {
             client_id: string;
+            use_fedcm_for_prompt?: boolean;
+            use_fedcm_for_button?: boolean;
             callback?: (response: { credential?: string }) => void;
           }) => void;
           renderButton: (element: HTMLElement | null, options: Record<string, unknown>) => void;

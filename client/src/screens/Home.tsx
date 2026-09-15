@@ -114,14 +114,14 @@ export default function Home({ onNew }: { onNew: () => void }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
         <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill" onClick={() => exportInventory('xlsx')} disabled={exporting}>
+          <button className="pill admin" onClick={() => exportInventory('xlsx')} disabled={exporting}>
             {exporting ? 'Exporting…' : '⬇ XLSX'}
           </button>
-          <button className="pill" onClick={() => exportInventory('pdf')} disabled={exporting}>
+          <button className="pill admin" onClick={() => exportInventory('pdf')} disabled={exporting}>
             {exporting ? 'Exporting…' : '⬇ PDF'}
           </button>
           {isSuperAdmin && (
-            <button className="pill" onClick={onNew}>+ New asset</button>
+            <button className="pill admin" onClick={onNew}>+ New asset</button>
           )}
         </div>
       </div>
@@ -142,7 +142,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <td style={{ textTransform: 'capitalize' }} className="status">{r.funder ?? '—'}</td>
             <td>{r.assignee_name ? <>{r.assignee_name}{r.assignee_email && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.assignee_email}</div>}</> : '—'}</td>
             <td><div className="actions">
-              {r.status !== 'assigned' ? <button className="pill green-light" onClick={() => openAssign(r.id, r.label)}>Assign</button> : <button className="pill" onClick={() => openReturn(r.id, r.label)}>Return</button>}
+              {r.status !== 'assigned' ? <button className="pill admin" onClick={() => openAssign(r.id, r.label)}>Assign</button> : <button className="pill admin" onClick={() => openReturn(r.id, r.label)}>Return</button>}
             </div></td>
           </tr>
         ))}

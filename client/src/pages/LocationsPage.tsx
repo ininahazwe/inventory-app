@@ -145,7 +145,7 @@ export default function LocationsPage() {
       <div className="shell-inner">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
           <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Locations</h2>
-          <button className="pill" onClick={openCreate}>+ Add location</button>
+          <button className="pill admin" onClick={openCreate}>+ Add location</button>
         </div>
 
         {error && (
@@ -189,7 +189,7 @@ export default function LocationsPage() {
               <td style={{ color: 'var(--muted)', fontSize: 13 }}>{loc.floor ?? '—'}</td>
               <td onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => openEdit(loc)}>
+                  <button className="pill admin" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => openEdit(loc)}>
                     Edit
                   </button>
                   <button

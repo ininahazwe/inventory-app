@@ -442,7 +442,7 @@ export const SuppliesList: React.FC = () => {
       {/* ═══ 1. Actions + Filters ═══ */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
-          className="pill"
+          className="pill admin"
           onClick={() => navigate('/supplies/create')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >

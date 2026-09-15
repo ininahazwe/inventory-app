@@ -5,6 +5,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import Layout from "../Layout.tsx";
 import Modal from "../components/Modal.tsx";
+import { SectionRevealCover } from "../components/SectionRevealCover";
 
 interface Auction {
   id: number;
@@ -193,12 +194,13 @@ export default function AuctionsPage() {
 
   return (
     <Layout>
+      <SectionRevealCover sectionKey="auctions" />
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
           <h2 style={{ margin: 0, letterSpacing: 0.2 }}>🔨 Auctions</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             {isSuperAdmin && (
-              <button className="pill" onClick={() => navigate('/auctions/create')}>
+              <button className="pill admin" onClick={() => navigate('/auctions/create')}>
                 + Create Auction
               </button>
             )}
