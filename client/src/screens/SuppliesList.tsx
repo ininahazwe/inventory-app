@@ -666,14 +666,14 @@ export const SuppliesList: React.FC = () => {
             <div style={{ overflowX: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
                 <button
-                  className="pill"
+                  className="pill admin"
                   style={{ padding: '6px 12px', fontSize: '12px' }}
                   onClick={() => exportToXlsx(`supply-movements-${selectedDate}.xlsx`, 'Movements', movementExportRows())}
                 >
                   ⬇ XLSX
                 </button>
                 <button
-                  className="pill"
+                  className="pill admin"
                   style={{ padding: '6px 12px', fontSize: '12px' }}
                   onClick={() => exportToPdf(`supply-movements-${selectedDate}.pdf`, `Movements - ${formatDateDisplay(selectedDate)}`, movementExportRows())}
                 >

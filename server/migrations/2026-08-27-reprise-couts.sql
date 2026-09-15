@@ -7,9 +7,10 @@
 -- migration sépare les notions : `unit_cost` devient la source de vérité et
 -- `cost` devient partout le total de ligne, conformément à son commentaire.
 --
--- ⚠ NE PAS EXÉCUTER avant validation des 37 lignes.
---   Feuille de revue : https://claude.ai/code/artifact/1bd8ae76-866f-407d-93b7-35061f80dc35
---   3 lignes restent à arbitrer : #16 Sugar, #22 Sanitizer, #46 Glass Cleaner
+-- 37/37 lignes validées (Gyan, 15/09/2026) — dont les 3 lignes arbitrées
+-- manuellement : #16 Sugar (35,00/u), #22 Sanitizer (50,00/u), #46 Glass
+-- Cleaner (20,00/u). Feuille de revue :
+--   https://claude.ai/code/artifact/1bd8ae76-866f-407d-93b7-35061f80dc35
 --
 -- Aucun mouvement de stock n'est touché : supply_movements et
 -- supply_assignments restent intacts. Seuls des montants changent.
@@ -39,12 +40,12 @@ UPDATE `supplies` SET `unit_cost` = 12.0000, `cost` = 240.00 WHERE `id` = 10;  -
 UPDATE `supplies` SET `unit_cost` = 20.0000, `cost` = 80.00 WHERE `id` = 11;  -- Bleach
 UPDATE `supplies` SET `unit_cost` = 150.0000, `cost` = 150.00 WHERE `id` = 13;  -- Nescafe
 UPDATE `supplies` SET `unit_cost` = 20.0000, `cost` = 160.00 WHERE `id` = 15;  -- Lipton Tea
-UPDATE `supplies` SET `unit_cost` = 55.0000, `cost` = 110.00 WHERE `id` = 16;  -- Sugar  ⚠ À ARBITRER
+UPDATE `supplies` SET `unit_cost` = 35.0000, `cost` = 70.00 WHERE `id` = 16;  -- Sugar (arbitré : saisie de mai 55,00 erronée, corrigée à 35,00/u)
 UPDATE `supplies` SET `unit_cost` = 35.0000, `cost` = 175.00 WHERE `id` = 18;  -- air refresher
 UPDATE `supplies` SET `unit_cost` = 50.0000, `cost` = 100.00 WHERE `id` = 19;  -- washing Powder
 UPDATE `supplies` SET `unit_cost` = 60.0000, `cost` = 180.00 WHERE `id` = 20;  -- Mosquito Spray
 UPDATE `supplies` SET `unit_cost` = 18.0000, `cost` = 72.00 WHERE `id` = 21;  -- Mosquito Coil
-UPDATE `supplies` SET `unit_cost` = 50.0000, `cost` = 2500.00 WHERE `id` = 22;  -- Sanitizer  ⚠ À ARBITRER
+UPDATE `supplies` SET `unit_cost` = 50.0000, `cost` = 2500.00 WHERE `id` = 22;  -- Sanitizer (arbitré : 50,00/u confirmé)
 UPDATE `supplies` SET `unit_cost` = 75.0000, `cost` = 75.00 WHERE `id` = 23;  -- Floor Cleaner
 UPDATE `supplies` SET `unit_cost` = 25.0000, `cost` = 25.00 WHERE `id` = 24;  -- Sponge (1Pack)
 UPDATE `supplies` SET `unit_cost` = 20.0000, `cost` = 20.00 WHERE `id` = 25;  -- Trash Bags
@@ -72,7 +73,7 @@ UPDATE `supplies` SET `unit_cost` = 2.5000, `cost` = 25.00 WHERE `id` = 44;  -- 
 UPDATE `supplies` SET `unit_cost` = 0.6667, `cost` = 40.00 WHERE `id` = 45;  -- Trash bags
 
 -- Achat du 27 août
-UPDATE `supplies` SET `unit_cost` = 10.0000, `cost` = 20.00 WHERE `id` = 46;  -- Glass Cleaner  ⚠ À ARBITRER
+UPDATE `supplies` SET `unit_cost` = 20.0000, `cost` = 40.00 WHERE `id` = 46;  -- Glass Cleaner (arbitré : 20,00/u confirmé)
 
 -- ─── 3. Verrouillage ───────────────────────────────────────────────────────
 ALTER TABLE `supplies`
@@ -82,7 +83,7 @@ ALTER TABLE `supplies`
     COMMENT 'Total de ligne = unit_cost * quantity';
 
 -- ─── Contrôles après ───────────────────────────────────────────────────────
--- cost_apres doit renvoyer 11068.00 (contre 5813.50 avant).
+-- cost_apres doit renvoyer 11048.00 (contre 5813.50 avant).
 SELECT ROUND(SUM(cost), 2) AS cost_apres FROM supplies;
 
 -- incoherences doit renvoyer 0. Tolérance au centime : l'arrondi du prix
@@ -94,7 +95,7 @@ WHERE ABS(unit_cost * quantity - cost) > 0.01;
 SELECT COUNT(*) AS mouvements_intacts FROM supply_movements;
 
 -- ─── Validation ────────────────────────────────────────────────────────────
--- Décommenter COMMIT et commenter ROLLBACK une fois les trois contrôles
--- vérifiés à l'œil.
--- COMMIT;
-ROLLBACK;
+-- Les 37 lignes sont validées (voir en-tête). COMMIT activé — vérifier les
+-- trois contrôles ci-dessus à l'œil avant d'exécuter ce script en base.
+COMMIT;
+-- ROLLBACK;
