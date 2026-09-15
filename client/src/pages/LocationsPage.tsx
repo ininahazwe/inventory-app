@@ -230,7 +230,7 @@ export default function LocationsPage() {
                 </button>
               )
             )}
-            <button className="pill" onClick={() => setPage(p => p + 1)} disabled={page === totalPages} style={{ opacity: page === totalPages ? 0.5 : 1 }}>
+            <button className="pill admin" onClick={() => setPage(p => p + 1)} disabled={page === totalPages} style={{ opacity: page === totalPages ? 0.5 : 1 }}>
               Next →
             </button>
             {filtered.length > 0 && (

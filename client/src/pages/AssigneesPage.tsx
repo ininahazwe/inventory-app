@@ -208,7 +208,7 @@ export default function AssigneesPage() {
               )
             )}
             <button
-              className="pill"
+              className="pill admin"
               onClick={() => setPage(p => p + 1)}
               disabled={page === totalFilteredPages}
               style={{ opacity: page === totalFilteredPages ? 0.5 : 1 }}

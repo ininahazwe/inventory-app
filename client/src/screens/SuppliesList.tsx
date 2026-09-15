@@ -53,11 +53,11 @@ const PaginationBar: React.FC<{
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16, padding: '8px 0' }}>
-      <button className="pill" onClick={() => onChange(page - 1)} disabled={page === 1} style={{ opacity: page === 1 ? 0.5 : 1 }}>← Previous</button>
+      <button className="pill admin" onClick={() => onChange(page - 1)} disabled={page === 1} style={{ opacity: page === 1 ? 0.5 : 1 }}>← Previous</button>
       {pages.map((p, i) => p === '...' ? <span key={`e${i}`} style={{ padding: '0 8px', color: 'var(--muted)' }}>…</span> : (
         <button key={p} className="pill" onClick={() => onChange(p as number)} style={{ background: page === p ? 'var(--brand)' : '#f4f1ee', color: page === p ? 'white' : 'var(--ink)', minWidth: 36, textAlign: 'center' }}>{p}</button>
       ))}
-      <button className="pill" onClick={() => onChange(page + 1)} disabled={page === totalPages} style={{ opacity: page === totalPages ? 0.5 : 1 }}>Next →</button>
+      <button className="pill admin" onClick={() => onChange(page + 1)} disabled={page === totalPages} style={{ opacity: page === totalPages ? 0.5 : 1 }}>Next →</button>
       <div style={{ marginLeft: 16, color: 'var(--muted)', fontSize: 14 }}>Showing {startIndex + 1}-{endIndex} of {totalItems}</div>
     </div>
   );
@@ -734,14 +734,14 @@ export const SuppliesList: React.FC = () => {
         {dateFilteredSupplies.length > 0 && (
           <div style={{ display: 'flex', gap: 8 }}>
             <button
-              className="pill"
+              className="pill admin"
               style={{ padding: '6px 12px', fontSize: '12px' }}
               onClick={() => exportToXlsx(`supplies-purchases-${selectedDate}.xlsx`, 'Purchases', purchaseExportRows())}
             >
               ⬇ XLSX
             </button>
             <button
-              className="pill"
+              className="pill admin"
               style={{ padding: '6px 12px', fontSize: '12px' }}
               onClick={() => exportToPdf(`supplies-purchases-${selectedDate}.pdf`, `Purchases - ${formatDateDisplay(selectedDate)}`, purchaseExportRows())}
             >
@@ -845,11 +845,11 @@ export const SuppliesList: React.FC = () => {
           {/* ✅ Pagination */}
           {totalPages > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '16px 0' }}>
-              <button className="pill" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} style={{ opacity: currentPage === 1 ? 0.5 : 1 }}>← Previous</button>
+              <button className="pill admin" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} style={{ opacity: currentPage === 1 ? 0.5 : 1 }}>← Previous</button>
               {getPageNumbers().map((page, i) => page === '...' ? <span key={i} style={{ padding: '0 8px', color: 'var(--muted)' }}>…</span> : (
                 <button key={page} className="pill" onClick={() => setCurrentPage(page as number)} style={{ background: currentPage === page ? 'var(--brand)' : '#f4f1ee', color: currentPage === page ? 'white' : 'var(--ink)', minWidth: 36, textAlign: 'center' }}>{page}</button>
               ))}
-              <button className="pill" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}>Next →</button>
+              <button className="pill admin" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}>Next →</button>
               {dateFilteredSupplies.length > 0 && <div style={{ marginLeft: 16, color: 'var(--muted)', fontSize: 14 }}>Showing {startIndex + 1}-{endIndex} of {dateFilteredSupplies.length}</div>}
             </div>
           )}
