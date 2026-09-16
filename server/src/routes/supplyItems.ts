@@ -5,8 +5,107 @@ import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
+import { logAudit } from './audit';
 
 const router = Router();
+
+// POST /api/supply-items - créer un nouvel article (référentiel, pas un achat).
+// Nécessaire pour logger l'achat d'un produit qui n'existe pas encore dans le
+// catalogue (voir la restriction stricte de POST /api/supplies sur le nom).
+router.post('/', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const { name, category_id, base_unit, reorder_point, target_level, is_batch_tracked } = req.body;
+
+        if (!name || !String(name).trim()) {
+            return res.status(400).json({ error: 'name is required' });
+        }
+        const trimmedName = String(name).trim();
+
+        const [existing] = await db.execute(`SELECT id FROM supply_items WHERE LOWER(name) = LOWER(?)`, [trimmedName]);
+        if ((existing as any[]).length) {
+            return res.status(400).json({ error: `An item named "${trimmedName}" already exists.` });
+        }
+
+        let validatedCategoryId: number | null = null;
+        if (category_id) {
+            const [catResult] = await db.execute(`SELECT id FROM categories WHERE id = ? AND type = 'supply'`, [category_id]);
+            if (!(catResult as any[]).length) {
+                return res.status(400).json({ error: 'Invalid or non-supply category' });
+            }
+            validatedCategoryId = category_id;
+        }
+
+        const cleanNonNegativeInt = (value: any, field: string): number | null => {
+            if (value === undefined || value === null || value === '') return null;
+            const n = parseInt(String(value), 10);
+            if (!Number.isInteger(n) || n < 0) {
+                throw new Error(`${field} must be a non-negative integer`);
+            }
+            return n;
+        };
+
+        let cleanReorder: number | null;
+        let cleanTarget: number | null;
+        try {
+            cleanReorder = cleanNonNegativeInt(reorder_point, 'reorder_point');
+            cleanTarget = cleanNonNegativeInt(target_level, 'target_level');
+        } catch (validationErr) {
+            return res.status(400).json({ error: (validationErr as Error).message });
+        }
+
+        // code = slug(name), déduplication en ajoutant -2, -3… en cas de collision
+        // (même convention que la table de correspondance de la Phase 1).
+        const baseSlug = trimmedName
+            .toLowerCase()
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'item';
+        let code = baseSlug;
+        let suffix = 2;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const [codeRows] = await db.execute(`SELECT id FROM supply_items WHERE code = ?`, [code]);
+            if (!(codeRows as any[]).length) break;
+            code = `${baseSlug}-${suffix}`;
+            suffix++;
+        }
+
+        const [result] = await db.execute(
+            `INSERT INTO supply_items (code, name, category_id, base_unit, is_batch_tracked, reorder_point, target_level, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+            [
+                code,
+                trimmedName,
+                validatedCategoryId,
+                base_unit && String(base_unit).trim() ? String(base_unit).trim() : 'unit',
+                is_batch_tracked ? 1 : 0,
+                cleanReorder,
+                cleanTarget,
+            ]
+        );
+        const itemId = (result as any).insertId;
+
+        const [rows] = await db.execute(
+            `SELECT i.id, i.code, i.name, i.category_id, c.name AS category_name,
+                    i.base_unit, i.is_batch_tracked, i.reorder_point, i.target_level, i.is_active
+             FROM supply_items i
+             LEFT JOIN categories c ON c.id = i.category_id
+             WHERE i.id = ?`,
+            [itemId]
+        );
+        const item = (rows as any[])[0];
+
+        await logAudit(user.email, 'supply_item_created', 'supply_items', itemId, null, item);
+
+        logger.info(`Created supply item: ${trimmedName} (${code})`, 'SUPPLY_ITEMS');
+        return res.status(201).json(item);
+    } catch (err) {
+        logger.error('POST /supply-items error:', err as Error);
+        return res.status(500).json({ error: 'Failed to create supply item' });
+    }
+});
+
 
 // GET /api/supply-items - liste des articles avec leur stock courant
 router.get('/', requireAuth, async (req: Request, res: Response) => {
