@@ -451,6 +451,15 @@ export const SuppliesList: React.FC = () => {
 
         <button
           className="pill"
+          onClick={() => navigate('/supply-items')}
+          style={{ padding: '8px 16px', fontSize: '14px', backgroundColor: '#f4f1ee' }}
+          title="Article catalog — identity, thresholds, current stock, full history"
+        >
+          📦 Items
+        </button>
+
+        <button
+          className="pill"
           onClick={() => setShowAssignModal(true)}
           style={{ padding: '8px 16px', fontSize: '14px', backgroundColor: 'var(--brand)', color: '#fff' }}
         >

@@ -19,6 +19,8 @@ import CreateAuctionPage from "./pages/CreateAuctionPage.tsx";
 import AuctionDetailPage from "./pages/Auctiondetailpage.tsx";
 import AssigneesPage from "./pages/AssigneesPage.tsx";
 import SuppliesPage from "./pages/SuppliesPage.tsx";
+import SupplyItemsPage from "./pages/SupplyItemsPage.tsx";
+import SupplyItemDetailPage from "./pages/SupplyItemDetailPage.tsx";
 import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
 import EditSupplyPage from "./pages/EditSupplyPage.tsx";
 import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
@@ -56,6 +58,8 @@ const router = createBrowserRouter([
       { path: "/supplies/create", element: <CreateSupplyPage /> },
       { path: "/supplies/:id/edit", element: <EditSupplyPage /> },
       { path: "/supplies", element: <SuppliesPage /> },
+      { path: "/supply-items", element: <SupplyItemsPage /> },
+      { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
       { path: "/locations", element: <LocationsPage /> },
       { path: "/locations/:id", element: <LocationDetailPage /> },
       { path: "/assignees", element: <AssigneesPage /> },
