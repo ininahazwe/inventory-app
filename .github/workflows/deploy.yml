@@ -37,9 +37,13 @@ jobs:
             BACKUP_PATH="/home/${{ secrets.SSH_USER }}/backups/assets-mfwa-$(date +%Y%m%d-%H%M%S)"
 
             echo "📦 Creating backup..."
-            mkdir -p "$(dirname "$BACKUP_PATH")"
-            cp -r "$PROD_PATH" "$BACKUP_PATH" 2>/dev/null || true
-            echo "✅ Backup created"
+            mkdir -p "$BACKUP_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --exclude 'node_modules' --exclude 'logs' "$PROD_PATH/" "$BACKUP_PATH/" 2>/dev/null || true
+            else
+              (cd "$PROD_PATH" 2>/dev/null && tar -cf - --exclude='node_modules' --exclude='logs' . | (cd "$BACKUP_PATH" && tar -xf -)) 2>/dev/null || true
+            fi
+            echo "✅ Backup created (node_modules et logs exclus — trop lourd pour cp -r sur cet hebergement mutualise, cause de l'incident du 16/09)"
 
             echo "📥 Pulling latest code..."
             cd "$REPO_PATH"
@@ -185,21 +189,54 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 600s
+          command_timeout: 600s
           script: |
+            set -e
             PROD_PATH="/home/${{ secrets.SSH_USER }}/public_html/assets.mfwa.org"
             LATEST_BACKUP=$(ls -td /home/${{ secrets.SSH_USER }}/backups/assets-mfwa-* 2>/dev/null | head -1)
-            if [ -n "$LATEST_BACKUP" ] && [ -d "$LATEST_BACKUP" ]; then
-              echo "🔄 Rolling back to $LATEST_BACKUP"
-              pm2 stop assets-tool --silent || true
-              rm -rf "$PROD_PATH"
-              cp -r "$LATEST_BACKUP" "$PROD_PATH"
-              cd "$PROD_PATH"
-              pm2 start dist/server.js --name assets-tool --node-args="--require dotenv/config" --silent
-              sleep 2
-              echo "✅ Rollback complete"
-            else
+
+            if [ -z "$LATEST_BACKUP" ] || [ ! -d "$LATEST_BACKUP" ]; then
               echo "⚠️ No backup found — prod preserved as-is"
+              exit 0
             fi
+
+            echo "🔄 Rolling back to $LATEST_BACKUP"
+            pm2 stop assets-tool --silent || true
+
+            # rsync (avec exclusion de node_modules/logs) au lieu de rm -rf + cp -r :
+            # plus rapide, ne vide jamais entierement PROD_PATH d'un coup, et ne
+            # copie pas node_modules (source de l'incident du 16/09 — cp -r d'un
+            # node_modules complet se fait tuer par l'hebergement mutualise).
+            mkdir -p "$PROD_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete --exclude 'node_modules' --exclude 'logs' "$LATEST_BACKUP/" "$PROD_PATH/"
+            else
+              find "$PROD_PATH" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name logs -exec rm -rf {} +
+              (cd "$LATEST_BACKUP" && tar -cf - --exclude='node_modules' --exclude='logs' .) | (cd "$PROD_PATH" && tar -xf -)
+            fi
+            echo "✅ Files restored"
+
+            cd "$PROD_PATH"
+            mkdir -p "$PROD_PATH/logs"
+            echo "📦 Reinstalling dependencies..."
+            npm install --omit=dev --quiet
+            echo "✅ Dependencies installed"
+
+            echo "🚀 Restarting PM2..."
+            pm2 delete assets-tool --silent 2>/dev/null || true
+            DOTENV_CONFIG_SILENT=true pm2 start "$PROD_PATH/dist/server.js" \
+              --name "assets-tool" \
+              --watch false \
+              --max-memory-restart "500M" \
+              --error "$PROD_PATH/logs/error.log" \
+              --output "$PROD_PATH/logs/out.log" \
+              --node-args="--require dotenv/config" \
+              --update-env \
+              --silent
+            sleep 4
+            pm2 save --silent
+            echo "✅ Rollback complete"
 
       - name: Slack notification
         if: always() && vars.SLACK_WEBHOOK != ''
