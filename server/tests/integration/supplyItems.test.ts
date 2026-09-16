@@ -3,7 +3,7 @@
 // notamment /:id/ledger (historique complet, paginé) ajoutée en Phase 4a.
 import request from 'supertest';
 import { createTestApp } from '../helpers/testApp';
-import { mockRows } from '../helpers/testApp';
+import { mockRows, mockOk } from '../helpers/testApp';
 import { db } from '../../src/database/connection';
 
 const mockedExecute = db.execute as jest.Mock;
@@ -109,5 +109,79 @@ describe('GET /api/supply-items/:id/ledger', () => {
 
         const ledgerCall = mockedExecute.mock.calls[2];
         expect(ledgerCall[1]).toEqual([1, 100, 200]); // offset = (3-1) * 100
+    });
+});
+describe('POST /api/supply-items', () => {
+    const app = createTestApp();
+
+    beforeEach(() => {
+        mockedExecute.mockReset();
+    });
+
+    it('rejects a missing name without hitting the database', async () => {
+        const res = await request(app).post('/api/supply-items').send({});
+
+        expect(res.status).toBe(400);
+        expect(mockedExecute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a name that already exists (case-insensitive)', async () => {
+        mockedExecute.mockResolvedValueOnce(mockRows([{ id: 5 }]));
+
+        const res = await request(app).post('/api/supply-items').send({ name: 'toilet roll' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/already exists/);
+    });
+
+    it('rejects an invalid or non-supply category_id', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([])) // name free
+            .mockResolvedValueOnce(mockRows([])); // category not found / wrong type
+
+        const res = await request(app).post('/api/supply-items').send({ name: 'Glass Cleaner', category_id: 999 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/category/);
+    });
+
+    it('rejects a negative reorder_point before touching the code/insert queries', async () => {
+        mockedExecute.mockResolvedValueOnce(mockRows([])); // name free
+
+        const res = await request(app).post('/api/supply-items').send({ name: 'Glass Cleaner', reorder_point: -3 });
+
+        expect(res.status).toBe(400);
+        expect(mockedExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('creates the item with a generated slug code and defaults base_unit to unit', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([])) // name free
+            .mockResolvedValueOnce(mockRows([])) // code 'glass-cleaner' free
+            .mockResolvedValueOnce(mockOk({ insertId: 42 })) // insert
+            .mockResolvedValueOnce(mockRows([{ id: 42, code: 'glass-cleaner', name: 'Glass Cleaner', category_id: null, category_name: null, base_unit: 'unit', is_batch_tracked: 0, reorder_point: null, target_level: null, is_active: 1 }]));
+
+        const res = await request(app).post('/api/supply-items').send({ name: 'Glass Cleaner' });
+
+        expect(res.status).toBe(201);
+        expect(res.body.code).toBe('glass-cleaner');
+        expect(res.body.base_unit).toBe('unit');
+
+        const insertCall = mockedExecute.mock.calls[2];
+        expect(insertCall[1]).toEqual(['glass-cleaner', 'Glass Cleaner', null, 'unit', 0, null, null]);
+    });
+
+    it('dedupes the generated code by appending -2 on collision', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([])) // name free
+            .mockResolvedValueOnce(mockRows([{ id: 1 }])) // 'toilet-roll' taken
+            .mockResolvedValueOnce(mockRows([])) // 'toilet-roll-2' free
+            .mockResolvedValueOnce(mockOk({ insertId: 99 }))
+            .mockResolvedValueOnce(mockRows([{ id: 99, code: 'toilet-roll-2', name: 'Toilet Roll (refill)', category_id: null, category_name: null, base_unit: 'unit', is_batch_tracked: 0, reorder_point: null, target_level: null, is_active: 1 }]));
+
+        const res = await request(app).post('/api/supply-items').send({ name: 'Toilet Roll (refill)' });
+
+        expect(res.status).toBe(201);
+        expect(res.body.code).toBe('toilet-roll-2');
     });
 });

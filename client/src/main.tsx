@@ -21,8 +21,7 @@ import AssigneesPage from "./pages/AssigneesPage.tsx";
 import SuppliesPage from "./pages/SuppliesPage.tsx";
 import SupplyItemsPage from "./pages/SupplyItemsPage.tsx";
 import SupplyItemDetailPage from "./pages/SupplyItemDetailPage.tsx";
-import CreateSupplyPage from "./pages/CreateSupplyPage.tsx";
-import EditSupplyPage from "./pages/EditSupplyPage.tsx";
+import SupplyReceiptFormPage from "./pages/SupplyReceiptFormPage.tsx";
 import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
 import PublicAssetPage from "./pages/PublicAssetPage.tsx";
 import LocationsPage from "./pages/LocationsPage.tsx";
@@ -55,8 +54,8 @@ const router = createBrowserRouter([
       { path: "/auctions", element: <AuctionsPage /> },
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
       { path: "/incidents", element: <IncidentsPage /> },
-      { path: "/supplies/create", element: <CreateSupplyPage /> },
-      { path: "/supplies/:id/edit", element: <EditSupplyPage /> },
+      { path: "/supplies/create", element: <SupplyReceiptFormPage /> },
+      { path: "/supplies/:id/edit", element: <SupplyReceiptFormPage /> },
       { path: "/supplies", element: <SuppliesPage /> },
       { path: "/supply-items", element: <SupplyItemsPage /> },
       { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
