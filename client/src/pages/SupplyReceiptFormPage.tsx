@@ -183,26 +183,26 @@ export default function SupplyReceiptFormPage() {
     return Math.round((total / quantityBase) * 10000) / 10000;
   }, [lineTotal, quantityBase]);
 
-  const selectedItemUnit = (!showNewItem && items.find(it => String(it.id) === itemId)?.base_unit) || newItem.base_unit || 'unité(s)';
+  const selectedItemUnit = (!showNewItem && items.find(it => String(it.id) === itemId)?.base_unit) || newItem.base_unit || 'unit(s)';
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!showNewItem && !itemId) {
-      setError('Choisissez un article, ou créez-en un nouveau.');
+      setError('Choose an item, or create a new one.');
       return;
     }
     if (showNewItem && !newItem.name.trim()) {
-      setError("Le nom du nouvel article est requis.");
+      setError("The new item's name is required.");
       return;
     }
     if (!receivedDate || !packSize || !packsReceived || !lineTotal) {
-      setError('Merci de renseigner tous les champs obligatoires.');
+      setError('Please fill in all required fields.');
       return;
     }
     if (quantityBase <= 0) {
-      setError('Le colisage et le nombre de colis doivent être des nombres positifs.');
+      setError('Pack size and packs received must be positive numbers.');
       return;
     }
 
@@ -220,7 +220,7 @@ export default function SupplyReceiptFormPage() {
           target_level: newItem.target_level ? parseInt(newItem.target_level, 10) : undefined,
         });
         if (createErr) throw new Error(createErr);
-        if (!created?.id) throw new Error("Échec de la création de l'article");
+        if (!created?.id) throw new Error("Failed to create item");
         resolvedItemId = created.id;
       } else {
         resolvedItemId = parseInt(itemId, 10);
@@ -240,12 +240,12 @@ export default function SupplyReceiptFormPage() {
       });
 
       if (receiptErr) throw new Error(receiptErr);
-      if (!receipt?.id) throw new Error("Échec de l'enregistrement de la réception");
+      if (!receipt?.id) throw new Error("Failed to save receipt");
 
       setSuccess(true);
       setTimeout(() => navigate('/supplies'), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement");
+      setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSubmitting(false);
     }
@@ -256,7 +256,7 @@ export default function SupplyReceiptFormPage() {
     setError(null);
 
     if (!editData.purchase_date || !editData.cost || !editData.quantity || !editData.receiver_uid) {
-      setError('Merci de renseigner tous les champs obligatoires.');
+      setError('Please fill in all required fields.');
       return;
     }
 
@@ -276,12 +276,12 @@ export default function SupplyReceiptFormPage() {
       }
 
       const { data, error: apiError } = await api.patch<any>(`/supplies/${id}`, payload);
-      if (apiError || !data) throw new Error(apiError || 'Échec de la mise à jour');
+      if (apiError || !data) throw new Error(apiError || 'Failed to update');
 
       setSuccess(true);
       setTimeout(() => navigate('/supplies'), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Échec de la mise à jour');
+      setError(err instanceof Error ? err.message : 'Failed to update');
     } finally {
       setSubmitting(false);
     }
@@ -290,7 +290,7 @@ export default function SupplyReceiptFormPage() {
   if (isEdit && loading) {
     return (
       <Layout>
-        <div style={{ padding: 20, textAlign: 'center' }}>Chargement…</div>
+        <div style={{ padding: 20, textAlign: 'center' }}>Loading…</div>
       </Layout>
     );
   }
@@ -298,11 +298,11 @@ export default function SupplyReceiptFormPage() {
   return (
     <Layout>
       <div style={{ maxWidth: 600, margin: '0 auto', padding: 20 }}>
-        <h1>{isEdit ? 'Modifier la réception' : 'Nouvelle réception'}</h1>
+        <h1>{isEdit ? 'Edit Receipt' : 'New Receipt'}</h1>
 
         {success && (
           <div style={{ padding: 12, margin: '12px 0', background: '#d4edda', color: '#155724', borderRadius: 4 }}>
-            ✅ {isEdit ? 'Réception mise à jour' : 'Réception enregistrée'} ! Redirection…
+            ✅ {isEdit ? 'Receipt updated' : 'Receipt recorded'} ! Redirection…
           </div>
         )}
         {error && (
@@ -314,73 +314,73 @@ export default function SupplyReceiptFormPage() {
         {isEdit ? (
           <form onSubmit={handleEditSubmit}>
             <div style={{ marginBottom: 20 }}>
-              <strong>Article</strong>
+              <strong>Item</strong>
               <div style={{ marginTop: 8, padding: 8, background: '#f4f1ee', borderRadius: 4, color: 'var(--ink)' }}>
                 {editData.itemName}
               </div>
               <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
-                L'article d'un lot déjà reçu ne peut pas être changé ici.
+                The item on an already-received lot cannot be changed here.
               </div>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Date d'achat *</strong>
+                <strong>Purchase Date *</strong>
                 <input type="date" value={editData.purchase_date} onChange={e => setEditData(prev => ({ ...prev, purchase_date: e.target.value }))} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Coût total (GH₵) *</strong>
+                <strong>Total Cost (GH₵) *</strong>
                 <input type="number" step="0.01" min="0" value={editData.cost} onChange={e => setEditData(prev => ({ ...prev, cost: e.target.value }))} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Marque</strong>
+                <strong>Brand</strong>
                 <input type="text" placeholder="ex. IKEA" value={editData.brand} onChange={e => setEditData(prev => ({ ...prev, brand: e.target.value }))} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Quantité *</strong>
+                <strong>Quantity *</strong>
                 <input type="number" min="1" value={editData.quantity} onChange={e => setEditData(prev => ({ ...prev, quantity: e.target.value }))} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Catégorie</strong>
+                <strong>Category</strong>
                 <Autocomplete
                   value={editData.categoryName}
                   onChange={(value) => setEditData(prev => ({ ...prev, categoryName: value }))}
                   fetchOptions={fetchCategoryOptions}
-                  placeholder="Rechercher/ajouter une catégorie…"
+                  placeholder="Search/add category…"
                   className="field"
                 />
                 <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
-                  Partagée par tous les lots de cet article.
+                  Shared across all lots of this item.
                 </div>
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Seuil d'alerte stock bas</strong>
-                <input type="number" min="0" placeholder="ex. 5 (laisser vide pour aucune alerte)" value={editData.lowStockThreshold} onChange={e => setEditData(prev => ({ ...prev, lowStockThreshold: e.target.value }))} style={inputStyle} />
+                <strong>Low Stock Alert At</strong>
+                <input type="number" min="0" placeholder="e.g., 5 (leave empty for no alert)" value={editData.lowStockThreshold} onChange={e => setEditData(prev => ({ ...prev, lowStockThreshold: e.target.value }))} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Réceptionnaire *</strong>
+                <strong>Receiver *</strong>
                 <div style={{ position: 'relative', marginTop: 8 }}>
                   <input
                     type="text"
-                    placeholder="Rechercher par email…"
+                    placeholder="Search by email…"
                     value={userSearch}
                     onChange={(e) => { setUserSearch(e.target.value); setDropdownOpen(true); }}
                     onFocus={() => setDropdownOpen(true)}
@@ -403,7 +403,7 @@ export default function SupplyReceiptFormPage() {
                   )}
                   {dropdownOpen && userSearch && filteredUsers.length === 0 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ddd', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: 10, color: '#999', zIndex: 10 }}>
-                      Aucun utilisateur trouvé
+                      No users found
                     </div>
                   )}
                 </div>
@@ -412,67 +412,67 @@ export default function SupplyReceiptFormPage() {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={submitting} style={{ flex: 1, padding: 12, background: 'var(--brand)', color: 'white', border: 'none', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1 }}>
-                {submitting ? 'Mise à jour…' : 'Mettre à jour'}
+                {submitting ? 'Updating…' : 'Update'}
               </button>
               <button type="button" onClick={() => navigate('/supplies')} style={{ flex: 1, padding: 12, background: '#f4f1ee', color: 'var(--ink)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                Annuler
+                Cancel
               </button>
             </div>
           </form>
         ) : (
           <form onSubmit={handleCreateSubmit}>
             <div style={{ marginBottom: 20 }}>
-              <strong>Article *</strong>
+              <strong>Item *</strong>
               {!showNewItem ? (
                 <>
                   <select value={itemId} onChange={e => setItemId(e.target.value)} style={inputStyle}>
-                    <option value="">— Choisir un article —</option>
+                    <option value="">— Select an item —</option>
                     {items.map(it => (
                       <option key={it.id} value={it.id}>{it.name} ({it.code})</option>
                     ))}
                   </select>
                   <button type="button" onClick={() => setShowNewItem(true)} style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--brand)', cursor: 'pointer', padding: 0, fontSize: 13 }}>
-                    + Créer un nouvel article
+                    + Create new item
                   </button>
                 </>
               ) : (
                 <div style={{ marginTop: 8, padding: 12, background: '#f9f9f9', border: '1px solid #eee', borderRadius: 4 }}>
                   <div style={{ marginBottom: 12 }}>
                     <label>
-                      <strong style={{ fontSize: 13 }}>Nom de l'article *</strong>
-                      <input type="text" placeholder="ex. Papier toilette (rouleau)" value={newItem.name} onChange={e => setNewItem(prev => ({ ...prev, name: e.target.value }))} style={inputStyle} />
+                      <strong style={{ fontSize: 13 }}>Item Name *</strong>
+                      <input type="text" placeholder="e.g., Toilet Roll (refill)" value={newItem.name} onChange={e => setNewItem(prev => ({ ...prev, name: e.target.value }))} style={inputStyle} />
                     </label>
                   </div>
                   <div style={{ marginBottom: 12 }}>
                     <label>
-                      <strong style={{ fontSize: 13 }}>Catégorie</strong>
+                      <strong style={{ fontSize: 13 }}>Category</strong>
                       <Autocomplete
                         value={newItem.categoryName}
                         onChange={(value) => setNewItem(prev => ({ ...prev, categoryName: value }))}
                         fetchOptions={fetchCategoryOptions}
-                        placeholder="Rechercher/ajouter une catégorie…"
+                        placeholder="Search/add category…"
                         className="field"
                       />
                     </label>
                   </div>
                   <div style={{ marginBottom: 12 }}>
                     <label>
-                      <strong style={{ fontSize: 13 }}>Unité de base</strong>
+                      <strong style={{ fontSize: 13 }}>Base Unit</strong>
                       <input type="text" placeholder="unit" value={newItem.base_unit} onChange={e => setNewItem(prev => ({ ...prev, base_unit: e.target.value }))} style={inputStyle} />
                     </label>
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
                     <label style={{ flex: 1 }}>
-                      <strong style={{ fontSize: 13 }}>Seuil d'alerte</strong>
+                      <strong style={{ fontSize: 13 }}>Reorder Point</strong>
                       <input type="number" min="0" value={newItem.reorder_point} onChange={e => setNewItem(prev => ({ ...prev, reorder_point: e.target.value }))} style={inputStyle} />
                     </label>
                     <label style={{ flex: 1 }}>
-                      <strong style={{ fontSize: 13 }}>Niveau cible</strong>
+                      <strong style={{ fontSize: 13 }}>Target Level</strong>
                       <input type="number" min="0" value={newItem.target_level} onChange={e => setNewItem(prev => ({ ...prev, target_level: e.target.value }))} style={inputStyle} />
                     </label>
                   </div>
                   <button type="button" onClick={() => setShowNewItem(false)} style={{ marginTop: 8, background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, fontSize: 13 }}>
-                    ← Choisir un article existant
+                    ← Choose an existing item
                   </button>
                 </div>
               )}
@@ -480,51 +480,51 @@ export default function SupplyReceiptFormPage() {
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Date de réception *</strong>
+                <strong>Received Date *</strong>
                 <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
               <label style={{ flex: 1 }}>
-                <strong>Colisage *</strong>
+                <strong>Pack Size *</strong>
                 <input type="number" min="1" value={packSize} onChange={e => setPackSize(e.target.value)} style={inputStyle} />
-                <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>Unités par colis</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>Units per pack</div>
               </label>
               <label style={{ flex: 1 }}>
-                <strong>Colis reçus *</strong>
+                <strong>Packs Received *</strong>
                 <input type="number" min="1" value={packsReceived} onChange={e => setPacksReceived(e.target.value)} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20, padding: 8, background: '#f4f1ee', borderRadius: 4, fontSize: 13 }}>
-              Quantité totale : <strong>{quantityBase || 0}</strong> {selectedItemUnit}
+              Total quantity: <strong>{quantityBase || 0}</strong> {selectedItemUnit}
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Montant de la facture (GH₵) *</strong>
+                <strong>Invoice Amount (GH₵) *</strong>
                 <input type="number" step="0.01" min="0" placeholder="0.00" value={lineTotal} onChange={e => setLineTotal(e.target.value)} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ marginBottom: 20, padding: 8, background: '#f4f1ee', borderRadius: 4, fontSize: 13 }}>
-              Coût unitaire calculé : <strong>{unitCostBase ? unitCostBase.toFixed(4) : '0.0000'}</strong> GH₵
+              Calculated unit cost: <strong>{unitCostBase ? unitCostBase.toFixed(4) : '0.0000'}</strong> GH₵
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <label>
-                <strong>Marque</strong>
+                <strong>Brand</strong>
                 <input type="text" placeholder="ex. IKEA" value={brand} onChange={e => setBrand(e.target.value)} style={inputStyle} />
               </label>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={submitting} style={{ flex: 1, padding: 12, background: 'var(--brand)', color: 'white', border: 'none', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1 }}>
-                {submitting ? 'Enregistrement…' : 'Enregistrer la réception'}
+                {submitting ? 'Saving…' : 'Save Receipt'}
               </button>
               <button type="button" onClick={() => navigate('/supplies')} style={{ flex: 1, padding: 12, background: '#f4f1ee', color: 'var(--ink)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                Annuler
+                Cancel
               </button>
             </div>
           </form>
