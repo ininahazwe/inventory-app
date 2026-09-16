@@ -1,64 +1,97 @@
-// routes/supplyMovements.ts
-// Ledger de stock fournitures (append-only).
-// qty signée: + entrée (purchase/return/adjustment+), − sortie (issue/adjustment−)
+// server/src/routes/supplyMovements.ts
+//
+// Phase 3 — ADAPTATEUR. Le ledger lui-même (supply_stock_ledger) EST
+// maintenant la source de vérité ; ce fichier ne fait plus qu'un UNION en
+// lecture dessus, reformaté dans l'ancien vocabulaire (type: purchase/issue/
+// return/adjustment) pour que SuppliesList.tsx continue de fonctionner sans
+// changement. Les anciens helpers recordMovement()/deleteMovementsByRef()
+// ont disparu : supplies.ts et supplyAssignments.ts écrivent désormais
+// directement via supplyLedger.ts, jamais via ce fichier.
+//
+// `supply_id` dans la liste reste, pour les lignes historiques, l'ancien id
+// de lot (repris depuis les tables legacy via legacy_supply_id /
+// legacy_assignment_id / legacy_movement_id) ; pour toute nouvelle activité
+// (réceptions exceptées, qui ont toujours un lot), c'est désormais l'id de
+// l'article — il n'y a plus de lot à référencer pour une sortie ou un
+// ajustement dans le nouveau modèle (stock mutualisé par article).
+//
+// `created_by` : approximation acceptée pendant la transition — faute d'une
+// colonne "créateur" distincte sur les nouveaux documents, on affiche le
+// destinataire/receveur du document. L'auteur réel de l'action reste tracé
+// fidèlement dans audit_log (logAudit), qui n'est pas concerné par ce gap.
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
-import { todayDateString } from '../utils/dateHelpers';
+import { postAdjustment } from '../services/supplyLedger';
+import { AppException } from '../exceptions';
 
 const router = Router();
 
-// ─── Helper réutilisé par les autres routes (supplies, supplyAssignments) ───
-// executor: passer `tx` (depuis db.transaction) pour que l'écriture du ledger
-// fasse partie de la même transaction que l'action principale. Si ça échoue,
-// ça throw et fait rollback tout le reste — le ledger ne doit jamais désynchroniser
-// silencieusement de l'état réel du stock.
-type Executor = { execute: (sql: string, values?: any[]) => Promise<any> };
+const UNION_SELECT = `
+    SELECT sl.id, COALESCE(rl.legacy_supply_id, rl.id) AS supply_id, 'purchase' AS type,
+           sl.quantity_base AS qty, sl.movement_date, 'supply' AS ref_type,
+           COALESCE(rl.legacy_supply_id, rl.id) AS ref_id,
+           CONCAT('Purchase: ', i.name) AS notes, sl.created_at,
+           ru.email AS created_by, i.name AS supply_name, c.name AS category_name
+    FROM supply_stock_ledger sl
+             JOIN supply_receipt_lines rl ON rl.id = sl.source_line_id AND sl.source_table = 'supply_receipt_lines'
+             JOIN supply_receipts r ON r.id = rl.receipt_id
+             JOIN supply_items i ON i.id = sl.item_id
+             LEFT JOIN categories c ON c.id = i.category_id
+             LEFT JOIN users ru ON ru.id = CAST(r.received_by_uid AS UNSIGNED)
+    WHERE sl.reason = 'receipt'
 
-export async function recordMovement(
-    params: {
-        supply_id: number;
-        type: 'purchase' | 'issue' | 'return' | 'adjustment';
-        qty: number;                 // signée
-        movement_date: string;       // YYYY-MM-DD
-        ref_type?: 'supply' | 'supply_assignment' | null;
-        ref_id?: number | null;
-        notes?: string | null;
-        created_by?: string | null;
-    },
-    executor: Executor = db
-): Promise<void> {
-    await executor.execute(
-        `INSERT INTO supply_movements (supply_id, type, qty, movement_date, ref_type, ref_id, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-            params.supply_id,
-            params.type,
-            params.qty,
-            params.movement_date,
-            params.ref_type || null,
-            params.ref_id || null,
-            params.notes || null,
-            params.created_by || null,
-        ]
-    );
-}
+    UNION ALL
 
-export async function deleteMovementsByRef(
-    refType: string,
-    refId: number,
-    executor: Executor = db
-): Promise<void> {
-    await executor.execute(
-        'DELETE FROM supply_movements WHERE ref_type = ? AND ref_id = ?',
-        [refType, refId]
-    );
-}
+    SELECT sl.id, COALESCE(sa_old.supply_id, il.item_id) AS supply_id, 'issue' AS type,
+           sl.quantity_base AS qty, sl.movement_date, 'supply_assignment' AS ref_type,
+           COALESCE(il.legacy_assignment_id, il.id) AS ref_id,
+           CONCAT('Issued to ', COALESCE(ru.email, CONCAT('location #', q.destination_location_id))) AS notes, sl.created_at,
+           ru.email AS created_by, i.name AS supply_name, c.name AS category_name
+    FROM supply_stock_ledger sl
+             JOIN supply_issue_lines il ON il.id = sl.source_line_id AND sl.source_table = 'supply_issue_lines'
+             JOIN supply_issues q ON q.id = il.issue_id
+             JOIN supply_items i ON i.id = sl.item_id
+             LEFT JOIN categories c ON c.id = i.category_id
+             LEFT JOIN supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
+             LEFT JOIN users ru ON ru.id = CAST(q.recipient_uid AS UNSIGNED)
+    WHERE sl.reason = 'issue'
+
+    UNION ALL
+
+    SELECT sl.id, COALESCE(sa_old.supply_id, il.item_id) AS supply_id, 'return' AS type,
+           sl.quantity_base AS qty, sl.movement_date, 'supply_assignment' AS ref_type,
+           COALESCE(il.legacy_assignment_id, il.id) AS ref_id,
+           CONCAT('Returned by ', COALESCE(ru.email, 'unknown')) AS notes, sl.created_at,
+           ru.email AS created_by, i.name AS supply_name, c.name AS category_name
+    FROM supply_stock_ledger sl
+             JOIN supply_issue_lines il ON il.id = sl.source_line_id AND sl.source_table = 'supply_issue_lines'
+             JOIN supply_issues q ON q.id = il.issue_id
+             JOIN supply_items i ON i.id = sl.item_id
+             LEFT JOIN categories c ON c.id = i.category_id
+             LEFT JOIN supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
+             LEFT JOIN users ru ON ru.id = CAST(q.recipient_uid AS UNSIGNED)
+    WHERE sl.reason = 'return'
+
+    UNION ALL
+
+    SELECT sl.id, COALESCE(mv_old.supply_id, al.item_id) AS supply_id, 'adjustment' AS type,
+           sl.quantity_base AS qty, sl.movement_date, NULL AS ref_type, NULL AS ref_id,
+           al.notes AS notes, sl.created_at,
+           ru.email AS created_by, i.name AS supply_name, c.name AS category_name
+    FROM supply_stock_ledger sl
+             JOIN supply_adjustment_lines al ON al.id = sl.source_line_id AND sl.source_table = 'supply_adjustment_lines'
+             JOIN supply_adjustments adj ON adj.id = al.adjustment_id
+             JOIN supply_items i ON i.id = sl.item_id
+             LEFT JOIN categories c ON c.id = i.category_id
+             LEFT JOIN supply_movements mv_old ON mv_old.id = al.legacy_movement_id
+             LEFT JOIN users ru ON ru.id = CAST(adj.recorded_by_uid AS UNSIGNED)
+    WHERE sl.reason IN ('count_variance', 'write_off')
+`;
 
 // ─── GET /api/supply-movements - liste filtrable ────────────────────────────
-// Filtres: supply_id, type, from (YYYY-MM-DD), to (YYYY-MM-DD)
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const { supply_id, type, from, to } = req.query;
@@ -72,19 +105,8 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
         const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-        // created_by peut contenir un uid (backfill) ou un email (runtime): on résout en email
         const [rows] = await db.execute(
-            `SELECT m.id, m.supply_id, m.type, m.qty, m.movement_date, m.ref_type, m.ref_id,
-                    m.notes, m.created_at,
-                    COALESCE(u.email, m.created_by) AS created_by,
-                    s.name AS supply_name, c.name AS category_name
-             FROM supply_movements m
-                      JOIN supplies s ON m.supply_id = s.id
-                      LEFT JOIN categories c ON s.category_id = c.id
-                      LEFT JOIN users u ON m.created_by = u.id
-                 ${whereClause}
-             ORDER BY m.movement_date DESC, m.id DESC
-             LIMIT 500`,
+            `SELECT m.* FROM (${UNION_SELECT}) m ${whereClause} ORDER BY m.movement_date DESC, m.id DESC LIMIT 500`,
             params
         );
 
@@ -96,27 +118,26 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/supply-movements/stock?at=YYYY-MM-DD ──────────────────────────
-// État du stock par fourniture à l'instant t (défaut: aujourd'hui)
+// Non utilisé par le front actuel (vérifié) : simplifié au niveau article
+// (le modèle cible mutualise le stock par article, plus par lot — voir
+// GET /api/supply-items pour l'équivalent qui remplace cet endpoint en Phase 4).
 router.get('/stock', requireAuth, async (req: Request, res: Response) => {
     try {
-        const at = (req.query.at as string) || todayDateString();
         const lowOnly = req.query.low_stock === '1' || req.query.low_stock === 'true';
 
         const [rows] = await db.execute(
-            `SELECT s.id AS supply_id, s.name, s.brand, c.name AS category_name,
-                    s.low_stock_threshold,
-                    COALESCE(SUM(CASE WHEN m.qty > 0 THEN m.qty ELSE 0 END), 0) AS total_in,
-                    COALESCE(SUM(CASE WHEN m.qty < 0 THEN -m.qty ELSE 0 END), 0) AS total_out,
-                    COALESCE(SUM(m.qty), 0) AS stock
-             FROM supplies s
-                      LEFT JOIN supply_movements m ON m.supply_id = s.id AND m.movement_date <= ?
-                      LEFT JOIN categories c ON s.category_id = c.id
-             GROUP BY s.id, s.name, s.brand, c.name, s.low_stock_threshold
-             ORDER BY s.name ASC`,
-            [at]
+            `SELECT i.id AS supply_id, i.name, NULL AS brand, c.name AS category_name,
+                    i.reorder_point AS low_stock_threshold,
+                    COALESCE(SUM(CASE WHEN sl.quantity_base > 0 THEN sl.quantity_base ELSE 0 END), 0) AS total_in,
+                    COALESCE(SUM(CASE WHEN sl.quantity_base < 0 THEN -sl.quantity_base ELSE 0 END), 0) AS total_out,
+                    COALESCE(SUM(sl.quantity_base), 0) AS stock
+             FROM supply_items i
+                      LEFT JOIN supply_stock_ledger sl ON sl.item_id = i.id
+                      LEFT JOIN categories c ON c.id = i.category_id
+             GROUP BY i.id, i.name, c.name, i.reorder_point
+             ORDER BY i.name ASC`
         );
 
-        // ✅ is_low: seuil configuré ET stock courant <= seuil (pas d'alerte si seuil NULL)
         let stock = (rows as any[]).map(r => ({
             ...r,
             is_low: r.low_stock_threshold !== null && Number(r.stock) <= Number(r.low_stock_threshold),
@@ -126,7 +147,7 @@ router.get('/stock', requireAuth, async (req: Request, res: Response) => {
             stock = stock.filter(r => r.is_low);
         }
 
-        return res.json({ at, stock });
+        return res.json({ at: req.query.at || null, stock });
     } catch (err) {
         logger.error('GET /supply-movements/stock error:', err as Error);
         return res.status(500).json({ error: 'Failed to compute stock' });
@@ -134,22 +155,21 @@ router.get('/stock', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/supply-movements/summary?from&to ──────────────────────────────
-// Entrées / sorties de la période + stock fin de période, par catégorie
 router.get('/summary', requireAuth, async (req: Request, res: Response) => {
     try {
         const from = (req.query.from as string) || '1970-01-01';
-        const to = (req.query.to as string) || todayDateString();
+        const to = (req.query.to as string) || new Date().toISOString().split('T')[0];
 
         const [rows] = await db.execute(
             `SELECT COALESCE(c.name, 'No category') AS category_name,
-                    COALESCE(SUM(CASE WHEN m.movement_date BETWEEN ? AND ? AND m.type = 'purchase' THEN m.qty ELSE 0 END), 0) AS period_purchased,
-                    COALESCE(SUM(CASE WHEN m.movement_date BETWEEN ? AND ? AND m.type = 'issue' THEN -m.qty ELSE 0 END), 0) AS period_issued,
-                    COALESCE(SUM(CASE WHEN m.movement_date BETWEEN ? AND ? AND m.type = 'return' THEN m.qty ELSE 0 END), 0) AS period_returned,
-                    COALESCE(SUM(CASE WHEN m.movement_date BETWEEN ? AND ? AND m.type = 'adjustment' THEN m.qty ELSE 0 END), 0) AS period_adjusted,
-                    COALESCE(SUM(CASE WHEN m.movement_date <= ? THEN m.qty ELSE 0 END), 0) AS stock_at_end
-             FROM supply_movements m
-                      JOIN supplies s ON m.supply_id = s.id
-                      LEFT JOIN categories c ON s.category_id = c.id
+                    COALESCE(SUM(CASE WHEN sl.movement_date BETWEEN ? AND ? AND sl.reason = 'receipt' THEN sl.quantity_base ELSE 0 END), 0) AS period_purchased,
+                    COALESCE(SUM(CASE WHEN sl.movement_date BETWEEN ? AND ? AND sl.reason = 'issue' THEN -sl.quantity_base ELSE 0 END), 0) AS period_issued,
+                    COALESCE(SUM(CASE WHEN sl.movement_date BETWEEN ? AND ? AND sl.reason = 'return' THEN sl.quantity_base ELSE 0 END), 0) AS period_returned,
+                    COALESCE(SUM(CASE WHEN sl.movement_date BETWEEN ? AND ? AND sl.reason = 'count_variance' THEN sl.quantity_base ELSE 0 END), 0) AS period_adjusted,
+                    COALESCE(SUM(CASE WHEN sl.movement_date <= ? THEN sl.quantity_base ELSE 0 END), 0) AS stock_at_end
+             FROM supply_stock_ledger sl
+                      JOIN supply_items i ON i.id = sl.item_id
+                      LEFT JOIN categories c ON c.id = i.category_id
              GROUP BY c.name
              ORDER BY category_name ASC`,
             [from, to, from, to, from, to, from, to, to]
@@ -163,7 +183,10 @@ router.get('/summary', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/supply-movements - ajustement manuel (admin) ─────────────────
-// Seul type saisi à la main: adjustment (perte, casse, correction d'inventaire)
+// Ancien formulaire : une quantité signée (+ entrée / - sortie), pas un
+// comptage. Converti en écart pour supplyLedger.postAdjustment() : le système
+// recalcule le stock courant dans la même transaction et pose la ligne du
+// ledger — jamais un UPDATE direct.
 router.post('/', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
@@ -182,39 +205,49 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'qty must be a non-zero integer (+ in / - out)' });
         }
 
-        const [supplyCheck] = await db.execute('SELECT id, name FROM supplies WHERE id = ?', [supply_id]);
-        if (!(supplyCheck as any[]).length) {
+        const [lotResult] = await db.execute(
+            `SELECT rl.item_id, i.name FROM supply_receipt_lines rl JOIN supply_items i ON i.id = rl.item_id
+             WHERE COALESCE(rl.legacy_supply_id, rl.id) = ?`,
+            [supply_id]
+        );
+        if (!(lotResult as any[]).length) {
             return res.status(404).json({ error: 'Supply not found' });
         }
+        const itemId = (lotResult as any[])[0].item_id;
 
-        // Un ajustement négatif ne peut pas rendre le stock négatif
-        if (qtyNum < 0) {
-            const [stockResult] = await db.execute(
-                'SELECT COALESCE(SUM(qty), 0) AS stock FROM supply_movements WHERE supply_id = ?',
-                [supply_id]
-            );
-            const currentStock = Number((stockResult as any[])[0]?.stock || 0);
-            if (currentStock + qtyNum < 0) {
-                return res.status(400).json({ error: `Stock would become negative (current: ${currentStock})` });
-            }
+        const [stockRows] = await db.execute(
+            `SELECT COALESCE(SUM(quantity_base), 0) AS stock FROM supply_stock_ledger WHERE item_id = ?`,
+            [itemId]
+        );
+        const currentStock = Number((stockRows as any[])[0]?.stock || 0);
+        if (currentStock + qtyNum < 0) {
+            return res.status(400).json({ error: `Stock would become negative (current: ${currentStock})` });
         }
 
         const cleanDate = movement_date.includes('T') ? movement_date.split('T')[0] : movement_date;
+        const countedQuantity = currentStock + qtyNum;
 
-        const [result] = await db.execute(
-            `INSERT INTO supply_movements (supply_id, type, qty, movement_date, notes, created_by)
-             VALUES (?, 'adjustment', ?, ?, ?, ?)`,
-            [supply_id, qtyNum, cleanDate, notes || null, user.email]
-        );
+        const { lineIds } = await db.transaction(async (tx) => {
+            return postAdjustment({
+                adjustment_date: cleanDate,
+                source: 'event',
+                reason: qtyNum < 0 ? 'loss' : 'found',
+                recorded_by_uid: user.uid !== undefined ? String(user.uid) : null,
+                lines: [{ item_id: itemId, counted_quantity: countedQuantity, notes: notes || null }],
+            }, tx);
+        });
 
-        const movementId = (result as any).insertId;
+        const movementId = lineIds[0];
         await logAudit(user.email, 'supply_adjustment', 'supply_movements', movementId, null, {
-            supply_id, qty: qtyNum, movement_date: cleanDate, notes
+            supply_id, qty: qtyNum, movement_date: cleanDate, notes,
         });
 
         logger.info(`Supply adjustment #${movementId}: supply ${supply_id}, qty ${qtyNum}`, 'SUPPLY_MOVEMENTS');
         return res.status(201).json({ id: movementId, supply_id, type: 'adjustment', qty: qtyNum, movement_date: cleanDate, notes });
     } catch (err) {
+        if (err instanceof AppException) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('POST /supply-movements error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }

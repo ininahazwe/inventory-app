@@ -1,8 +1,8 @@
 // tests/integration/supplies.test.ts
-// Vraie app Express (mêmes routes/middlewares), DB mockée. Couvre le comportement
-// transactionnel ajouté sur POST /api/supplies : l'écriture du ledger (supply_movements)
-// fait partie de la même transaction que la création de la supply — si elle échoue,
-// tout échoue (avant le correctif, l'erreur du ledger était avalée silencieusement).
+// Vraie app Express (mêmes routes/middlewares), DB mockée. Phase 3 : POST
+// /api/supplies est un adaptateur qui écrit via supplyLedger.postReceipt()
+// dans les nouvelles tables (supply_receipts / supply_receipt_lines /
+// supply_stock_ledger), plus jamais dans l'ancienne table `supplies`.
 import request from 'supertest';
 import { createTestApp } from '../helpers/testApp';
 import { mockRows, mockOk } from '../helpers/testApp';
@@ -56,12 +56,29 @@ describe('POST /api/supplies', () => {
         expect(res.body.error).toMatch(/category/i);
     });
 
-    it('creates the supply and records a purchase movement in the same transaction', async () => {
+    it('rejects an item name that does not match an existing supply item', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))       // lookup receiver
-            .mockResolvedValueOnce(mockOk({ insertId: 42 }))            // INSERT supplies (tx)
-            .mockResolvedValueOnce(mockOk({ insertId: 100 }))           // INSERT supply_movements (tx)
-            .mockResolvedValueOnce(mockRows([{                         // fetch created supply
+            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }])) // lookup receiver OK
+            .mockResolvedValueOnce(mockRows([])); // item lookup -> aucune correspondance
+
+        const res = await request(app).post('/api/supplies').send(validPayload);
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/unknown item/i);
+    });
+
+    it('creates the receipt line and records a receipt movement in the same transaction', async () => {
+        // Ordre réel de supplyLedger.postReceipt(): l'en-tête supply_receipts est
+        // inséré AVANT le verrou (lockItem) sur l'article, lui-même avant la ligne
+        // et l'écriture du ledger.
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))            // lookup receiver
+            .mockResolvedValueOnce(mockRows([{ id: 5, category_id: null }])) // item lookup
+            .mockResolvedValueOnce(mockOk({ insertId: 900 }))                // INSERT supply_receipts (tx, en-tête)
+            .mockResolvedValueOnce(mockRows([{ id: 5 }]))                    // lockItem (tx, FOR UPDATE)
+            .mockResolvedValueOnce(mockOk({ insertId: 42 }))                 // INSERT supply_receipt_lines (tx)
+            .mockResolvedValueOnce(mockOk({ insertId: 100 }))                // INSERT supply_stock_ledger (tx)
+            .mockResolvedValueOnce(mockRows([{                              // fetch created row
                 id: 42,
                 name: validPayload.name,
                 purchase_date: validPayload.purchase_date,
@@ -76,14 +93,17 @@ describe('POST /api/supplies', () => {
         expect(res.status).toBe(201);
         expect(res.body.id).toBe(42);
 
-        // 2e appel execute = INSERT supplies, 3e = INSERT supply_movements (type purchase, qty = quantity)
-        const insertSupplyCall = mockedExecute.mock.calls[1];
-        expect(insertSupplyCall[0]).toMatch(/INSERT INTO supplies/);
+        const insertReceiptCall = mockedExecute.mock.calls[2];
+        expect(insertReceiptCall[0]).toMatch(/INSERT INTO supply_receipts/);
 
-        const insertMovementCall = mockedExecute.mock.calls[2];
-        expect(insertMovementCall[0]).toMatch(/INSERT INTO supply_movements/);
-        expect(insertMovementCall[1]).toEqual(
-            expect.arrayContaining([42, 'purchase', 10, validPayload.purchase_date])
+        const insertLineCall = mockedExecute.mock.calls[4];
+        expect(insertLineCall[0]).toMatch(/INSERT INTO supply_receipt_lines/);
+
+        const insertLedgerCall = mockedExecute.mock.calls[5];
+        expect(insertLedgerCall[0]).toMatch(/INSERT INTO supply_stock_ledger/);
+        expect(insertLedgerCall[0]).toMatch(/'receipt'/);
+        expect(insertLedgerCall[1]).toEqual(
+            expect.arrayContaining([5, validPayload.purchase_date, 10])
         );
     });
 
@@ -97,11 +117,15 @@ describe('POST /api/supplies', () => {
         expect(mockedExecute).not.toHaveBeenCalled();
     });
 
-    it('accepts and stores a valid low_stock_threshold', async () => {
+    it('accepts a valid low_stock_threshold and stores it on the item (shared across its lots)', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))       // lookup receiver
-            .mockResolvedValueOnce(mockOk({ insertId: 42 }))            // INSERT supplies (tx)
-            .mockResolvedValueOnce(mockOk({ insertId: 100 }))           // INSERT supply_movements (tx)
+            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))            // lookup receiver
+            .mockResolvedValueOnce(mockRows([{ id: 5, category_id: null }])) // item lookup
+            .mockResolvedValueOnce(mockOk({ insertId: 900 }))                // INSERT supply_receipts (tx, en-tête)
+            .mockResolvedValueOnce(mockRows([{ id: 5 }]))                    // lockItem (tx)
+            .mockResolvedValueOnce(mockOk({ insertId: 42 }))                 // INSERT supply_receipt_lines (tx)
+            .mockResolvedValueOnce(mockOk({ insertId: 100 }))                // INSERT supply_stock_ledger (tx)
+            .mockResolvedValueOnce(mockOk())                                 // UPDATE supply_items (tx) -- reorder_point
             .mockResolvedValueOnce(mockRows([{ id: 42, name: validPayload.name, low_stock_threshold: 5 }]));
 
         const res = await request(app)
@@ -109,22 +133,25 @@ describe('POST /api/supplies', () => {
             .send({ ...validPayload, low_stock_threshold: 5 });
 
         expect(res.status).toBe(201);
-        const insertSupplyCall = mockedExecute.mock.calls[1];
-        expect(insertSupplyCall[0]).toMatch(/INSERT INTO supplies/);
-        expect(insertSupplyCall[1]).toEqual(expect.arrayContaining([5]));
+        const updateItemCall = mockedExecute.mock.calls[6];
+        expect(updateItemCall[0]).toMatch(/UPDATE supply_items/);
+        expect(updateItemCall[1]).toEqual(expect.arrayContaining([5]));
     });
 
     it('fails the whole request if the ledger write fails inside the transaction', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))       // lookup receiver
-            .mockResolvedValueOnce(mockOk({ insertId: 42 }))            // INSERT supplies (tx)
-            .mockRejectedValueOnce(new Error('ledger insert failed'));  // INSERT supply_movements (tx) -> échoue
+            .mockResolvedValueOnce(mockRows([{ id: 'user-1' }]))            // lookup receiver
+            .mockResolvedValueOnce(mockRows([{ id: 5, category_id: null }])) // item lookup
+            .mockResolvedValueOnce(mockOk({ insertId: 900 }))                // INSERT supply_receipts (tx, en-tête)
+            .mockResolvedValueOnce(mockRows([{ id: 5 }]))                    // lockItem (tx)
+            .mockResolvedValueOnce(mockOk({ insertId: 42 }))                 // INSERT supply_receipt_lines (tx)
+            .mockRejectedValueOnce(new Error('ledger insert failed'));       // INSERT supply_stock_ledger (tx) -> échoue
 
         const res = await request(app).post('/api/supplies').send(validPayload);
 
         expect(res.status).toBe(500);
-        // La lecture de la supply créée (4e appel execute) ne doit JAMAIS survenir:
-        // la transaction a échoué avant, donc rien n'a été "commité" côté logique métier.
-        expect(mockedExecute).toHaveBeenCalledTimes(3);
+        // La lecture après coup (7e appel) ne doit jamais survenir : la
+        // transaction a échoué avant, rien n'a été "commité" côté métier.
+        expect(mockedExecute).toHaveBeenCalledTimes(6);
     });
 });
