@@ -1,8 +1,19 @@
 name: 🚀 Complete Deploy - Assets Management
 
 on:
-  push:
-    branches: [main]
+  # DESACTIVE le 17/09/2026. Ce pipeline ouvre une session SSH depuis GitHub
+  # Actions vers l'hebergement mutualise ; cette session se fait tuer (SIGTERM,
+  # exit 143) en 4 a 5 secondes, quelle que soit la commande en cours. Trois
+  # executions, trois echecs, dont deux mises hors ligne du site (16 et
+  # 17/09/2026) parce que le rollback se fait tuer de la meme facon.
+  #
+  # Remplace par un deploiement "pull" : c'est le serveur qui va chercher les
+  # nouveaux commits, via un cron cPanel qui lance deploy/deploy.sh en local.
+  # Plus aucune session SSH entrante. Voir deploy/README.md.
+  #
+  # Conserve en declenchement manuel uniquement, pour ne pas perdre l'historique
+  # ni le script (utile comme reference). A supprimer une fois la bascule faite.
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
