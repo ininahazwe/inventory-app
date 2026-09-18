@@ -8,9 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
 import { todayDateString } from '../lib/dateHelpers';
 import { useSupplies } from '../hooks/useSupplies';
-import { useSupplyAssignments } from '../hooks/useSupplyAssignments';
 import { usePermissions } from '../hooks/usePermissions';
-import { AssignSupplyModal } from '../components/AssignSupplyModal';
 import Modal from '../components/Modal';
 import { SupplyTrendChart } from '../components/SupplyTrendChart';
 import { exportToXlsx } from '../lib/exportXlsx';
@@ -101,12 +99,10 @@ export const SuppliesList: React.FC = () => {
   const navigate = useNavigate();
   const { isAdmin } = usePermissions();
   const { supplies, loading, error, fetchSupplies, deleteSupply } = useSupplies();
-  const { fetchAssignments } = useSupplyAssignments();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0')
   );
-  const [showAssignModal, setShowAssignModal] = useState(false);
   const [overviewTab, setOverviewTab] = useState<'cost' | 'stock' | 'movements'>('cost');
   const [currentPage, setCurrentPage] = useState(1);
   const [stockPage, setStockPage] = useState(1);
@@ -460,10 +456,10 @@ export const SuppliesList: React.FC = () => {
 
         <button
           className="pill"
-          onClick={() => setShowAssignModal(true)}
+          onClick={() => navigate('/supplies/issue')}
           style={{ padding: '8px 16px', fontSize: '14px', backgroundColor: 'var(--brand)', color: '#fff' }}
         >
-          Assign Supply
+          Issue Supply
         </button>
 
         {isAdmin && (
@@ -879,20 +875,6 @@ export const SuppliesList: React.FC = () => {
 
       {/* ═══ 4. Chart (ledger de la période) ═══ */}
       <SupplyTrendChart stats={chartData} />
-
-      {/* ✅ Assign Supply Modal */}
-      {showAssignModal && (
-        <AssignSupplyModal
-          supplies={supplies}
-          onAssigned={() => {
-            fetchSupplies();
-            fetchAssignments();
-            loadAssignments();
-            loadLedger();
-          }}
-          onClose={() => setShowAssignModal(false)}
-        />
-      )}
 
       {/* ✅ Adjustment Modal (admin) */}
       <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title="Stock Adjustment">
