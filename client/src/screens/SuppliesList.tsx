@@ -6,7 +6,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
-import { todayDateString } from '../lib/dateHelpers';
 import { useSupplies } from '../hooks/useSupplies';
 import { usePermissions } from '../hooks/usePermissions';
 import Modal from '../components/Modal';
@@ -116,16 +115,6 @@ export const SuppliesList: React.FC = () => {
   const [summary, setSummary] = useState<CategorySummary[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
 
-  // ✅ Adjustment modal (admin)
-  const [adjustOpen, setAdjustOpen] = useState(false);
-  const [adjSupplyId, setAdjSupplyId] = useState<string>('');
-  const [adjDirection, setAdjDirection] = useState<'out' | 'in'>('out');
-  const [adjQty, setAdjQty] = useState<string>('1');
-  const [adjDate, setAdjDate] = useState<string>(todayDateString());
-  const [adjNotes, setAdjNotes] = useState<string>('');
-  const [adjError, setAdjError] = useState<string | null>(null);
-  const [adjSaving, setAdjSaving] = useState(false);
-
   // Nom lisible depuis l'email (pas de colonne name en base).
   // uid résiduel (36 chars sans @) -> '—'
   const displayUser = (value: string | null): string => {
@@ -232,40 +221,6 @@ export const SuppliesList: React.FC = () => {
       await deleteSupply(deleteSupplyId);
       closeDeleteConfirm();
       await loadLedger();
-    }
-  };
-
-  // ✅ Adjustment (admin)
-  const openAdjust = () => {
-    setAdjSupplyId('');
-    setAdjDirection('out');
-    setAdjQty('1');
-    setAdjDate(todayDateString());
-    setAdjNotes('');
-    setAdjError(null);
-    setAdjustOpen(true);
-  };
-
-  const submitAdjust = async () => {
-    setAdjError(null);
-    const qtyNum = parseInt(adjQty, 10);
-    if (!adjSupplyId) { setAdjError('Select a supply'); return; }
-    if (isNaN(qtyNum) || qtyNum < 1) { setAdjError('Quantity must be at least 1'); return; }
-    if (!adjDate) { setAdjError('Date required'); return; }
-
-    try {
-      setAdjSaving(true);
-      const { error: apiError } = await api.post('/supply-movements', {
-        supply_id: parseInt(adjSupplyId, 10),
-        qty: adjDirection === 'out' ? -qtyNum : qtyNum,
-        movement_date: adjDate,
-        notes: adjNotes || undefined,
-      });
-      if (apiError) { setAdjError(apiError); return; }
-      setAdjustOpen(false);
-      await loadLedger();
-    } finally {
-      setAdjSaving(false);
     }
   };
 
@@ -465,7 +420,7 @@ export const SuppliesList: React.FC = () => {
         {isAdmin && (
           <button
             className="pill"
-            onClick={openAdjust}
+            onClick={() => navigate('/supplies/adjust')}
             style={{ padding: '8px 16px', fontSize: '14px', backgroundColor: '#b45309', color: '#fff' }}
             title="Loss, breakage, inventory correction"
           >
@@ -875,83 +830,6 @@ export const SuppliesList: React.FC = () => {
 
       {/* ═══ 4. Chart (ledger de la période) ═══ */}
       <SupplyTrendChart stats={chartData} />
-
-      {/* ✅ Adjustment Modal (admin) */}
-      <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title="Stock Adjustment">
-        <div style={{ display: 'grid', gap: 14 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <strong>Supply *</strong>
-            <select
-              className="field"
-              value={adjSupplyId}
-              onChange={e => setAdjSupplyId(e.target.value)}
-              style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-            >
-              <option value="">— Select a supply —</option>
-              {supplies.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}{s.brand ? ` (${s.brand})` : ''} — bought {s.quantity}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <strong>Direction *</strong>
-            <select
-              className="field"
-              value={adjDirection}
-              onChange={e => setAdjDirection(e.target.value as 'out' | 'in')}
-              style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-            >
-              <option value="out">Out — loss, breakage, write-off (−)</option>
-              <option value="in">In — inventory correction (+)</option>
-            </select>
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <strong>Quantity *</strong>
-              <input
-                type="number"
-                min="1"
-                value={adjQty}
-                onChange={e => setAdjQty(e.target.value)}
-                style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-              />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <strong>Date *</strong>
-              <input
-                type="date"
-                value={adjDate}
-                onChange={e => setAdjDate(e.target.value)}
-                style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-              />
-            </label>
-          </div>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <strong>Notes</strong>
-            <input
-              type="text"
-              placeholder="e.g., 2 broken during move"
-              value={adjNotes}
-              onChange={e => setAdjNotes(e.target.value)}
-              style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-            />
-          </label>
-
-          {adjError && <p style={{ color: 'crimson', margin: 0 }}>{adjError}</p>}
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="pill" style={{ background: '#bbb' }} onClick={() => setAdjustOpen(false)}>Cancel</button>
-            <button className="pill" style={{ background: '#b45309', color: '#fff' }} disabled={adjSaving} onClick={submitAdjust}>
-              {adjSaving ? 'Saving…' : 'Save Adjustment'}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* ✅ Delete Confirmation Modal */}
       <Modal open={deleteConfirmOpen} onClose={closeDeleteConfirm} title={`Delete: ${deleteSupplyName}`}>

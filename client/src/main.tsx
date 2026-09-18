@@ -23,6 +23,7 @@ import SupplyItemsPage from "./pages/SupplyItemsPage.tsx";
 import SupplyItemDetailPage from "./pages/SupplyItemDetailPage.tsx";
 import SupplyReceiptFormPage from "./pages/SupplyReceiptFormPage.tsx";
 import SupplyIssueFormPage from "./pages/SupplyIssueFormPage.tsx";
+import SupplyAdjustFormPage from "./pages/SupplyAdjustFormPage.tsx";
 import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
 import PublicAssetPage from "./pages/PublicAssetPage.tsx";
 import LocationsPage from "./pages/LocationsPage.tsx";
@@ -58,6 +59,7 @@ const router = createBrowserRouter([
       { path: "/supplies/create", element: <SupplyReceiptFormPage /> },
       { path: "/supplies/:id/edit", element: <SupplyReceiptFormPage /> },
       { path: "/supplies/issue", element: <SupplyIssueFormPage /> },
+      { path: "/supplies/adjust", element: <SupplyAdjustFormPage /> },
       { path: "/supplies", element: <SuppliesPage /> },
       { path: "/supply-items", element: <SupplyItemsPage /> },
       { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
