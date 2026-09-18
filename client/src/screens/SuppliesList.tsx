@@ -81,12 +81,6 @@ type Movement = {
   created_by: string | null;
 };
 
-type ActiveAssignment = {
-  supply_id: number;
-  status: string;
-  quantity_assigned: number;
-};
-
 const MOVEMENT_STYLES: Record<Movement['type'], { label: string; bg: string; color: string }> = {
   purchase: { label: 'Purchase', bg: '#dbeafe', color: '#1e40af' },
   issue: { label: 'Issued', bg: '#fee2e2', color: '#991b1b' },
@@ -109,7 +103,6 @@ export const SuppliesList: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSupplyId, setDeleteSupplyId] = useState<number | null>(null);
   const [deleteSupplyName, setDeleteSupplyName] = useState<string>('');
-  const [assignments, setAssignments] = useState<ActiveAssignment[]>([]);
 
   // ✅ Ledger data (période = mois sélectionné)
   const [summary, setSummary] = useState<CategorySummary[]>([]);
@@ -148,7 +141,6 @@ export const SuppliesList: React.FC = () => {
 
   useEffect(() => {
     fetchSupplies();
-    loadAssignments();
   }, [fetchSupplies]);
 
   // ✅ Ledger: summary + journal de la période
@@ -171,38 +163,6 @@ export const SuppliesList: React.FC = () => {
     loadLedger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
-
-  // ✅ Load assignments to calculate remaining stock (colonne Remaining du tableau)
-  const loadAssignments = async () => {
-    try {
-      const { data } = await api.get<ActiveAssignment[]>('/supply-assignments?status=active');
-      if (Array.isArray(data)) {
-        setAssignments(data);
-      }
-    } catch (err) {
-      console.error('Failed to load assignments:', err);
-    }
-  };
-
-  // ✅ Stock restant temps réel par ligne d'achat
-  const getRemaining = (supplyId: number): number => {
-    const supply = supplies.find(s => s.id === supplyId);
-    if (!supply) return 0;
-
-    const assignedQty = assignments
-      .filter(a => a.supply_id === supplyId && a.status === 'active')
-      .reduce((sum, a) => sum + (a.quantity_assigned || 0), 0);
-
-    return Math.max(0, supply.quantity - assignedQty);
-  };
-
-  // ✅ Alertes stock bas: seuil configuré (low_stock_threshold non null) ET
-  // stock restant <= seuil. Réutilise getRemaining() — même définition du
-  // "stock restant" que la colonne Remaining du tableau, pas de second calcul
-  // divergent (ex: via le ledger complet) qui afficherait un chiffre différent.
-  const lowStockSupplies = supplies.filter(
-    s => s.low_stock_threshold != null && getRemaining(s.id) <= s.low_stock_threshold
-  );
 
   const openDeleteConfirm = (id: number, name: string) => {
     setDeleteSupplyId(id);
@@ -361,7 +321,6 @@ export const SuppliesList: React.FC = () => {
     Category: s.category_name || '',
     'Purchase Date': s.purchase_date,
     Quantity: s.quantity,
-    Remaining: getRemaining(s.id),
     'Cost (GH₵)': parseFloat(String(s.cost)) || 0,
     Brand: s.brand || '',
     Receiver: s.receiver_email || '',
@@ -469,38 +428,6 @@ export const SuppliesList: React.FC = () => {
           {error && <span style={{ color: '#991b1b' }}>Error: {error}</span>}
         </div>
       </div>
-
-      {/* ✅ Bannière alertes stock bas */}
-      {lowStockSupplies.length > 0 && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '12px 16px',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '8px',
-        }}>
-          <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: 6, fontSize: '14px' }}>
-            ⚠️ {lowStockSupplies.length} supply {lowStockSupplies.length > 1 ? 'lines' : 'line'} low on stock
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {lowStockSupplies.map(s => (
-              <span
-                key={s.id}
-                style={{
-                  fontSize: '12px',
-                  padding: '4px 10px',
-                  background: '#fee2e2',
-                  color: '#991b1b',
-                  borderRadius: '999px',
-                }}
-                title={`Threshold: ${s.low_stock_threshold}`}
-              >
-                {s.name}: {getRemaining(s.id)} left
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ═══ 2. Period Overview (Cost / Stock / Movements) ═══ */}
       <div style={{ marginBottom: 30 }}>
@@ -720,7 +647,6 @@ export const SuppliesList: React.FC = () => {
                 <th style={{ padding: '12px', textAlign: 'left' }}>Category</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Purchase Date</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Quantity</th>
-                <th style={{ padding: '12px', textAlign: 'left' }}>Remaining</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Cost (GH₵)</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Brand</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Receiver</th>
@@ -755,24 +681,6 @@ export const SuppliesList: React.FC = () => {
                     {formatDate(supply.purchase_date)}
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{supply.quantity}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontWeight: 500, color: getRemaining(supply.id) === 0 ? '#991b1b' : 'var(--ink)' }}>
-                    {getRemaining(supply.id)}
-                    {supply.low_stock_threshold != null && getRemaining(supply.id) <= supply.low_stock_threshold && (
-                      <span
-                        title={`Low stock (threshold: ${supply.low_stock_threshold})`}
-                        style={{
-                          marginLeft: 6,
-                          fontSize: '11px',
-                          padding: '2px 6px',
-                          background: '#fee2e2',
-                          color: '#991b1b',
-                          borderRadius: '999px',
-                        }}
-                      >
-                        low
-                      </span>
-                    )}
-                  </td>
                   <td style={{ padding: '12px', fontWeight: 500 }}>{parseFloat(String(supply.cost)).toFixed(2)}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
                     {supply.brand || '—'}
