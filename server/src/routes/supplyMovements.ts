@@ -55,7 +55,7 @@ const UNION_SELECT = `
              JOIN supply_issues q ON q.id = il.issue_id
              JOIN supply_items i ON i.id = sl.item_id
              LEFT JOIN categories c ON c.id = i.category_id
-             LEFT JOIN supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
+             LEFT JOIN _legacy_supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
              LEFT JOIN users ru ON ru.id = CAST(q.recipient_uid AS UNSIGNED)
     WHERE sl.reason = 'issue'
 
@@ -71,7 +71,7 @@ const UNION_SELECT = `
              JOIN supply_issues q ON q.id = il.issue_id
              JOIN supply_items i ON i.id = sl.item_id
              LEFT JOIN categories c ON c.id = i.category_id
-             LEFT JOIN supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
+             LEFT JOIN _legacy_supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
              LEFT JOIN users ru ON ru.id = CAST(q.recipient_uid AS UNSIGNED)
     WHERE sl.reason = 'return'
 
@@ -86,7 +86,7 @@ const UNION_SELECT = `
              JOIN supply_adjustments adj ON adj.id = al.adjustment_id
              JOIN supply_items i ON i.id = sl.item_id
              LEFT JOIN categories c ON c.id = i.category_id
-             LEFT JOIN supply_movements mv_old ON mv_old.id = al.legacy_movement_id
+             LEFT JOIN _legacy_supply_movements mv_old ON mv_old.id = al.legacy_movement_id
              LEFT JOIN users ru ON ru.id = CAST(adj.recorded_by_uid AS UNSIGNED)
     WHERE sl.reason IN ('count_variance', 'write_off')
 `;

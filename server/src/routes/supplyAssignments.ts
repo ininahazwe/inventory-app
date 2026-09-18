@@ -51,7 +51,7 @@ const ROW_SELECT = `
              JOIN supply_issues q ON q.id = il.issue_id
              JOIN supply_items i ON i.id = il.item_id
              LEFT JOIN locations l ON l.id = q.destination_location_id
-             LEFT JOIN supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
+             LEFT JOIN _legacy_supply_assignments sa_old ON sa_old.id = il.legacy_assignment_id
              LEFT JOIN users ru ON ru.id = CAST(q.recipient_uid AS UNSIGNED)
              LEFT JOIN supply_stock_ledger orig ON orig.source_table = 'supply_issue_lines' AND orig.source_line_id = il.id
              LEFT JOIN (
