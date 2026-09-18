@@ -39,12 +39,19 @@ set -uo pipefail
 # a mesure de son execution : si le fichier change sous ses pieds, la suite est
 # interpretee n'importe comment. On se recopie donc dans un fichier temporaire
 # et on relance l'execution depuis cette copie, que rien ne viendra modifier.
+#
+# La copie va sous $HOME et non dans /tmp : sur cet hebergement /tmp est monte
+# en noexec, et toute tentative d'y executer un fichier echoue avec
+# "Permission denied" (code 126) — constate le 18/09/2026. On relance par
+# ailleurs via "bash <fichier>" plutot qu'en execution directe, ce qui
+# fonctionne meme sans bit d'execution et meme sur un montage noexec.
 
 if [ "${DEPLOY_SELF_COPY:-0}" != "1" ]; then
-  SELF_COPY=$(mktemp "${TMPDIR:-/tmp}/deploy-assets-XXXXXX.sh") || exit 1
+  SELF_DIR="${HOME:-/home/dxtrmfwa}/.deploy-run"
+  mkdir -p "$SELF_DIR" || { echo "deploy.sh: impossible de creer $SELF_DIR" >&2; exit 1; }
+  SELF_COPY=$(mktemp "$SELF_DIR/deploy-XXXXXX") || exit 1
   cat "$0" > "$SELF_COPY" || { rm -f "$SELF_COPY"; exit 1; }
-  chmod +x "$SELF_COPY"
-  DEPLOY_SELF_COPY=1 "$SELF_COPY" "$@"
+  DEPLOY_SELF_COPY=1 bash "$SELF_COPY" "$@"
   rc=$?
   rm -f "$SELF_COPY"
   exit $rc
