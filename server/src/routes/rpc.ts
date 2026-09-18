@@ -285,7 +285,7 @@ router.post('/get_dashboard_kpis', requireAuth, async (_req: Request, res: Respo
         const [rows] = await db.query(
             `SELECT
                 (SELECT COALESCE(SUM(purchase_price), 0) FROM assets WHERE status != 'retired') AS fleet_value,
-                (SELECT COALESCE(SUM(cost), 0) FROM supplies WHERE purchase_date BETWEEN ? AND ?) AS supplies_cost_month,
+                (SELECT COALESCE(SUM(rl.line_total), 0) FROM supply_receipt_lines rl JOIN supply_receipts r ON r.id = rl.receipt_id WHERE r.received_date BETWEEN ? AND ?) AS supplies_cost_month,
                 (SELECT COUNT(*) FROM incidents WHERE status IN ('open', 'in_progress')) AS open_incidents,
                 (SELECT COUNT(*) FROM auctions WHERE status = 'active') AS active_auctions
             `,

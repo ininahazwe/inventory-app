@@ -121,15 +121,18 @@ router.delete('/:id', requireAuth, requireSuperAdmin, async (req: Request, res: 
             });
         }
 
-        // Bloquer aussi si des fournitures y sont assignées (actives)
-        const [activeSupplyAssignments] = await db.query(
-            'SELECT COUNT(*) as count FROM supply_assignments WHERE location_id = ? AND status = "active"',
+        // Bloquer aussi si des fournitures y ont été émises et pas encore retournées
+        // (post-Phase 3 : le ledger supply_stock_ledger est la source de vérité, plus supply_assignments)
+        const [supplyLedgerBalance] = await db.query(
+            `SELECT COALESCE(-SUM(quantity_base), 0) as outstanding
+             FROM supply_stock_ledger
+             WHERE location_id = ? AND reason IN ('issue', 'return')`,
             [id]
         );
-        const supplyCount = (activeSupplyAssignments as any[])[0]?.count || 0;
-        if (supplyCount > 0) {
+        const supplyOutstanding = Number((supplyLedgerBalance as any[])[0]?.outstanding || 0);
+        if (supplyOutstanding > 0) {
             return res.status(400).json({
-                error: `Cannot delete location with ${supplyCount} active supply assignment(s). Return supplies first.`
+                error: `Cannot delete location with ${supplyOutstanding} unit(s) of supply issued there and not yet returned.`
             });
         }
 

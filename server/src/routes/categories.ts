@@ -36,7 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
                 COUNT(DISTINCT s.id) as supplies_count
             FROM categories c
                      LEFT JOIN assets a ON c.id = a.category_id AND a.category_id IS NOT NULL
-                     LEFT JOIN supplies s ON c.id = s.category_id AND s.category_id IS NOT NULL
+                     LEFT JOIN supply_items s ON c.id = s.category_id AND s.category_id IS NOT NULL
                 ${whereClause}
             GROUP BY c.id, c.name, c.type, c.created_at
             ORDER BY c.name ASC
