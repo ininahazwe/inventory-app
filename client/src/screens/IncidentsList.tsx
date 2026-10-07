@@ -140,7 +140,7 @@ export const IncidentsList: React.FC = () => {
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right' }}>
                   <button
-                    className="pill"
+                    className="pill admin"
                     style={{ padding: '6px 12px', fontSize: '12px' }}
                     onClick={() => handleRowClick(incident.id)}
                   >

@@ -103,7 +103,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <motion.main className="shell">
+      <motion.main className="shell hide">
         <div className="shell-inner">
           <div className="grid-bg" aria-hidden />
           <div className="shell-body">{children}</div>
@@ -125,10 +125,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             top: menuPos.top,
             right: menuPos.right,
             minWidth: 180,
-            background: 'white',
+            background: 'none',
             border: '1px solid #ddd',
             borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
             padding: 6,
             zIndex: 1000,
             display: 'flex',

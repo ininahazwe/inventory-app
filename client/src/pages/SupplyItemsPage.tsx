@@ -171,7 +171,7 @@ export default function SupplyItemsPage() {
 
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '16px 0' }}>
-            <button className="pill" onClick={() => setPage(p => p - 1)} disabled={page === 1} style={{ opacity: page === 1 ? 0.5 : 1 }}>
+            <button className="pill admin" onClick={() => setPage(p => p - 1)} disabled={page === 1} style={{ opacity: page === 1 ? 0.5 : 1 }}>
               ← Previous
             </button>
             {getPageNumbers().map((p, i) =>

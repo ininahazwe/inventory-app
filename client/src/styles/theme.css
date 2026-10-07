@@ -95,6 +95,10 @@ tbody {background: #f7f7f7}
     padding:14px;
     background: #F1ECEC;
     min-height: 80vh;
+
+    &.hide{
+      background: none;
+    }
 }
 .shell-inner{
     position:relative;

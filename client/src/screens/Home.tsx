@@ -152,11 +152,11 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '16px 0' }}>
-          <button className="pill" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} style={{ opacity: currentPage === 1 ? 0.5 : 1 }}>← Previous</button>
+          <button className="pill admin" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} style={{ opacity: currentPage === 1 ? 0.5 : 1 }}>← Previous</button>
           {getPageNumbers().map((page, i) => page === '...' ? <span key={i} style={{ padding: '0 8px', color: 'var(--muted)' }}>…</span> : (
             <button key={page} className="pill" onClick={() => setCurrentPage(page as number)} style={{ background: currentPage === page ? 'var(--brand)' : '#f4f1ee', color: currentPage === page ? 'white' : 'var(--ink)', minWidth: 36, textAlign: 'center' }}>{page}</button>
           ))}
-          <button className="pill" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}>Next →</button>
+          <button className="pill admin" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}>Next →</button>
           {totalCount > 0 && <div style={{ marginLeft: 16, color: 'var(--muted)', fontSize: 14 }}>Showing {startIndex + 1}-{endIndex} of {totalCount}</div>}
         </div>
       )}
