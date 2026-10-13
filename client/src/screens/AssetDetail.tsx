@@ -20,7 +20,7 @@ type Asset = {
   category_id: number | null;
   category_name: string | null;
   serial_no: string | null;
-  status: 'in_stock' | 'assigned' | 'repair' | 'retired';
+  status: 'in_stock' | 'assigned' | 'repair' | 'retired' | 'auctioned' | 'on_loan';
   purchased_at: string | null;
   purchase_price: number | null;
   supplier: string | null;
@@ -405,6 +405,12 @@ export default function AssetDetail() {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            {/* Point d'entrée du module prêts : l'asset est pré-sélectionné dans le
+                formulaire de demande. Masqué pour un matériel retiré ou vendu —
+                le serveur refuserait le prêt de toute façon. */}
+            {asset.status !== 'retired' && asset.status !== 'auctioned' && (
+              <button className="pill" onClick={() => navigate(`/loans/new?asset_id=${asset.id}`)} style={{ background: 'rgb(231, 223, 248)' }}>🔁 Lend this</button>
+            )}
             <button className="pill" onClick={() => setShowIncidentForm(true)} style={{ background: '#b98b46' }}>📋 Report an incident</button>
             <button className="pill" onClick={openEdit} disabled={busy}>{busy ? '…' : 'Edit'}</button>
             {isAdmin && <button className="pill" style={{ background: '#dc3545', color: 'white' }} onClick={() => setDeleteConfirmOpen(true)} disabled={busy}>{busy ? '…' : 'Delete'}</button>}

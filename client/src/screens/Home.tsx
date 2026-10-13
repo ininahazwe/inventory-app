@@ -12,7 +12,7 @@ import DashboardKPIs from '../components/DashboardKPIs';
 import { exportToXlsx } from '../lib/exportXlsx';
 import { exportToPdf } from '../lib/exportPdf';
 
-type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
+type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired' | 'auctioned' | 'on_loan'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {

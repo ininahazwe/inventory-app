@@ -1,6 +1,6 @@
 // src/lib/sections.ts
 //
-// Single source of truth for the app's four sections: used by the hub grid
+// Single source of truth for the app's five sections: used by the hub grid
 // (HomePage) to draw its tiles, and by SectionRevealCover to paint each
 // destination page with the same color/icon the tile expanded from — that
 // reuse is what makes the transition read as one continuous motion.
@@ -45,6 +45,14 @@ export const SECTIONS: SectionDef[] = [
     description: 'Retired asset sales',
     icon: '⏱︎',
     color: '#F4DEE0', // tint of .pill.bordeaux #6d071a
+  },
+  {
+    key: 'loans',
+    path: '/loans',
+    label: 'Loans',
+    description: 'Equipment lent out & due back',
+    icon: '\u{1F501}',
+    color: '#E7DFF8', // tint of the loan status purple #7c3aed
   },
   {
     key: 'incidents',

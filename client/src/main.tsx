@@ -28,6 +28,9 @@ import LegacyQrRedirect from "./components/LegacyQrRedirect.tsx";
 import PublicAssetPage from "./pages/PublicAssetPage.tsx";
 import LocationsPage from "./pages/LocationsPage.tsx";
 import LocationDetailPage from "./pages/LocationDetailPage.tsx";
+import LoansPage from "./pages/LoansPage.tsx";
+import LoanRequestFormPage from "./pages/LoanRequestFormPage.tsx";
+import LoanDetailPage from "./pages/LoanDetailPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -63,6 +66,9 @@ const router = createBrowserRouter([
       { path: "/supplies", element: <SuppliesPage /> },
       { path: "/supply-items", element: <SupplyItemsPage /> },
       { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
+      { path: "/loans/new", element: <LoanRequestFormPage /> },
+      { path: "/loans/:id", element: <LoanDetailPage /> },
+      { path: "/loans", element: <LoansPage /> },
       { path: "/locations", element: <LocationsPage /> },
       { path: "/locations/:id", element: <LocationDetailPage /> },
       { path: "/assignees", element: <AssigneesPage /> },

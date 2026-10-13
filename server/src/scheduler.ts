@@ -6,6 +6,7 @@ import schedule from 'node-schedule';
 import { logger } from './middleware/logger';
 import { runAutoCloseAuctions } from './routes/auctions';
 import { checkIncidentSLA } from './routes/incidents';
+import { checkLoansOverdue } from './routes/loans';
 
 let started = false;
 
@@ -37,5 +38,19 @@ export function startScheduler(): void {
         }
     });
 
-    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00)', 'SCHEDULER');
+    // Une fois par jour à 08:30 — relance des prêts non rendus à l'échéance.
+    // Décalé de 30 min par rapport au SLA incidents pour ne pas envoyer deux
+    // vagues de mails en même temps.
+    schedule.scheduleJob('loans-overdue-check', '30 8 * * *', async () => {
+        try {
+            const { overdue, notified } = await checkLoansOverdue();
+            if (overdue > 0) {
+                logger.info(`[scheduler] loans overdue: ${overdue} overdue, ${notified} notified`, 'SCHEDULER');
+            }
+        } catch (err) {
+            logger.error('[scheduler] loans overdue check failed:', err as Error);
+        }
+    });
+
+    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00, loan overdue check daily 08:30)', 'SCHEDULER');
 }

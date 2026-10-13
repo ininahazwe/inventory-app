@@ -16,6 +16,7 @@ import supplyItemsRoutes from './routes/supplyItems';
 import supplyReceiptsRoutes from './routes/supplyReceipts';
 import supplyIssuesRoutes from './routes/supplyIssues';
 import supplyAdjustmentsRoutes from './routes/supplyAdjustments';
+import loansRoutes from './routes/loans';
 import auditRoutes from './routes/audit';
 import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
@@ -53,6 +54,7 @@ export function createApp() {
     app.use('/api/supply-receipts', supplyReceiptsRoutes);
     app.use('/api/supply-issues', supplyIssuesRoutes);
     app.use('/api/supply-adjustments', supplyAdjustmentsRoutes);
+    app.use('/api/loans', loansRoutes);
     app.use('/api/incidents', incidentsRoutes);
     app.use('/api/users', usersRoutes);
     app.use('/api/rpc', rpcRoutes);

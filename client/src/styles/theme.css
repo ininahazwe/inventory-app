@@ -192,6 +192,10 @@ tbody {background: #f7f7f7}
   &.color4{
     background: rgb(246, 228, 199);
   }
+  /* Loans — même teinte que la tuile 'loans' du hub (lib/sections.ts) */
+  &.color5{
+    background: rgb(231, 223, 248);
+  }
   &.admin{
       color: #FFFFFF;
   }
@@ -270,6 +274,9 @@ tbody {background: #f7f7f7}
 .chip--repair{ color:#fff; background:#b98b46; border-color:#b98b46; }
 .chip--in_stock{ background:#f4f1ee; }
 .chip--retired{ background:#eee; color:#888; }
+.chip--auctioned{ background:#f4dee0; color:#6d071a; }
+/* Matériel sorti en prêt — même violet que les badges du module Loans */
+.chip--on_loan{ color:#fff; background:#7c3aed; border-color:#7c3aed; }
 
 .journal{
     height: 150px;
