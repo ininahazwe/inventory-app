@@ -27,7 +27,7 @@ export default function AssigneesTable({
           <td className="actives">{a.asset_count}</td>
           <td style={{ width:200 }}>
             <div className="actions">
-              <button className="pill" onClick={()=>onEdit(a)}>Edit</button>
+              <button className="pill admin" onClick={()=>onEdit(a)}>Edit</button>
               <button className="pill" style={{ background:"#f3d0d0" }} onClick={()=>onDelete(a)}>Delete</button>
             </div>
           </td>
