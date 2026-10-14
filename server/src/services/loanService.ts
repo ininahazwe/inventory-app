@@ -11,6 +11,7 @@
 //      ligne de l'asset, ce qui bloque deux demandes concurrentes.
 // ─────────────────────────────────────────────────────────────────────────────
 import { BusinessException, ConflictException, NotFoundException } from '../exceptions';
+import { todayDateString } from '../utils/dateHelpers';
 
 export type LoanStatus =
     | 'requested'
@@ -249,7 +250,8 @@ export async function cancelLoan(
     tx: Executor,
     loanId: number,
     actorEmail: string,
-    reason?: string | null
+    reason?: string | null,
+    payload?: Record<string, any> | null
 ): Promise<any> {
     const loan = await loadLoanForUpdate(tx, loanId);
     assertTransition(loan.status, 'cancelled');
@@ -265,6 +267,7 @@ export async function cancelLoan(
         from_status: loan.status,
         to_status: 'cancelled',
         actor_email: actorEmail,
+        payload: payload || null,
         notes: reason || null,
     });
 
@@ -294,12 +297,24 @@ export async function checkoutLoan(
         throw new ConflictException(`Asset is already checked out on loan #${(outRows as any[])[0].id}`);
     }
 
+    // Sortie anticipée : autorisée (cas courant), mais le créneau réellement occupé
+    // est [aujourd'hui, retour], pas [start_date, retour] — on le revérifie, puis on
+    // recale start_date sur la date réelle pour que le calendrier reste honnête.
+    const today = todayDateString();
+    const dueDate = String(loan.due_date).slice(0, 10);
+    let startDate = String(loan.start_date).slice(0, 10);
+    const earlyCheckout = startDate > today;
+    if (earlyCheckout) {
+        await assertAssetAvailable(tx, loan.asset_id, today, dueDate, loanId);
+        startDate = today;
+    }
+
     await tx.execute(
         `UPDATE loans
          SET status = 'checked_out', checked_out_at = NOW(), checked_out_by_email = ?,
-             condition_out = ?, asset_status_before = ?, notes = COALESCE(?, notes)
+             condition_out = ?, asset_status_before = ?, start_date = ?, notes = COALESCE(?, notes)
          WHERE id = ?`,
-        [actorEmail, input.condition_out || 'good', asset.status, input.notes || null, loanId]
+        [actorEmail, input.condition_out || 'good', asset.status, startDate, input.notes || null, loanId]
     );
 
     // Le statut d'origine est mémorisé pour être restitué au retour : un matériel
@@ -312,7 +327,11 @@ export async function checkoutLoan(
         from_status: loan.status,
         to_status: 'checked_out',
         actor_email: actorEmail,
-        payload: { condition_out: input.condition_out || 'good', asset_status_before: asset.status },
+        payload: {
+            condition_out: input.condition_out || 'good',
+            asset_status_before: asset.status,
+            ...(earlyCheckout ? { early_checkout: true, planned_start_date: String(loan.start_date).slice(0, 10) } : {}),
+        },
         notes: input.notes || null,
     });
 

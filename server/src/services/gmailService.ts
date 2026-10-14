@@ -506,3 +506,51 @@ export function getLoanReturnedEmail(
         ),
     };
 }
+
+/** Rappel : prêt approuvé dont la date de début est passée sans retrait. */
+export function getLoanPickupReminderEmail(
+    recipients: string[],
+    assetLabel: string,
+    borrowerEmail: string,
+    startDate: string,
+    graceDaysLeft: number,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Not picked up — ${assetLabel}`,
+        html: loanShell(
+            '📦 Equipment not picked up',
+            '#b45309',
+            `<p>This approved loan was due to start on <strong>${startDate}</strong> and the equipment has not been collected. ` +
+            `The reservation will be released automatically in <strong>${graceDaysLeft} day${graceDaysLeft === 1 ? '' : 's'}</strong> ` +
+            `unless it is picked up.</p>` +
+            loanFacts([['Asset', assetLabel], ['Borrower', borrowerEmail], ['Planned start', startDate]], '#fffbeb', '#b45309'),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}
+
+/** À l'emprunteur : réservation libérée faute de retrait. */
+export function getLoanAutoCancelledEmail(
+    recipients: string[],
+    assetLabel: string,
+    startDate: string,
+    graceDays: number,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Reservation released — ${assetLabel}`,
+        html: loanShell(
+            '🚫 Reservation released',
+            '#6b7280',
+            `<p>The equipment was not picked up within ${graceDays} day${graceDays === 1 ? '' : 's'} of the planned start date, ` +
+            `so the reservation has been released. Submit a new request if you still need it.</p>` +
+            loanFacts([['Asset', assetLabel], ['Planned start', startDate]], '#f9fafb', '#6b7280'),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}

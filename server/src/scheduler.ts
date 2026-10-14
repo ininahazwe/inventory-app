@@ -6,7 +6,7 @@ import schedule from 'node-schedule';
 import { logger } from './middleware/logger';
 import { runAutoCloseAuctions } from './routes/auctions';
 import { checkIncidentSLA } from './routes/incidents';
-import { checkLoansOverdue } from './routes/loans';
+import { checkLoansOverdue, checkLoansNoShow } from './routes/loans';
 
 let started = false;
 
@@ -52,5 +52,18 @@ export function startScheduler(): void {
         }
     });
 
-    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00, loan overdue check daily 08:30)', 'SCHEDULER');
+    // Une fois par jour à 08:45 — prêts approuvés jamais retirés : relance puis
+    // annulation automatique après le délai de grâce (LOAN_NOSHOW_GRACE_DAYS).
+    schedule.scheduleJob('loans-noshow-check', '45 8 * * *', async () => {
+        try {
+            const { reminded, cancelled } = await checkLoansNoShow();
+            if (reminded > 0 || cancelled > 0) {
+                logger.info(`[scheduler] loans no-show: ${reminded} reminded, ${cancelled} cancelled`, 'SCHEDULER');
+            }
+        } catch (err) {
+            logger.error('[scheduler] loans no-show check failed:', err as Error);
+        }
+    });
+
+    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00, loan overdue check daily 08:30, loan no-show check daily 08:45)', 'SCHEDULER');
 }

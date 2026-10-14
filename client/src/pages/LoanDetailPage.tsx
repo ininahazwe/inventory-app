@@ -15,7 +15,7 @@ type LocationOption = { id: number; name: string; floor: string | null };
 
 const EVENT_ICON: Record<string, string> = {
   requested: '📥', approved: '✅', rejected: '❌', cancelled: '🚫',
-  checked_out: '📤', extended: '🗓️', returned: '📦', overdue_reminder: '⏰',
+  checked_out: '📤', extended: '🗓️', returned: '📦', overdue_reminder: '⏰', pickup_reminder: '📣',
 };
 
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (

@@ -27,6 +27,8 @@ import {
     getLoanDecisionEmail,
     getLoanOverdueReminderEmail,
     getLoanReturnedEmail,
+    getLoanPickupReminderEmail,
+    getLoanAutoCancelledEmail,
 } from '../services/gmailService';
 
 const router = Router();
@@ -482,6 +484,85 @@ export async function checkLoansOverdue(): Promise<{ overdue: number; notified: 
 
     logger.info(`Loan overdue check: ${overdue.length} overdue, ${notified} notified`, 'LOANS');
     return { overdue: overdue.length, notified };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NO-SHOW : prêts approuvés jamais retirés. Sans ce job, une réservation oubliée
+// bloquerait l'asset indéfiniment (elle compte dans la détection de chevauchement).
+//   1. start_date dépassée → relance unique (verrou pickup_reminder_sent_at) ;
+//   2. start_date + LOAN_NOSHOW_GRACE_DAYS dépassée → annulation automatique,
+//      acteur 'system', journalisée comme n'importe quelle annulation.
+// L'annulation passe d'abord : un prêt déjà hors délai n'a plus à être relancé.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function checkLoansNoShow(): Promise<{ reminded: number; cancelled: number }> {
+    const graceDays = Math.max(1, parseInt(process.env.LOAN_NOSHOW_GRACE_DAYS || '3', 10) || 3);
+    const admins = await adminEmails();
+
+    // 1. Annulations
+    const [expiredRows] = await db.query(
+        `SELECT l.id, l.asset_id, l.borrower_email, l.start_date, a.label AS asset_label
+         FROM loans l LEFT JOIN assets a ON l.asset_id = a.id
+         WHERE l.status = 'approved' AND DATE_ADD(l.start_date, INTERVAL ? DAY) < CURDATE()`,
+        [graceDays]
+    );
+    let cancelled = 0;
+    for (const loan of expiredRows as any[]) {
+        try {
+            await db.transaction(async (tx) =>
+                cancelLoan(tx as any, loan.id, 'system',
+                    `Auto-cancelled: not picked up within ${graceDays} day(s) of the planned start date`,
+                    { reason: 'no_show', grace_days: graceDays })
+            );
+            cancelled++;
+            await notify(
+                getLoanAutoCancelledEmail(
+                    Array.from(new Set([loan.borrower_email, ...admins].filter(Boolean))),
+                    loan.asset_label || `Asset #${loan.asset_id}`,
+                    String(loan.start_date).slice(0, 10), graceDays, loanUrl(loan.id)
+                ),
+                `no-show cancel #${loan.id}`
+            );
+        } catch (err) {
+            // Un prêt modifié entre-temps (ex. sorti) lève un conflit d'état : on passe.
+            logger.error(`No-show cancel failed for loan ${loan.id}:`, err as Error);
+        }
+    }
+
+    // 2. Relances
+    const [dueRows] = await db.query(
+        `SELECT l.id, l.asset_id, l.borrower_email, l.start_date,
+                DATEDIFF(CURDATE(), l.start_date) AS days_since_start, a.label AS asset_label
+         FROM loans l LEFT JOIN assets a ON l.asset_id = a.id
+         WHERE l.status = 'approved' AND l.start_date < CURDATE()
+           AND l.pickup_reminder_sent_at IS NULL
+           AND DATE_ADD(l.start_date, INTERVAL ? DAY) >= CURDATE()`,
+        [graceDays]
+    );
+    let reminded = 0;
+    for (const loan of dueRows as any[]) {
+        try {
+            await sendEmail(getLoanPickupReminderEmail(
+                Array.from(new Set([loan.borrower_email, ...admins].filter(Boolean))),
+                loan.asset_label || `Asset #${loan.asset_id}`,
+                loan.borrower_email,
+                String(loan.start_date).slice(0, 10),
+                Math.max(1, graceDays - Number(loan.days_since_start) + 1),
+                loanUrl(loan.id)
+            ));
+            await db.query('UPDATE loans SET pickup_reminder_sent_at = NOW() WHERE id = ?', [loan.id]);
+            await db.query(
+                `INSERT INTO loan_events (loan_id, event_type, from_status, to_status, actor_email, payload)
+                 VALUES (?, 'pickup_reminder', 'approved', 'approved', 'system', ?)`,
+                [loan.id, JSON.stringify({ days_since_start: Number(loan.days_since_start), grace_days: graceDays })]
+            );
+            reminded++;
+        } catch (err) {
+            logger.error(`Pickup reminder failed for loan ${loan.id}:`, err as Error);
+        }
+    }
+
+    logger.info(`Loan no-show check: ${reminded} reminded, ${cancelled} cancelled`, 'LOANS');
+    return { reminded, cancelled };
 }
 
 export default router;

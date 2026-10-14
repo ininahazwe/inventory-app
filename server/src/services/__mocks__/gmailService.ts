@@ -16,3 +16,5 @@ export const getLoanRequestedAdminEmail = jest.fn(stubPayload);
 export const getLoanDecisionEmail = jest.fn(stubPayload);
 export const getLoanOverdueReminderEmail = jest.fn(stubPayload);
 export const getLoanReturnedEmail = jest.fn(stubPayload);
+export const getLoanPickupReminderEmail = jest.fn(stubPayload);
+export const getLoanAutoCancelledEmail = jest.fn(stubPayload);

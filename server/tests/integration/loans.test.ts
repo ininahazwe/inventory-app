@@ -138,7 +138,7 @@ describe('PATCH /api/loans/:id/checkout', () => {
 
     it('marks the asset as on_loan and remembers its previous status', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([loanRow({ status: 'approved' })]))
+            .mockResolvedValueOnce(mockRows([loanRow({ status: 'approved', start_date: '2026-01-01' })]))
             .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'assigned' }]))
             .mockResolvedValueOnce(mockRows([]))   // aucun autre prêt sorti
             .mockResolvedValueOnce(mockOk())       // update loan
@@ -165,6 +165,94 @@ describe('PATCH /api/loans/:id/checkout', () => {
 
         expect(res.status).toBe(409);
         expect(res.body.error).toContain('already checked out');
+    });
+});
+
+describe('PATCH /api/loans/:id/checkout — sortie anticipée', () => {
+    const app = createTestApp();
+    beforeEach(() => { mockedExecute.mockReset(); mockedQuery.mockReset(); });
+
+    it('re-checks the real window and moves start_date to today', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([loanRow({ status: 'approved', start_date: '2099-01-10', due_date: '2099-01-20' })]))
+            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock' }]))
+            .mockResolvedValueOnce(mockRows([]))   // aucun autre prêt sorti
+            .mockResolvedValueOnce(mockRows([]))   // fenêtre [aujourd'hui, retour] libre
+            .mockResolvedValueOnce(mockOk())       // update loan
+            .mockResolvedValueOnce(mockOk())       // update asset
+            .mockResolvedValueOnce(mockOk());      // event
+        mockedQuery.mockResolvedValue(mockOk());
+
+        const res = await request(app).patch('/api/loans/7/checkout').send({});
+
+        expect(res.status).toBe(200);
+        const update = mockedExecute.mock.calls.find(c => String(c[0]).includes('asset_status_before'));
+        const today = new Date();
+        const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        expect(update![1]).toContain(iso);
+        const event = mockedExecute.mock.calls.find(c => String(c[0]).includes('INSERT INTO loan_events'));
+        expect(String(event![1][5])).toContain('early_checkout');
+    });
+
+    it('refuses an early check-out when another booking covers the days gained', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([loanRow({ status: 'approved', start_date: '2099-01-10', due_date: '2099-01-20' })]))
+            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock' }]))
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([
+                { id: 3, status: 'approved', start_date: '2099-01-05', due_date: '2099-01-08', borrower_email: 'other@mfwa.org' },
+            ]));
+
+        const res = await request(app).patch('/api/loans/7/checkout').send({});
+
+        expect(res.status).toBe(409);
+        expect(res.body.error).toContain('already booked');
+    });
+});
+
+describe('checkLoansNoShow', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { checkLoansNoShow } = require('../../src/routes/loans');
+    beforeEach(() => { mockedExecute.mockReset(); mockedQuery.mockReset(); delete process.env.LOAN_NOSHOW_GRACE_DAYS; });
+
+    it('auto-cancels an approved loan past the grace period, as the system', async () => {
+        mockedQuery
+            .mockResolvedValueOnce(mockRows([{ email: 'admin@mfwa.org' }]))                       // admins
+            .mockResolvedValueOnce(mockRows([{ id: 7, asset_id: 12, borrower_email: 'b@mfwa.org', start_date: '2026-01-01', asset_label: 'Canon C70' }]))
+            .mockResolvedValueOnce(mockRows([]));                                                  // aucune relance
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([loanRow({ status: 'approved' })]))                    // load FOR UPDATE
+            .mockResolvedValueOnce(mockOk())                                                       // update
+            .mockResolvedValueOnce(mockOk());                                                      // event
+
+        const result = await checkLoansNoShow();
+
+        expect(result).toEqual({ reminded: 0, cancelled: 1 });
+        const event = mockedExecute.mock.calls.find(c => String(c[0]).includes('INSERT INTO loan_events'));
+        expect(event![1][4]).toBe('system');
+        expect(String(event![1][5])).toContain('no_show');
+    });
+
+    it('sends one pickup reminder inside the grace period and locks it', async () => {
+        mockedQuery
+            .mockResolvedValueOnce(mockRows([{ email: 'admin@mfwa.org' }]))
+            .mockResolvedValueOnce(mockRows([]))                                                   // rien à annuler
+            .mockResolvedValueOnce(mockRows([{ id: 7, asset_id: 12, borrower_email: 'b@mfwa.org', start_date: '2026-10-13', days_since_start: 1, asset_label: 'Canon C70' }]))
+            .mockResolvedValue(mockOk());                                                          // lock + event
+
+        const result = await checkLoansNoShow();
+
+        expect(result).toEqual({ reminded: 1, cancelled: 0 });
+        expect(mockedQuery.mock.calls.some(c => String(c[0]).includes('pickup_reminder_sent_at = NOW()'))).toBe(true);
+    });
+
+    it('does nothing when no approved loan is late', async () => {
+        mockedQuery
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]));
+
+        expect(await checkLoansNoShow()).toEqual({ reminded: 0, cancelled: 0 });
     });
 });
 
