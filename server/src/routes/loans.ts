@@ -125,7 +125,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response) => {
             SELECT
                 SUM(status = 'requested')                                AS pending,
                 SUM(status = 'approved')                                 AS approved,
-                SUM(status = 'checked_out')                              AS out,
+                SUM(status = 'checked_out')                              AS out_count,
                 SUM(status = 'checked_out' AND due_date < CURDATE())     AS overdue,
                 SUM(status = 'checked_out' AND due_date = CURDATE())     AS due_today,
                 SUM(status = 'returned')                                 AS returned
@@ -135,7 +135,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response) => {
         return res.json({
             pending: Number(r.pending || 0),
             approved: Number(r.approved || 0),
-            out: Number(r.out || 0),
+            out: Number(r.out_count || 0),
             overdue: Number(r.overdue || 0),
             due_today: Number(r.due_today || 0),
             returned: Number(r.returned || 0),
