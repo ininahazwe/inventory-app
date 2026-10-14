@@ -25,7 +25,7 @@ describe('POST /api/health/test-email', () => {
     it('surfaces the Google error with a hint (invalid_grant)', async () => {
         mocked.mockRejectedValueOnce(Object.assign(new Error('invalid_grant'), { response: { data: { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' } } }));
         const res = await request(app).post('/api/health/test-email');
-        expect(res.status).toBe(502);
+        expect(res.status).toBe(200);
         expect(res.body.ok).toBe(false);
         expect(res.body.hint).toMatch(/REFRESH_TOKEN/);
     });

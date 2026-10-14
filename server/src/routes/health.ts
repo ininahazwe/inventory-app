@@ -43,7 +43,9 @@ router.post('/test-email', requireAuth, requireAdmin, async (req, res) => {
         } else if (/has not been used|disabled|accessNotConfigured/i.test(message)) {
             hint = 'The Gmail API is not enabled in the Google Cloud project of this client.';
         }
-        return res.status(502).json({ ok: false, to, error: message, code: code || undefined, hint, config });
+        // HTTP 200 on purpose: the hosting proxy replaces 5xx bodies with its own HTML error page,
+        // which would hide the diagnostic. The outcome is carried by `ok`.
+        return res.json({ ok: false, to, error: message, code: code || undefined, hint, config });
     }
 });
 
