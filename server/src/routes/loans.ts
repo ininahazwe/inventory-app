@@ -263,7 +263,11 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
         if (status === 'requested') {
             const admins = await adminEmails();
+            if (!admins.length) {
+                logger.warn(`Loan #${loanId} requested but no admin/super_admin found in users: no notification sent`, 'LOANS');
+            }
             if (admins.length) {
+                logger.info(`Loan #${loanId} requested: notifying ${admins.length} admin(s)`, 'LOANS');
                 await notify(
                     getLoanRequestedAdminEmail(admins, assetLabel, borrowerEmail, String(start_date).slice(0, 10), String(due_date).slice(0, 10), purpose || null, loanUrl(loanId)),
                     `request #${loanId}`
@@ -271,6 +275,9 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             }
         }
 
+        if (status !== 'requested') {
+            logger.info(`Loan #${loanId} was recorded as '${status}' on behalf of ${borrowerEmail}: admins are not notified for pre-approved loans`, 'LOANS');
+        }
         logger.info(`Created loan #${loanId} (${status}) for asset ${asset_id}`, 'LOANS');
         return res.status(201).json({ id: loanId, status, asset_id, borrower_email: borrowerEmail, start_date, due_date });
     } catch (err) {
