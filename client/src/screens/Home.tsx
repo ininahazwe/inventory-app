@@ -201,7 +201,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         <p>Confirm return of this asset to stock?</p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="pill" style={{ background: '#bbb' }} onClick={closeReturn}>Cancel</button>
-          <button className="pill" onClick={confirmReturn}>Confirm</button>
+          <button className="pill admin" onClick={confirmReturn}>Confirm</button>
         </div>
       </Modal>
 

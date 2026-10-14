@@ -123,7 +123,7 @@ export default function AssignAsset({ assetId, onDone }: { assetId: number; onDo
 
       {err && <p style={{ color: 'crimson', margin: 0 }}>{err}</p>}
 
-      <button className="pill green-light" disabled={loading || (!selectedUserId && !selectedLocationId)}>
+      <button className="pill admin green-light" disabled={loading || (!selectedUserId && !selectedLocationId)}>
         {loading ? 'Assigning…' : 'Assign'}
       </button>
     </form>
