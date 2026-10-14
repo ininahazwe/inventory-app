@@ -11,7 +11,7 @@
 //      ligne de l'asset, ce qui bloque deux demandes concurrentes.
 // ─────────────────────────────────────────────────────────────────────────────
 import { BusinessException, ConflictException, NotFoundException } from '../exceptions';
-import { todayDateString } from '../utils/dateHelpers';
+import { todayDateString, calendarDaysLate } from '../utils/dateHelpers';
 
 export type LoanStatus =
     | 'requested'
@@ -447,8 +447,7 @@ export async function checkinLoan(
 
     await tx.execute(`UPDATE assets SET status = ? WHERE id = ?`, [restoredStatus, loan.asset_id]);
 
-    const dueDate = String(loan.due_date).slice(0, 10);
-    const daysLate = Math.max(0, Math.floor((Date.now() - new Date(`${dueDate}T23:59:59`).getTime()) / 86400000));
+    const daysLate = calendarDaysLate(loan.due_date);
 
     await recordLoanEvent(tx, {
         loan_id: loanId,

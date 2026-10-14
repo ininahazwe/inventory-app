@@ -1,9 +1,10 @@
 // src/components/AssetTimeline.tsx
 // Historique unifié d'un asset: assignments + réparations (lifecycle_events) +
-// incidents + enchères, fusionnés côté serveur (GET /assets/:id/timeline) et
+// incidents + enchères + prêts, fusionnés côté serveur (GET /assets/:id/timeline) et
 // affichés en une seule frise chronologique plutôt que dispersés par module.
 import React from 'react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/apiClient';
 
 type TimelineEvent = {
@@ -13,6 +14,8 @@ type TimelineEvent = {
   detail: string;
   status?: string | null;
   source_id: number;
+  /** Page de détail de l'élément (ex. /loans/:id pour un prêt) — titre cliquable si présent. */
+  link?: string;
 };
 
 const TYPE_STYLES: Record<string, { icon: string; bg: string; color: string }> = {
@@ -22,6 +25,8 @@ const TYPE_STYLES: Record<string, { icon: string; bg: string; color: string }> =
   retired: { icon: '🗄️', bg: '#f4f1ee', color: '#6b7280' },
   incident: { icon: '⚠️', bg: '#fee2e2', color: '#991b1b' },
   auction: { icon: '🔨', bg: '#ede9fe', color: '#6d28d9' },
+  // Prêts — même violet que les badges du module Loans
+  loan: { icon: '🔁', bg: '#e7dff8', color: '#7c3aed' },
 };
 
 function styleFor(type: string) {
@@ -89,7 +94,9 @@ export default function AssetTimeline({ assetId }: { assetId: number }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: 13 }}>{ev.title}</strong>
+                <strong style={{ fontSize: 13 }}>
+                  {ev.link ? <Link to={ev.link} style={{ color: 'inherit' }}>{ev.title}</Link> : ev.title}
+                </strong>
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>{formatWhen(ev.at)}</span>
               </div>
               {ev.detail && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{ev.detail}</div>}

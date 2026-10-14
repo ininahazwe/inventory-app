@@ -9,7 +9,7 @@ import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
 import { AppException, ConflictException } from '../exceptions';
-import { todayDateString } from '../utils/dateHelpers';
+import { todayDateString, calendarDaysLate } from '../utils/dateHelpers';
 import {
     createLoanRequest,
     decideLoan,
@@ -421,8 +421,7 @@ router.patch('/:id/checkin', requireAuth, requireAdmin, async (req: Request, res
 
         const [assetRows] = await db.query('SELECT label FROM assets WHERE id = ?', [loan.asset_id]);
         const assetLabel = (assetRows as any[])[0]?.label || `Asset #${loan.asset_id}`;
-        const dueDate = String(loan.due_date).slice(0, 10);
-        const daysLate = Math.max(0, Math.floor((Date.now() - new Date(`${dueDate}T23:59:59`).getTime()) / 86400000));
+        const daysLate = calendarDaysLate(loan.due_date);
         await notify(getLoanReturnedEmail(loan.borrower_email, assetLabel, condition_in, daysLate, loanUrl(loanId)), `return #${loanId}`);
 
         logger.info(`Loan #${loanId} returned (${condition_in}) — asset back to '${assetStatus}'`, 'LOANS');

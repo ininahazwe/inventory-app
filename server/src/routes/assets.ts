@@ -4,6 +4,7 @@ import { logger } from '../middleware/logger';
 import { requireAuth } from '../middleware/auth';
 import { logAudit } from './audit';
 import {AuthUser} from "../types/requests";
+import { calendarDaysLate } from '../utils/dateHelpers';
 
 const router = Router();
 
@@ -432,8 +433,11 @@ const LIFECYCLE_LABELS: Record<string, string> = {
 };
 
 // GET /api/assets/:id/timeline - Historique unifié (assignments + réparations +
-// incidents + enchères), fusionné et trié par date décroissante. Les données
-// existaient déjà, dispersées sur 4 tables — pas de nouvelle table, juste l'agrégation.
+// incidents + enchères + prêts), fusionné et trié par date décroissante. Les données
+// existaient déjà, dispersées sur 5 tables — pas de nouvelle table, juste l'agrégation.
+// Un prêt = UNE entrée (son état courant, avec lien vers /loans/:id où vit le journal
+// détaillé de ses étapes), pas une entrée par événement : la frise reste lisible.
+// Un non-admin ne voit que ses propres prêts, comme dans GET /api/loans.
 router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => {
     try {
         const assetId = parseInt(req.params.id as string, 10);
@@ -474,6 +478,19 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             [assetId]
         );
 
+        const requester = (req as any).user;
+        const requesterIsAdmin = requester && (requester.role === 'admin' || requester.role === 'super_admin');
+        const [loanRows] = await db.execute(
+            `SELECT id, borrower_email, purpose, start_date, due_date, status, requested_at, checked_out_at,
+                    returned_at, condition_out, condition_in, extended_count, incident_id, created_at,
+                    (status = 'checked_out' AND due_date < CURDATE()) AS is_overdue
+             FROM loans
+             WHERE asset_id = ?
+               ${requesterIsAdmin ? '' : 'AND (borrower_email = ? OR requested_by_email = ?)'}
+             ORDER BY created_at DESC`,
+            requesterIsAdmin ? [assetId] : [assetId, requester?.email ?? '', requester?.email ?? '']
+        );
+
         type TimelineEvent = {
             type: string;
             at: string;
@@ -481,6 +498,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             detail: string;
             status?: string | null;
             source_id: number;
+            link?: string;
         };
 
         const events: TimelineEvent[] = [];
@@ -537,6 +555,41 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
                 ].filter(Boolean).join(', '),
                 status: r.status,
                 source_id: r.id,
+            });
+        }
+
+        for (const r of loanRows as any[]) {
+            const overdue = Number(r.is_overdue) === 1;
+            const title =
+                r.status === 'requested'   ? `Loan requested by ${r.borrower_email}`
+              : r.status === 'approved'    ? `Loan approved for ${r.borrower_email}`
+              : r.status === 'rejected'    ? `Loan declined (${r.borrower_email})`
+              : r.status === 'cancelled'   ? `Loan cancelled (${r.borrower_email})`
+              : r.status === 'checked_out' ? `${overdue ? 'Overdue — ' : ''}Out on loan to ${r.borrower_email}`
+              :                              `Loan to ${r.borrower_email} (returned)`;
+
+            // Retard constaté au retour : jours entre l'échéance et la date réelle de retour.
+            const daysLate = (r.status === 'returned' && r.returned_at && r.due_date)
+                ? calendarDaysLate(r.due_date, new Date(r.returned_at))
+                : 0;
+
+            events.push({
+                type: 'loan',
+                // Date de référence : la sortie effective si elle a eu lieu, sinon la demande.
+                at: new Date(r.checked_out_at || r.requested_at || r.created_at).toISOString(),
+                title,
+                detail: [
+                    `${String(r.start_date).slice(0, 10)} → ${String(r.due_date).slice(0, 10)}`,
+                    r.purpose || null,
+                    r.extended_count > 0 ? `extended ${r.extended_count}×` : null,
+                    r.condition_out ? `out: ${r.condition_out}` : null,
+                    r.condition_in ? `back: ${r.condition_in}` : null,
+                    daysLate > 0 ? `returned ${daysLate} day${daysLate === 1 ? '' : 's'} late` : null,
+                    r.incident_id ? `incident #${r.incident_id}` : null,
+                ].filter(Boolean).join(' · '),
+                status: overdue ? 'overdue' : r.status,
+                source_id: r.id,
+                link: `/loans/${r.id}`,
             });
         }
 
