@@ -1,11 +1,11 @@
-import dotenv from 'dotenv';
+// Must be the FIRST import: ES imports are hoisted, so modules like gmailService that read
+// process.env at load time would otherwise run before dotenv.config() and see empty values.
+import 'dotenv/config';
 import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
 import { initializePool } from './database/connection.js';
 import { validateEnv } from './config/env.js';
 import { startScheduler } from './scheduler.js';
-
-dotenv.config();
 
 async function startServer() {
     // ✅ Fail fast: pas de secret hardcodé en fallback si la config est incomplète
