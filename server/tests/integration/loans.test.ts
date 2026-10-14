@@ -30,7 +30,7 @@ describe('POST /api/loans', () => {
 
     it('creates a request when the asset is free over the window', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock' }])) // lock asset
+            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock', is_lendable: 1 }])) // lock asset
             .mockResolvedValueOnce(mockRows([]))                                                   // no clash
             .mockResolvedValueOnce(mockOk({ insertId: 7 }))                                        // insert loan
             .mockResolvedValueOnce(mockOk());                                                      // loan_events
@@ -50,7 +50,7 @@ describe('POST /api/loans', () => {
 
     it('refuses a window that overlaps an existing booking', async () => {
         mockedExecute
-            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock' }]))
+            .mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock', is_lendable: 1 }]))
             .mockResolvedValueOnce(mockRows([
                 { id: 3, status: 'approved', start_date: '2026-10-25', due_date: '2026-10-30', borrower_email: 'other@mfwa.org' },
             ]));
@@ -61,6 +61,17 @@ describe('POST /api/loans', () => {
 
         expect(res.status).toBe(409);
         expect(res.body.error).toContain('already booked');
+    });
+
+    it('refuses a request on an asset that is not flagged lendable', async () => {
+        mockedExecute.mockResolvedValueOnce(mockRows([{ id: 12, label: 'Canon C70', status: 'in_stock', is_lendable: 0 }]));
+
+        const res = await request(app)
+            .post('/api/loans')
+            .send({ asset_id: 12, start_date: '2026-10-20', due_date: '2026-10-27' });
+
+        expect(res.status).toBe(409);
+        expect(res.body.error).toContain('not available for loan');
     });
 
     it('refuses to lend a retired asset', async () => {

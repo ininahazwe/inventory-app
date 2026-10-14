@@ -12,11 +12,11 @@ import DashboardKPIs from '../components/DashboardKPIs';
 import { exportToXlsx } from '../lib/exportXlsx';
 import { exportToPdf } from '../lib/exportPdf';
 
-type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired' | 'auctioned' | 'on_loan'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
+type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired' | 'auctioned' | 'on_loan'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; is_lendable: number; };
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, isAdmin } = usePermissions();
   const [rows, setRows]           = useState<Row[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,6 +30,20 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [returnAssetId, setReturnAssetId]         = useState<number | null>(null);
   const [returnAssetLabel, setReturnAssetLabel]   = useState<string>('');
   const [exporting, setExporting]                 = useState(false);
+  const [lendableError, setLendableError]         = useState<string | null>(null);
+
+  // Interrupteur « prêtable » : mise à jour optimiste, annulée si le serveur refuse.
+  // Le changement ne passe que par la route dédiée (PATCH /assets/:id/lendable).
+  const toggleLendable = async (row: Row) => {
+    const next = row.is_lendable ? 0 : 1;
+    setLendableError(null);
+    setRows(prev => prev.map(r => r.id === row.id ? { ...r, is_lendable: next } : r));
+    const { error } = await api.patch(`/assets/${row.id}/lendable`, { is_lendable: next === 1 });
+    if (error) {
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, is_lendable: row.is_lendable } : r));
+      setLendableError(`Could not update “${row.label}”: ${error}`);
+    }
+  };
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -131,8 +145,12 @@ export default function Home({ onNew }: { onNew: () => void }) {
         <Autocomplete className="input" value={qCategory} onChange={setQCategory} fetchOptions={fetchCategoryOptions} placeholder="Category…" />
       </div>
 
+      {lendableError && (
+        <div style={{ padding: 10, margin: '0 0 12px', background: '#f8d7da', color: '#721c24', borderRadius: 4, fontSize: 14 }}>❌ {lendableError}</div>
+      )}
+
       <table className="table">
-        <thead><tr style={{ background: '#8D86C9' }}><th>Name</th><th>Category</th><th className="status">Status</th><th className="status">Funder</th><th>Assigned to</th><th></th></tr></thead>
+        <thead><tr style={{ background: '#8D86C9' }}><th>Name</th><th>Category</th><th className="status">Status</th><th className="status">Funder</th><th>Assigned to</th><th className="status" title="Shown in the equipment list of the Loans module when on">Lendable</th><th></th></tr></thead>
         <tbody>
         {rows.map(r => (
           <tr key={r.id}>
@@ -141,12 +159,24 @@ export default function Home({ onNew }: { onNew: () => void }) {
             <td style={{ textTransform: 'capitalize' }} className="status">{r.status}</td>
             <td style={{ textTransform: 'capitalize' }} className="status">{r.funder ?? '—'}</td>
             <td>{r.assignee_name ? <>{r.assignee_name}{r.assignee_email && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.assignee_email}</div>}</> : '—'}</td>
+            <td className="status">
+              <button
+                type="button"
+                role="switch"
+                className="switch"
+                aria-checked={r.is_lendable === 1}
+                aria-label={`${r.label}: available for loan`}
+                title={isAdmin ? (r.is_lendable ? 'Lendable — click to turn off' : 'Not lendable — click to turn on') : 'Only an administrator can change this'}
+                disabled={!isAdmin}
+                onClick={() => toggleLendable(r)}
+              />
+            </td>
             <td><div className="actions">
               {r.status !== 'assigned' ? <button className="pill admin" onClick={() => openAssign(r.id, r.label)}>Assign</button> : <button className="pill admin" onClick={() => openReturn(r.id, r.label)}>Return</button>}
             </div></td>
           </tr>
         ))}
-        {rows.length === 0 && <tr><td colSpan={6} style={{ padding: 16, color: 'var(--muted)' }}>No result</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={7} style={{ padding: 16, color: 'var(--muted)' }}>No result</td></tr>}
         </tbody>
       </table>
 

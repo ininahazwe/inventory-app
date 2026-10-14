@@ -274,6 +274,15 @@ tbody {background: #f7f7f7}
 .chip--repair{ color:#fff; background:#b98b46; border-color:#b98b46; }
 .chip--in_stock{ background:#f4f1ee; }
 .chip--retired{ background:#eee; color:#888; }
+
+/* Interrupteur on/off (colonne « Lendable » de /inventory) — bouton role="switch"
+   pour rester accessible au clavier et aux lecteurs d'écran. */
+.switch{ position:relative; width:40px; height:22px; border:none; border-radius:999px; padding:0; cursor:pointer; background:#ccc; transition:background .15s; vertical-align:middle; }
+.switch::after{ content:''; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .15s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+.switch[aria-checked="true"]{ background:#7c3aed; }
+.switch[aria-checked="true"]::after{ transform:translateX(18px); }
+.switch:disabled{ opacity:.45; cursor:not-allowed; }
+.switch:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
 .chip--auctioned{ background:#f4dee0; color:#6d071a; }
 /* Matériel sorti en prêt — même violet que les badges du module Loans */
 .chip--on_loan{ color:#fff; background:#7c3aed; border-color:#7c3aed; }

@@ -29,6 +29,7 @@ type Asset = {
   photo_url: string | null;
   qr_slug: string | null;
   notes: string | null;
+  is_lendable?: number;
   created_at: string;
   total_repair_cost?: number;
 };
@@ -376,14 +377,14 @@ export default function AssetDetail() {
               <div className="qr-section">
                 <img src={qrImg} alt="QR" width={180} height={180} />
                 <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                  <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill" style={{ textDecoration: 'none' }}>Download QR</a>
+                  <a href={qrImg} download={`asset-${asset.id}-qr.png`} className="pill admin" style={{ textDecoration: 'none' }}>Download QR</a>
                 </div>
               </div>
             </div>
 
             <div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                {asset.status !== 'assigned' ? <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
+                {asset.status !== 'assigned' ? <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill admin" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
               </div>
               {asset.photo_url && (
                 <div style={{ marginTop: 12 }}>
@@ -397,7 +398,7 @@ export default function AssetDetail() {
             <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
               <h3 style={{ margin: '8px 0' }}>Lifecycle</h3>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {asset.status !== 'repair' && <button className="pill" onClick={() => openLifecycleModal('repair')} disabled={busy}>{busy ? '…' : 'Send for repair'}</button>}
+                {asset.status !== 'repair' && <button className="pill admin" onClick={() => openLifecycleModal('repair')} disabled={busy}>{busy ? '…' : 'Send for repair'}</button>}
                 {asset.status === 'repair' && <button className="pill" onClick={() => openLifecycleModal('exit_repair')} disabled={busy}>{busy ? '…' : 'Return from repair'}</button>}
                 <button className="pill" onClick={() => openLifecycleModal('retire')} disabled={busy} style={{ backgroundColor: '#dc3545', color: 'white' }}>{busy ? '…' : 'Retire permanently'}</button>
               </div>
@@ -406,9 +407,10 @@ export default function AssetDetail() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             {/* Point d'entrée du module prêts : l'asset est pré-sélectionné dans le
-                formulaire de demande. Masqué pour un matériel retiré ou vendu —
-                le serveur refuserait le prêt de toute façon. */}
-            {asset.status !== 'retired' && asset.status !== 'auctioned' && (
+                formulaire de demande. Masqué si l'asset n'est pas marqué « prêtable »
+                (interrupteur de /inventory) ou s'il est retiré/vendu — le serveur
+                refuserait la demande de toute façon. */}
+            {asset.is_lendable === 1 && asset.status !== 'retired' && asset.status !== 'auctioned' && (
               <button className="pill" onClick={() => navigate(`/loans/new?asset_id=${asset.id}`)} style={{ background: 'rgb(231, 223, 248)' }}>🔁 Lend this</button>
             )}
             <button className="pill" onClick={() => setShowIncidentForm(true)} style={{ background: '#b98b46' }}>📋 Report an incident</button>

@@ -7,6 +7,14 @@ import {AuthUser} from "../types/requests";
 
 const router = Router();
 
+const requireAdmin = (req: Request, res: Response, next: Function) => {
+    const user = (req as any).user;
+    if (!user || (user.role !== 'super_admin' && user.role !== 'admin')) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+};
+
 // ✅ Helper: clean date to YYYY-MM-DD format
 const cleanDate = (dateStr: any): string | null => {
     if (!dateStr) return null;
@@ -36,7 +44,7 @@ const cleanDate = (dateStr: any): string | null => {
 // GET /api/assets - List all assets with pagination
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 10, category_name, label, status } = req.query;
+        const { page = 1, limit = 10, category_name, label, status, lendable } = req.query;
         const pageNum = parseInt(page as string) || 1;
         const pageSize = parseInt(limit as string) || 10;
         const offset = (pageNum - 1) * pageSize;
@@ -62,6 +70,11 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
             params.push(status);
         }
 
+        // Filtre « prêtable » : alimente la liste d'équipements de /loans/new.
+        if (lendable === '1') {
+            whereConditions.push('a.is_lendable = 1');
+        }
+
         const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
 
         const countQuery = `
@@ -80,6 +93,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
                 a.status,
                 a.serial_no,
                 a.funder,
+                a.is_lendable,
                 c.name as category_name,
                 asn.assignee_name,
                 asn.assignee_email
@@ -126,6 +140,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
                 a.funder,
                 a.qr_slug,
                 a.photo_url,
+                a.is_lendable,
                 a.created_at,
                 asn.assignee_name,
                 asn.assignee_email,
@@ -308,6 +323,37 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     } catch (err) {
         logger.error('PUT /assets/:id error:', err as Error);
         res.status(500).json({ error: 'Failed to update asset' });
+    }
+});
+
+// PATCH /api/assets/:id/lendable - { is_lendable: boolean } (admin)
+// Route dédiée plutôt qu'un champ de PUT /:id : le PUT remplace tout l'asset depuis
+// le formulaire d'édition, et un interrupteur cliqué dans la liste ne doit pas
+// pouvoir écraser (ni être écrasé par) une édition concurrente des autres champs.
+router.patch('/:id/lendable', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const assetId = parseInt(String(req.params.id), 10);
+        const { is_lendable } = req.body || {};
+        const user = (req as any).user;
+
+        if (typeof is_lendable !== 'boolean' && is_lendable !== 0 && is_lendable !== 1) {
+            return res.status(400).json({ error: 'is_lendable must be a boolean' });
+        }
+        const value = is_lendable ? 1 : 0;
+
+        const [rows] = await db.query('SELECT id, is_lendable FROM assets WHERE id = ?', [assetId]);
+        const existing = (rows as any[])[0];
+        if (!existing) return res.status(404).json({ error: 'Asset not found' });
+
+        await db.query('UPDATE assets SET is_lendable = ? WHERE id = ?', [value, assetId]);
+        await logAudit(user.email, 'asset_lendable_changed', 'assets', assetId,
+            { is_lendable: existing.is_lendable }, { is_lendable: value });
+
+        logger.info(`Asset ${assetId} lendable=${value} by ${user.email}`, 'ASSETS');
+        return res.json({ success: true, id: assetId, is_lendable: value });
+    } catch (err) {
+        logger.error('PATCH /assets/:id/lendable error:', err as Error);
+        return res.status(500).json({ error: 'Failed to update asset' });
     }
 });
 

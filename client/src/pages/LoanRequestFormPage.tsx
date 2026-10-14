@@ -54,9 +54,10 @@ export default function LoanRequestFormPage() {
 
   useEffect(() => {
     const load = async () => {
-      // Le matériel retiré ou vendu aux enchères n'est pas prêtable : le serveur
-      // le refuse de toute façon, autant ne pas le proposer.
-      const { data } = await api.get<{ data: AssetOption[] }>('/assets?limit=500');
+      // Seuls les assets dont l'interrupteur « Lendable » est activé dans /inventory
+      // sont proposés (filtre serveur). Le matériel retiré ou vendu aux enchères est
+      // en plus écarté : le serveur le refuserait de toute façon.
+      const { data } = await api.get<{ data: AssetOption[] }>('/assets?limit=500&lendable=1');
       if (data?.data) setAssets(data.data.filter(a => a.status !== 'retired' && a.status !== 'auctioned'));
       if (isAdmin) {
         const { data: u } = await api.get<UserOption[]>('/users/assignable');
@@ -152,7 +153,13 @@ export default function LoanRequestFormPage() {
                 </span>
               </div>
             ))}
-            {filteredAssets.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: '#999' }}>No matching equipment.</div>}
+            {filteredAssets.length === 0 && (
+              <div style={{ padding: 16, textAlign: 'center', color: '#999' }}>
+                {assets.length === 0
+                  ? 'No equipment is available for loan yet. An administrator can turn on “Lendable” for an item in Inventory.'
+                  : 'No matching equipment.'}
+              </div>
+            )}
           </div>
 
           {isAdmin && (

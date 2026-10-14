@@ -131,7 +131,7 @@ export async function assertAssetAvailable(
 
 /** Vérifie que l'asset existe, le verrouille, et refuse les statuts non prêtables. */
 async function lockLoanableAsset(tx: Executor, assetId: number): Promise<any> {
-    const [rows] = await tx.execute('SELECT id, label, status FROM assets WHERE id = ? FOR UPDATE', [assetId]);
+    const [rows] = await tx.execute('SELECT id, label, status, is_lendable FROM assets WHERE id = ? FOR UPDATE', [assetId]);
     const asset = (rows as any[])[0];
     if (!asset) throw new NotFoundException('Asset not found');
     if (asset.status === 'retired' || asset.status === 'auctioned') {
@@ -163,7 +163,17 @@ export async function createLoanRequest(
     }
 ): Promise<{ loanId: number; status: LoanStatus }> {
     assertDateWindow(input.start_date, input.due_date);
-    await lockLoanableAsset(tx, input.asset_id);
+    const asset = await lockLoanableAsset(tx, input.asset_id);
+
+    // Seuls les assets marqués « prêtables » (interrupteur de /inventory) peuvent faire
+    // l'objet d'une nouvelle demande. Contrôlé ici, pas seulement dans la liste du
+    // formulaire : un appel direct à l'API ne doit pas contourner l'interrupteur.
+    // Les prêts déjà créés (approbation, sortie, retour) ne sont volontairement pas
+    // affectés si l'interrupteur est coupé ensuite : on ne casse pas un cycle en cours.
+    if (!asset.is_lendable) {
+        throw new ConflictException(`'${asset.label}' is not available for loan`);
+    }
+
     await assertAssetAvailable(tx, input.asset_id, input.start_date, input.due_date);
 
     const status: LoanStatus = input.auto_approve ? 'approved' : 'requested';
