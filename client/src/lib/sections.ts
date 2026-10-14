@@ -54,7 +54,7 @@ export const SECTIONS: SectionDef[] = [
     path: '/loans',
     label: 'Loans',
     description: 'Equipment lent out & due back',
-    icon: '\u{1F501}',
+    icon: '\u21C4\uFE0E', // ⇄ (text presentation, like the other tiles; the 🔁 emoji rendered as tofu)
     color: '#E7DFF8', // tint of the loan status purple #7c3aed
   },
   {
