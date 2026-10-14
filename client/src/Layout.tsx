@@ -67,9 +67,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {isAdmin && (
                   <Link to="/supplies" className="pill color3">📋︎ Supplies</Link>
                 )}
-                {isAdmin && (
-                  <Link to="/incidents" className="pill color4">🛠︎ Incidents</Link>
-                )}
+                <Link to="/incidents" className="pill color4">🛠︎ Incidents</Link>
               </>
             )}
             {isSuperAdmin && (
