@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useIncidents } from '../hooks/useIncidents';
 import type { Incident } from '../hooks/useIncidents';
 import { IncidentBadge } from '../components/IncidentBadge';
+import { usePermissions } from '../hooks/usePermissions';
 
 export const IncidentsList: React.FC = () => {
   const navigate = useNavigate();
+  const { isAdmin } = usePermissions();
   const { incidents, loading, error, fetchIncidents } = useIncidents();
 
   const [filters, setFilters] = useState({
@@ -39,7 +41,7 @@ export const IncidentsList: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
+    return new Date(dateString).toLocaleDateString('en-GB', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -49,7 +51,7 @@ export const IncidentsList: React.FC = () => {
   return (
     <div className="">
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ margin: '0 0 16px 0' }}>Incidents</h2>
+        <h2 style={{ margin: '0 0 16px 0' }}>{isAdmin ? 'Incidents' : 'My incidents'}</h2>
         <p style={{ margin: 0, color: 'var(--muted)', fontSize: '14px' }}>
           {filteredIncidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''}
         </p>
@@ -98,7 +100,7 @@ export const IncidentsList: React.FC = () => {
               <th style={{ padding: '12px', textAlign: 'left' }}>Type</th>
               <th style={{ padding: '12px', textAlign: 'left' }}>Severity</th>
               <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
-              <th style={{ padding: '12px', textAlign: 'left' }}>Reported By</th>
+              {isAdmin && <th style={{ padding: '12px', textAlign: 'left' }}>Reported By</th>}
               <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
               <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
             </tr>
@@ -132,9 +134,9 @@ export const IncidentsList: React.FC = () => {
                 <td style={{ padding: '12px' }}>
                   <IncidentBadge type="status" value={incident.status} />
                 </td>
-                <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
+                {isAdmin && <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
                   {incident.reported_by_email}
-                </td>
+                </td>}
                 <td style={{ padding: '12px', fontSize: '13px', color: 'var(--muted)' }}>
                   {formatDate(incident.created_at)}
                 </td>
@@ -162,7 +164,7 @@ export const IncidentsList: React.FC = () => {
             borderRadius: '14px',
           }}
         >
-          <p style={{ margin: 0 }}>No incidents found</p>
+          <p style={{ margin: 0 }}>{isAdmin ? 'No incidents found' : 'You have no incidents'}</p>
         </div>
       )}
     </div>

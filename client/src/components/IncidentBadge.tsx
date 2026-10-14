@@ -13,27 +13,27 @@ export const IncidentBadge: React.FC<IncidentBadgeProps> = ({ type, value }) => 
   if (type === 'type') {
     switch (value) {
       case 'damage':
-        label = 'Dommage';
+        label = 'Damage';
         bgColor = '#fee2e2';
         textColor = '#991b1b';
         break;
       case 'loss':
-        label = 'Perte';
+        label = 'Loss';
         bgColor = '#fce7f3';
         textColor = '#831843';
         break;
       case 'malfunction':
-        label = 'Dysfonctionnement';
+        label = 'Malfunction';
         bgColor = '#fef3c7';
         textColor = '#92400e';
         break;
       case 'theft':
-        label = 'Vol';
+        label = 'Theft';
         bgColor = '#f3e8ff';
         textColor = '#6b21a8';
         break;
       case 'other':
-        label = 'Autre';
+        label = 'Other';
         bgColor = '#f4f1ee';
         textColor = 'var(--ink)';
         break;
@@ -43,22 +43,22 @@ export const IncidentBadge: React.FC<IncidentBadgeProps> = ({ type, value }) => 
   } else if (type === 'severity') {
     switch (value) {
       case 'low':
-        label = 'Faible';
+        label = 'Low';
         bgColor = '#dcfce7';
         textColor = '#166534';
         break;
       case 'medium':
-        label = 'Moyen';
+        label = 'Medium';
         bgColor = '#fef08a';
         textColor = '#713f12';
         break;
       case 'high':
-        label = 'Élevé';
+        label = 'High';
         bgColor = '#fed7aa';
         textColor = '#92400e';
         break;
       case 'critical':
-        label = 'Critique';
+        label = 'Critical';
         bgColor = '#fecaca';
         textColor = '#7f1d1d';
         break;
@@ -68,22 +68,22 @@ export const IncidentBadge: React.FC<IncidentBadgeProps> = ({ type, value }) => 
   } else if (type === 'status') {
     switch (value) {
       case 'open':
-        label = 'Ouvert';
+        label = 'Open';
         bgColor = '#bfdbfe';
         textColor = '#1e3a8a';
         break;
       case 'in_progress':
-        label = 'En cours';
+        label = 'In progress';
         bgColor = '#fde68a';
         textColor = '#713f12';
         break;
       case 'resolved':
-        label = 'Résolu';
+        label = 'Resolved';
         bgColor = '#bbf7d0';
         textColor = '#166534';
         break;
       case 'closed':
-        label = 'Fermé';
+        label = 'Closed';
         bgColor = '#e5e7eb';
         textColor = '#374151';
         break;

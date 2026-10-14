@@ -79,7 +79,7 @@ export const IncidentDetail: React.FC = () => {
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return '—';
-    return new Date(dateString).toLocaleDateString('fr-FR', {
+    return new Date(dateString).toLocaleDateString('en-GB', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -100,7 +100,7 @@ export const IncidentDetail: React.FC = () => {
     return (
       <div className="main-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
         <p style={{ color: '#991b1b' }}>
-          {error ? `Error: ${error}` : 'Incident not found'}
+          {error ? (/not related to you/i.test(error) ? 'You do not have access to this incident' : `Error: ${error}`) : 'Incident not found'}
         </p>
         <button
           className="pill"
@@ -196,18 +196,18 @@ export const IncidentDetail: React.FC = () => {
             Status
           </p>
           <div style={{ position: 'relative' }}>
-            <button
-              className="pill padding"
-              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              disabled={!canManage || isUpdatingStatus}
-              style={{
-                opacity: !canManage ? 0.6 : 1,
-                cursor: canManage ? 'pointer' : 'not-allowed',
-                paddingRight: '10px',
-              }}
-            >
-              <IncidentBadge type="status" value={incident.status} /> click to update
-            </button>
+            {canManage ? (
+              <button
+                className="pill admin padding"
+                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                disabled={isUpdatingStatus}
+                style={{ paddingRight: '10px' }}
+              >
+                <IncidentBadge type="status" value={incident.status} /> click to update
+              </button>
+            ) : (
+              <IncidentBadge type="status" value={incident.status} />
+            )}
 
             {canManage && showStatusDropdown && (
               <div className="incident-status-dropdown">

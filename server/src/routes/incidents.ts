@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin, isAdminUser, ENTRUSTED_SQL, entrustedParams } from '../middleware/auth';
 import {
     sendEmail,
     getIncidentCreatedAdminEmail,
@@ -13,13 +13,9 @@ const router = Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
 
-const requireAdmin = (req: Request, res: Response, next: Function) => {
-    const user = (req as any).user;
-    if (!user || (user.role !== 'super_admin' && user.role !== 'admin')) {
-        return res.status(403).json({ error: 'Admin access required' });
-    }
-    next();
-};
+
+// Users never see internal handling details (technician, repair notes).
+const stripAdminFields = (row: any) => ({ ...row, assigned_to: null, notes: null });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SPECIFIC ROUTES (/:id/action) - MUST BE BEFORE GENERIC /:id
@@ -157,6 +153,8 @@ router.patch('/:id/notes', requireAuth, requireAdmin, async (req: Request, res: 
 // GET /incidents - Lister tous les incidents
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
+        const reqUser = (req as any).user;
+        const admin = isAdminUser(reqUser);
         const [incidents] = await db.query(`
             SELECT
                 i.id,
@@ -173,10 +171,11 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
                 i.notes
             FROM incidents i
             LEFT JOIN assets a ON i.asset_id = a.id
+            ${admin ? '' : `WHERE (i.reported_by_email = ? OR ${ENTRUSTED_SQL})`}
             ORDER BY i.created_at DESC
-        `);
+        `, admin ? [] : [reqUser.email, ...entrustedParams(reqUser)]);
         logger.info(`Fetched incidents`, 'INCIDENTS');
-        return res.json(incidents || []);
+        return res.json(admin ? (incidents || []) : (incidents as any[] || []).map(stripAdminFields));
     } catch (err) {
         logger.error('GET /incidents error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
@@ -210,7 +209,24 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Incident not found' });
         }
 
-        return res.json((incidents as any[])[0]);
+        const row = (incidents as any[])[0];
+        const reqUser = (req as any).user;
+        if (!isAdminUser(reqUser)) {
+            let allowed = row.reported_by_email === reqUser.email;
+            if (!allowed) {
+                const [ok] = await db.query(
+                    `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                    [row.asset_id, ...entrustedParams(reqUser)]
+                );
+                allowed = (ok as any[]).length > 0;
+            }
+            if (!allowed) {
+                return res.status(403).json({ error: 'This incident is not related to you' });
+            }
+            return res.json(stripAdminFields(row));
+        }
+
+        return res.json(row);
     } catch (err) {
         logger.error(`GET /incidents/:id error:`, err as Error);
         return res.status(500).json({ error: (err as Error).message });
@@ -226,6 +242,16 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
         if (!asset_id) {
             return res.status(400).json({ error: 'asset_id required' });
+        }
+
+        if (!isAdminUser(user)) {
+            const [ok] = await db.query(
+                `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                [asset_id, ...entrustedParams(user)]
+            );
+            if (!(ok as any[]).length) {
+                return res.status(403).json({ error: 'You can only report incidents on assets assigned to you' });
+            }
         }
 
         const [result] = await db.query(
