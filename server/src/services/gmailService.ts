@@ -25,45 +25,65 @@ interface EmailPayload {
     html: string;
 }
 
+// RFC 2047 encoding so non-ASCII subjects (e.g. "—") are not garbled by mail clients.
+const encodeHeader = (value: string): string =>
+    /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+
+const SENDER_NAME = process.env.EMAIL_FROM_NAME || 'MFWA Asset Management';
+
+/** Sends through the Gmail API and THROWS on failure (used by the test route). */
+export async function sendEmailOrThrow(payload: EmailPayload): Promise<string | null | undefined> {
+    const formattedTo = Array.isArray(payload.to) ? payload.to.join(', ') : payload.to;
+
+    const messageParts = [
+        `From: ${encodeHeader(SENDER_NAME)} <${SENDER_EMAIL}>`,
+        `To: ${formattedTo}`,
+        `Subject: ${encodeHeader(payload.subject)}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=utf-8`,
+        ``,
+        `<html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                ${payload.html}
+            </body>
+        </html>`
+    ];
+
+    const encodedMessage = Buffer.from(messageParts.join('\r\n'))
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+    const response = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: encodedMessage },
+    });
+
+    logger.info(`Email sent via Google API. Message ID: ${response.data.id} to [${formattedTo}]`, 'EMAIL');
+    return response.data.id;
+}
+
+/** Fire-and-forget variant used by business code: never throws, logs failures. */
 export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     try {
-        const formattedTo = Array.isArray(payload.to) ? payload.to.join(', ') : payload.to;
-
-        const messageParts = [
-            `From: "The Auction Team" <${SENDER_EMAIL}>`,
-            `To: ${formattedTo}`,
-            `Subject: ${payload.subject}`,
-            `MIME-Version: 1.0`,
-            `Content-Type: text/html; charset=utf-8`,
-            ``,
-            `<html>
-                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                    ${payload.html}
-                </body>
-            </html>`
-        ];
-
-        const message = messageParts.join('\r\n');
-
-        const encodedMessage = Buffer.from(message)
-            .toString('base64')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-
-        const response = await gmail.users.messages.send({
-            userId: 'me',
-            requestBody: {
-                raw: encodedMessage,
-            },
-        });
-
-        logger.info(`Email sent via Google API. Message ID: ${response.data.id} to [${formattedTo}]`, 'EMAIL');
+        await sendEmailOrThrow(payload);
         return true;
     } catch (err: any) {
         logger.error(`Failed to send email via Google API: ${err.message || err}`, 'EMAIL');
         return false;
     }
+}
+
+export function emailConfigStatus() {
+    return {
+        EMAIL_USER: !!process.env.EMAIL_USER,
+        CLIENT_ID: !!process.env.CLIENT_ID,
+        CLIENT_SECRET: !!process.env.CLIENT_SECRET,
+        REFRESH_TOKEN: !!process.env.REFRESH_TOKEN,
+        FRONTEND_URL: !!process.env.FRONTEND_URL,
+        sender: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+    };
 }
 
 export function getBidderConfirmationEmail(
