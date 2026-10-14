@@ -8,11 +8,12 @@ import jwt from 'jsonwebtoken';
 import {AuthUser} from '../types/requests';
 import {UnauthorizedException} from "../exceptions/index";
 import { JWT_SECRET } from '../config/env';
+import { db } from '../database/connection';
 
 /**
  * Middleware to verify JWT and attach user to request
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
     try {
         const authHeader = req.headers.authorization;
 
@@ -23,7 +24,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
         const token = authHeader.substring(7); // Remove "Bearer " prefix
         const decoded = jwt.verify(token, JWT_SECRET()) as AuthUser;
 
-        req.user = decoded;
+        // The role in the JWT is frozen at sign-in: re-read it from the DB so a
+        // role change (e.g. admin -> user) applies immediately, not at token expiry.
+        const [rows] = await db.query('SELECT role FROM users WHERE email = ? LIMIT 1', [decoded.email]);
+        const fresh = (rows as any[])[0];
+        if (!fresh) {
+            throw new UnauthorizedException('User no longer has access');
+        }
+        req.user = { ...decoded, role: fresh.role };
         next();
     } catch (error) {
         if (error instanceof jwt.JsonWebTokenError) {
