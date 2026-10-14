@@ -16,10 +16,11 @@ import supplyItemsRoutes from './routes/supplyItems';
 import supplyReceiptsRoutes from './routes/supplyReceipts';
 import supplyIssuesRoutes from './routes/supplyIssues';
 import supplyAdjustmentsRoutes from './routes/supplyAdjustments';
+import loansRoutes from './routes/loans';
 import auditRoutes from './routes/audit';
 import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
-import { requireAuth } from './middleware/auth';
+import { requireAuth, requireAdmin } from './middleware/auth';
 import healthRoutes from './routes/health';
 
 export function createApp() {
@@ -46,17 +47,18 @@ export function createApp() {
     app.use('/api/categories', categoriesRoutes);
     app.use('/api/assets', assetsRoutes);
     app.use('/api/assignments', assignmentsRoutes);
-    app.use('/api/locations', locationsRoutes);
-    app.use('/api/supply-assignments', supplyAssignmentsRoutes);
-    app.use('/api/supply-movements', supplyMovementsRoutes);
-    app.use('/api/supply-items', supplyItemsRoutes);
-    app.use('/api/supply-receipts', supplyReceiptsRoutes);
-    app.use('/api/supply-issues', supplyIssuesRoutes);
-    app.use('/api/supply-adjustments', supplyAdjustmentsRoutes);
+    app.use('/api/locations', requireAuth, requireAdmin, locationsRoutes);
+    app.use('/api/supply-assignments', requireAuth, requireAdmin, supplyAssignmentsRoutes);
+    app.use('/api/supply-movements', requireAuth, requireAdmin, supplyMovementsRoutes);
+    app.use('/api/supply-items', requireAuth, requireAdmin, supplyItemsRoutes);
+    app.use('/api/supply-receipts', requireAuth, requireAdmin, supplyReceiptsRoutes);
+    app.use('/api/supply-issues', requireAuth, requireAdmin, supplyIssuesRoutes);
+    app.use('/api/supply-adjustments', requireAuth, requireAdmin, supplyAdjustmentsRoutes);
+    app.use('/api/loans', loansRoutes);
     app.use('/api/incidents', incidentsRoutes);
     app.use('/api/users', usersRoutes);
     app.use('/api/rpc', rpcRoutes);
-    app.use('/api/supplies', suppliesRoutes);
+    app.use('/api/supplies', requireAuth, requireAdmin, suppliesRoutes);
     app.use('/api/auctions', auctionsRouter);
     app.use('/api/audit', requireAuth, auditRoutes);
 

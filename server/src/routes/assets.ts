@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin, isAdminUser, ENTRUSTED_SQL, entrustedParams } from '../middleware/auth';
 import { logAudit } from './audit';
 import {AuthUser} from "../types/requests";
+import { calendarDaysLate } from '../utils/dateHelpers';
 
 const router = Router();
+
 
 // ✅ Helper: clean date to YYYY-MM-DD format
 const cleanDate = (dateStr: any): string | null => {
@@ -36,7 +38,7 @@ const cleanDate = (dateStr: any): string | null => {
 // GET /api/assets - List all assets with pagination
 router.get('/', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 10, category_name, label, status } = req.query;
+        const { page = 1, limit = 10, category_name, label, status, lendable } = req.query;
         const pageNum = parseInt(page as string) || 1;
         const pageSize = parseInt(limit as string) || 10;
         const offset = (pageNum - 1) * pageSize;
@@ -62,6 +64,21 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
             params.push(status);
         }
 
+        // Filtre « prêtable » : alimente la liste d'équipements de /loans/new.
+        if (lendable === '1') {
+            whereConditions.push('a.is_lendable = 1');
+        }
+
+        // Non-admins: only assets entrusted to them. Exception: the loan-request
+        // picker (?lendable=1) lists lendable assets for everyone, minus assignee details.
+        const listUser = (req as any).user;
+        const listIsAdmin = isAdminUser(listUser);
+        const listRestricted = !listIsAdmin && lendable !== '1';
+        if (listRestricted) {
+            whereConditions.push(ENTRUSTED_SQL);
+            params.push(...entrustedParams(listUser));
+        }
+
         const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
 
         const countQuery = `
@@ -80,6 +97,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
                 a.status,
                 a.serial_no,
                 a.funder,
+                a.is_lendable,
                 c.name as category_name,
                 asn.assignee_name,
                 asn.assignee_email
@@ -93,6 +111,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         params.push(pageSize, offset);
 
         const [assets] = await db.query(dataQuery, params);
+        if (!listIsAdmin && !listRestricted) {
+            (assets as any[]).forEach(r => { r.assignee_name = null; r.assignee_email = null; });
+        }
 
         logger.info(`Fetched ${(assets as any[]).length} assets`, 'ASSETS');
         return res.json({
@@ -109,6 +130,16 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
         const id = String(req.params.id);
+        const detailUser = (req as any).user;
+        if (!isAdminUser(detailUser)) {
+            const [ok] = await db.query(
+                `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                [id, ...entrustedParams(detailUser)]
+            );
+            if (!(ok as any[]).length) {
+                return res.status(403).json({ error: 'This asset is not assigned to you' });
+            }
+        }
 
         const [asset] = await db.query(`
             SELECT
@@ -126,6 +157,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
                 a.funder,
                 a.qr_slug,
                 a.photo_url,
+                a.is_lendable,
                 a.created_at,
                 asn.assignee_name,
                 asn.assignee_email,
@@ -164,7 +196,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/assets - Create new asset
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const { label, serial_no, category_id, status, funder, purchase_price, photo_url, purchased_at, warranty_end, supplier, notes } = req.body;
         const user = (req as any).user;
@@ -220,7 +252,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 });
 
 // PUT /api/assets/:id - Update asset
-router.put('/:id', requireAuth, async (req: Request, res: Response) => {
+router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     // ✅ Type id correctly (req.params.id is string | string[])
     const id = String(req.params.id);
     const assetId = parseInt(id, 10);
@@ -311,10 +343,41 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 });
 
+// PATCH /api/assets/:id/lendable - { is_lendable: boolean } (admin)
+// Route dédiée plutôt qu'un champ de PUT /:id : le PUT remplace tout l'asset depuis
+// le formulaire d'édition, et un interrupteur cliqué dans la liste ne doit pas
+// pouvoir écraser (ni être écrasé par) une édition concurrente des autres champs.
+router.patch('/:id/lendable', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const assetId = parseInt(String(req.params.id), 10);
+        const { is_lendable } = req.body || {};
+        const user = (req as any).user;
+
+        if (typeof is_lendable !== 'boolean' && is_lendable !== 0 && is_lendable !== 1) {
+            return res.status(400).json({ error: 'is_lendable must be a boolean' });
+        }
+        const value = is_lendable ? 1 : 0;
+
+        const [rows] = await db.query('SELECT id, is_lendable FROM assets WHERE id = ?', [assetId]);
+        const existing = (rows as any[])[0];
+        if (!existing) return res.status(404).json({ error: 'Asset not found' });
+
+        await db.query('UPDATE assets SET is_lendable = ? WHERE id = ?', [value, assetId]);
+        await logAudit(user.email, 'asset_lendable_changed', 'assets', assetId,
+            { is_lendable: existing.is_lendable }, { is_lendable: value });
+
+        logger.info(`Asset ${assetId} lendable=${value} by ${user.email}`, 'ASSETS');
+        return res.json({ success: true, id: assetId, is_lendable: value });
+    } catch (err) {
+        logger.error('PATCH /assets/:id/lendable error:', err as Error);
+        return res.status(500).json({ error: 'Failed to update asset' });
+    }
+});
+
 // DELETE /api/assets/:id - Supprimer un asset
 // ✅ Requiert auth + admin
 
-router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = req.user as AuthUser;
         const assetId = parseInt(req.params.id as string, 10);
@@ -386,8 +449,11 @@ const LIFECYCLE_LABELS: Record<string, string> = {
 };
 
 // GET /api/assets/:id/timeline - Historique unifié (assignments + réparations +
-// incidents + enchères), fusionné et trié par date décroissante. Les données
-// existaient déjà, dispersées sur 4 tables — pas de nouvelle table, juste l'agrégation.
+// incidents + enchères + prêts), fusionné et trié par date décroissante. Les données
+// existaient déjà, dispersées sur 5 tables — pas de nouvelle table, juste l'agrégation.
+// Un prêt = UNE entrée (son état courant, avec lien vers /loans/:id où vit le journal
+// détaillé de ses étapes), pas une entrée par événement : la frise reste lisible.
+// Un non-admin ne voit que ses propres prêts, comme dans GET /api/loans.
 router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => {
     try {
         const assetId = parseInt(req.params.id as string, 10);
@@ -398,6 +464,17 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
         const [assetCheck] = await db.execute('SELECT id FROM assets WHERE id = ?', [assetId]);
         if (!(assetCheck as any[]).length) {
             return res.status(404).json({ error: 'Asset not found' });
+        }
+        const tlUser = (req as any).user;
+        const tlIsAdmin = isAdminUser(tlUser);
+        if (!tlIsAdmin) {
+            const [ok] = await db.execute(
+                `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                [assetId, ...entrustedParams(tlUser)]
+            );
+            if (!(ok as any[]).length) {
+                return res.status(403).json({ error: 'This asset is not assigned to you' });
+            }
         }
 
         const [assignmentRows] = await db.execute(
@@ -428,6 +505,19 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             [assetId]
         );
 
+        const requester = (req as any).user;
+        const requesterIsAdmin = requester && (requester.role === 'admin' || requester.role === 'super_admin');
+        const [loanRows] = await db.execute(
+            `SELECT id, borrower_email, purpose, start_date, due_date, status, requested_at, checked_out_at,
+                    returned_at, condition_out, condition_in, extended_count, incident_id, created_at,
+                    (status = 'checked_out' AND due_date < CURDATE()) AS is_overdue
+             FROM loans
+             WHERE asset_id = ?
+               ${requesterIsAdmin ? '' : 'AND (borrower_email = ? OR requested_by_email = ?)'}
+             ORDER BY created_at DESC`,
+            requesterIsAdmin ? [assetId] : [assetId, requester?.email ?? '', requester?.email ?? '']
+        );
+
         type TimelineEvent = {
             type: string;
             at: string;
@@ -435,11 +525,12 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             detail: string;
             status?: string | null;
             source_id: number;
+            link?: string;
         };
 
         const events: TimelineEvent[] = [];
 
-        for (const r of assignmentRows as any[]) {
+        for (const r of (assignmentRows as any[]).filter(x => tlIsAdmin || x.assignee_email === tlUser.email)) {
             const who = r.assignee_name || r.assignee_email || 'user';
             events.push({
                 type: 'assignment',
@@ -455,7 +546,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of lifecycleRows as any[]) {
+        for (const r of (tlIsAdmin ? (lifecycleRows as any[]) : [])) {
             const cost = r.cost != null ? Number(r.cost) : null;
             events.push({
                 type: r.event_type || 'lifecycle',
@@ -467,7 +558,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of incidentRows as any[]) {
+        for (const r of (incidentRows as any[]).filter(x => tlIsAdmin || x.reported_by_email === tlUser.email)) {
             events.push({
                 type: 'incident',
                 at: new Date(r.created_at).toISOString(),
@@ -478,7 +569,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of auctionRows as any[]) {
+        for (const r of (tlIsAdmin ? (auctionRows as any[]) : [])) {
             const highest = r.current_highest_bid != null ? `GH₵${Number(r.current_highest_bid).toFixed(2)}` : '—';
             events.push({
                 type: 'auction',
@@ -491,6 +582,41 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
                 ].filter(Boolean).join(', '),
                 status: r.status,
                 source_id: r.id,
+            });
+        }
+
+        for (const r of loanRows as any[]) {
+            const overdue = Number(r.is_overdue) === 1;
+            const title =
+                r.status === 'requested'   ? `Loan requested by ${r.borrower_email}`
+              : r.status === 'approved'    ? `Loan approved for ${r.borrower_email}`
+              : r.status === 'rejected'    ? `Loan declined (${r.borrower_email})`
+              : r.status === 'cancelled'   ? `Loan cancelled (${r.borrower_email})`
+              : r.status === 'checked_out' ? `${overdue ? 'Overdue — ' : ''}Out on loan to ${r.borrower_email}`
+              :                              `Loan to ${r.borrower_email} (returned)`;
+
+            // Retard constaté au retour : jours entre l'échéance et la date réelle de retour.
+            const daysLate = (r.status === 'returned' && r.returned_at && r.due_date)
+                ? calendarDaysLate(r.due_date, new Date(r.returned_at))
+                : 0;
+
+            events.push({
+                type: 'loan',
+                // Date de référence : la sortie effective si elle a eu lieu, sinon la demande.
+                at: new Date(r.checked_out_at || r.requested_at || r.created_at).toISOString(),
+                title,
+                detail: [
+                    `${String(r.start_date).slice(0, 10)} → ${String(r.due_date).slice(0, 10)}`,
+                    r.purpose || null,
+                    r.extended_count > 0 ? `extended ${r.extended_count}×` : null,
+                    r.condition_out ? `out: ${r.condition_out}` : null,
+                    r.condition_in ? `back: ${r.condition_in}` : null,
+                    daysLate > 0 ? `returned ${daysLate} day${daysLate === 1 ? '' : 's'} late` : null,
+                    r.incident_id ? `incident #${r.incident_id}` : null,
+                ].filter(Boolean).join(' · '),
+                status: overdue ? 'overdue' : r.status,
+                source_id: r.id,
+                link: `/loans/${r.id}`,
             });
         }
 

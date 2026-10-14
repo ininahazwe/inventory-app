@@ -7,17 +7,17 @@ export function QrBlock({ qrImg, qrDataUrl, onDownload }: { qrImg: string; qrDat
                 <img src={qrImg} alt="QR" width={180} height={180} />
                 <div>
                     <div style={{ color: "#666", fontSize: 12, wordBreak: "break-all" }}>
-                        Lien encodé : <code>{qrDataUrl}</code>
+                        Encoded link : <code>{qrDataUrl}</code>
                     </div>
                     <div style={{ marginTop: 8 }}>
                         <button className="pill" onClick={onDownload} style={{ textDecoration: "none", border: "none", cursor: "pointer" }}>
-                            📥 Télécharger le QR
+                            📥 Download QR
                         </button>
                     </div>
                 </div>
             </div>
             <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                (Accès public sans login : possible via lien signé/token + policy RLS dédiée.)
+                (Public access without login is possible via a signed link/token.)
             </p>
         </section>
     );

@@ -27,3 +27,10 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
     (req as any).user = userFromHeader(req);
     next();
 }
+
+// Role helpers are pure (no JWT involved): reuse the real implementations.
+const actual = jest.requireActual('../auth') as typeof import('../auth');
+export const requireAdmin = actual.requireAdmin;
+export const isAdminUser = actual.isAdminUser;
+export const ENTRUSTED_SQL = actual.ENTRUSTED_SQL;
+export const entrustedParams = actual.entrustedParams;

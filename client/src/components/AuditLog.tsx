@@ -105,7 +105,7 @@ export default function AuditLog({ entityType, entityId }: AuditLogProps) {
 
   const formatDate = (dateStr: string): string => {
     try {
-      return new Date(dateStr).toLocaleString('fr-FR');
+      return new Date(dateStr).toLocaleString('en-GB');
     } catch {
       return dateStr;
     }

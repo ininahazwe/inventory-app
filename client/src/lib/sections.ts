@@ -1,6 +1,6 @@
 // src/lib/sections.ts
 //
-// Single source of truth for the app's four sections: used by the hub grid
+// Single source of truth for the app's five sections: used by the hub grid
 // (HomePage) to draw its tiles, and by SectionRevealCover to paint each
 // destination page with the same color/icon the tile expanded from — that
 // reuse is what makes the transition read as one continuous motion.
@@ -15,6 +15,8 @@ export interface SectionDef {
   description: string;
   icon: string;
   color: string;
+  /** Hidden from the hub (and guarded) for non-admin users. */
+  adminOnly?: boolean;
 }
 
 // Pastel tints in the same hue family as each section's existing saturated
@@ -37,6 +39,7 @@ export const SECTIONS: SectionDef[] = [
     description: 'Consumables & stock',
     icon: '📋︎',
     color: '#DCEAE6', // tint of .pill.green #213547
+    adminOnly: true,
   },
   {
     key: 'auctions',
@@ -45,6 +48,14 @@ export const SECTIONS: SectionDef[] = [
     description: 'Retired asset sales',
     icon: '⏱︎',
     color: '#F4DEE0', // tint of .pill.bordeaux #6d071a
+  },
+  {
+    key: 'loans',
+    path: '/loans',
+    label: 'Loans',
+    description: 'Equipment lent out & due back',
+    icon: '\u21C4\uFE0E', // ⇄ (text presentation, like the other tiles; the 🔁 emoji rendered as tofu)
+    color: '#E7DFF8', // tint of the loan status purple #7c3aed
   },
   {
     key: 'incidents',

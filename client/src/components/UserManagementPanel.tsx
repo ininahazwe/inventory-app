@@ -69,7 +69,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
             <option value="admin">Admin</option>
           </select>
         </div>
-        <button className="pill" type="submit" disabled={adding}>{adding ? '…' : '+ Ajouter'}</button>
+        <button className="pill admin" type="submit" disabled={adding}>{adding ? '…' : '+ Add'}</button>
       </form>
 
       <table className="table">
@@ -100,7 +100,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
                   </>
                 ) : (
                   <>
-                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
+                    <button className="pill admin" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
                     <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user.id, user.email)}>Delete</button>
                   </>
                 )}

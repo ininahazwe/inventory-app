@@ -30,3 +30,19 @@ export function currentMonthBounds(d: Date = new Date()): { from: string; to: st
         to: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
     };
 }
+
+/**
+ * ✅ Jours de retard en jours CALENDAIRES entre une échéance (YYYY-MM-DD) et une
+ * date réelle (par défaut maintenant) — 0 si on est dans les temps, le jour même
+ * inclus. Même définition que DATEDIFF(CURDATE(), due_date) utilisé en SQL pour le
+ * badge « Overdue » et les relances : un retour le lendemain de l'échéance compte
+ * 1 jour de retard, quelle que soit l'heure. Lecture en heure locale, comme
+ * todayDateString() (pas de détour par UTC).
+ */
+export function calendarDaysLate(dueDate: string | Date, actual: Date = new Date()): number {
+    const [y, m, d] = String(dueDate).slice(0, 10).split('-').map(Number);
+    if (!y || !m || !d) return 0;
+    const due = Date.UTC(y, m - 1, d);
+    const act = Date.UTC(actual.getFullYear(), actual.getMonth(), actual.getDate());
+    return Math.max(0, Math.round((act - due) / 86400000));
+}

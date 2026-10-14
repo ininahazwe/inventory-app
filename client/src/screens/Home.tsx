@@ -9,14 +9,15 @@ import AssignAsset from './AssignAsset';
 import Modal from '../components/Modal';
 import InventoryStats from '../components/InventoryStats';
 import DashboardKPIs from '../components/DashboardKPIs';
+import { assetStatusLabel } from '../lib/assetStatus';
 import { exportToXlsx } from '../lib/exportXlsx';
 import { exportToPdf } from '../lib/exportPdf';
 
-type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; };
+type Row = { id: number; label: string; status: 'in_stock' | 'assigned' | 'repair' | 'retired' | 'auctioned' | 'on_loan'; serial_no: string | null; funder: string | null; category_name: string | null; assignee_name: string | null; assignee_email: string | null; is_lendable: number; };
 const ITEMS_PER_PAGE = 10;
 
 export default function Home({ onNew }: { onNew: () => void }) {
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, isAdmin } = usePermissions();
   const [rows, setRows]           = useState<Row[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,6 +31,20 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [returnAssetId, setReturnAssetId]         = useState<number | null>(null);
   const [returnAssetLabel, setReturnAssetLabel]   = useState<string>('');
   const [exporting, setExporting]                 = useState(false);
+  const [lendableError, setLendableError]         = useState<string | null>(null);
+
+  // Interrupteur « prêtable » : mise à jour optimiste, annulée si le serveur refuse.
+  // Le changement ne passe que par la route dédiée (PATCH /assets/:id/lendable).
+  const toggleLendable = async (row: Row) => {
+    const next = row.is_lendable ? 0 : 1;
+    setLendableError(null);
+    setRows(prev => prev.map(r => r.id === row.id ? { ...r, is_lendable: next } : r));
+    const { error } = await api.patch(`/assets/${row.id}/lendable`, { is_lendable: next === 1 });
+    if (error) {
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, is_lendable: row.is_lendable } : r));
+      setLendableError(`Could not update “${row.label}”: ${error}`);
+    }
+  };
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -68,7 +83,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         Name: r.label,
         'Serial No': r.serial_no || '',
         Category: r.category_name || '',
-        Status: r.status,
+        Status: assetStatusLabel(r.status),
         Funder: r.funder || '',
         'Assigned To': r.assignee_name || '',
         'Assigned Email': r.assignee_email || '',
@@ -109,17 +124,19 @@ export default function Home({ onNew }: { onNew: () => void }) {
 
   return (
     <div>
-      <DashboardKPIs />
+      {isAdmin && <DashboardKPIs />}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '12px' }}>
-        <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Inventory</h2>
+        <h2 style={{ margin: 0, letterSpacing: 0.2 }}>{isAdmin ? 'Inventory' : 'My assets'}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill admin" onClick={() => exportInventory('xlsx')} disabled={exporting}>
-            {exporting ? 'Exporting…' : '⬇ XLSX'}
-          </button>
-          <button className="pill admin" onClick={() => exportInventory('pdf')} disabled={exporting}>
-            {exporting ? 'Exporting…' : '⬇ PDF'}
-          </button>
+          {isAdmin && (<>
+            <button className="pill admin" onClick={() => exportInventory('xlsx')} disabled={exporting}>
+              {exporting ? 'Exporting…' : '⬇ XLSX'}
+            </button>
+            <button className="pill admin" onClick={() => exportInventory('pdf')} disabled={exporting}>
+              {exporting ? 'Exporting…' : '⬇ PDF'}
+            </button>
+          </>)}
           {isSuperAdmin && (
             <button className="pill admin" onClick={onNew}>+ New asset</button>
           )}
@@ -131,22 +148,38 @@ export default function Home({ onNew }: { onNew: () => void }) {
         <Autocomplete className="input" value={qCategory} onChange={setQCategory} fetchOptions={fetchCategoryOptions} placeholder="Category…" />
       </div>
 
+      {lendableError && (
+        <div style={{ padding: 10, margin: '0 0 12px', background: '#f8d7da', color: '#721c24', borderRadius: 4, fontSize: 14 }}>❌ {lendableError}</div>
+      )}
+
       <table className="table">
-        <thead><tr style={{ background: '#8D86C9' }}><th>Name</th><th>Category</th><th className="status">Status</th><th className="status">Funder</th><th>Assigned to</th><th></th></tr></thead>
+        <thead><tr style={{ background: '#8D86C9' }}><th>Name</th><th>Category</th><th className="status">Status</th><th className="status">Funder</th><th>Assigned to</th>{isAdmin && <th className="status" title="Shown in the equipment list of the Loans module when on">Lendable</th>}{isAdmin && <th></th>}</tr></thead>
         <tbody>
         {rows.map(r => (
           <tr key={r.id}>
             <td><Link className="asset-link" to={`/asset/${r.id}`}>{r.label}</Link>{r.serial_no && <div style={{ color: 'var(--muted)', fontSize: 12 }}>SN: {r.serial_no}</div>}</td>
             <td>{r.category_name ?? '—'}</td>
-            <td style={{ textTransform: 'capitalize' }} className="status">{r.status}</td>
+            <td className="status"><span className={`chip chip--${r.status}`}>{assetStatusLabel(r.status)}</span></td>
             <td style={{ textTransform: 'capitalize' }} className="status">{r.funder ?? '—'}</td>
             <td>{r.assignee_name ? <>{r.assignee_name}{r.assignee_email && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.assignee_email}</div>}</> : '—'}</td>
-            <td><div className="actions">
+            {isAdmin && <td className="status">
+              <button
+                type="button"
+                role="switch"
+                className="switch"
+                aria-checked={r.is_lendable === 1}
+                aria-label={`${r.label}: available for loan`}
+                title={isAdmin ? (r.is_lendable ? 'Lendable — click to turn off' : 'Not lendable — click to turn on') : 'Only an administrator can change this'}
+                disabled={!isAdmin}
+                onClick={() => toggleLendable(r)}
+              />
+            </td>}
+            {isAdmin && <td><div className="actions">
               {r.status !== 'assigned' ? <button className="pill admin" onClick={() => openAssign(r.id, r.label)}>Assign</button> : <button className="pill admin" onClick={() => openReturn(r.id, r.label)}>Return</button>}
-            </div></td>
+            </div></td>}
           </tr>
         ))}
-        {rows.length === 0 && <tr><td colSpan={6} style={{ padding: 16, color: 'var(--muted)' }}>No result</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={isAdmin ? 7 : 5} style={{ padding: 16, color: 'var(--muted)' }}>{isAdmin ? 'No result' : 'No asset is currently assigned to you'}</td></tr>}
         </tbody>
       </table>
 
@@ -172,7 +205,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
         </div>
       </Modal>
 
-      <InventoryStats refreshTrigger={statsRefreshTrigger} onCategoryFilter={setQCategory} selectedCategory={qCategory} />
+      {isAdmin && <InventoryStats refreshTrigger={statsRefreshTrigger} onCategoryFilter={setQCategory} selectedCategory={qCategory} />}
     </div>
   );
 }

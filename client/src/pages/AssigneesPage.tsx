@@ -124,7 +124,7 @@ export default function AssigneesPage() {
               <option value="admin">Admin</option>
             </select>
           </div>
-          <button className="pill" type="submit" disabled={adding}>{adding ? '…' : '+ Ajouter'}</button>
+          <button className="pill admin" type="submit" disabled={adding}>{adding ? '…' : '+ Add'}</button>
         </form>
 
         <div className="filters">
@@ -165,7 +165,7 @@ export default function AssigneesPage() {
                     </>
                   ) : (
                     <>
-                      <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
+                      <button className="pill admin" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => setEditingUser(user)}>Edit</button>
                       <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#f3d0d0' }} onClick={() => handleDeleteUser(user)}>Delete</button>
                     </>
                   )}

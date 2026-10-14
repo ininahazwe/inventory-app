@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import Layout from "../Layout";
 import { SECTIONS, type SectionDef } from "../lib/sections";
+import { usePermissions } from "../hooks/usePermissions";
 
 const EXPAND_DURATION = 0.45;
 
@@ -96,6 +97,8 @@ function SectionTile({
 export default function HomePage() {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+  const { isAdmin } = usePermissions();
+  const visibleSections = SECTIONS.filter((sec) => isAdmin || !sec.adminOnly);
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const handleActivate = (section: SectionDef) => {
@@ -123,7 +126,7 @@ export default function HomePage() {
             gap: 20,
           }}
         >
-          {SECTIONS.map((section) => (
+          {visibleSections.map((section) => (
             <SectionTile
               key={section.key}
               section={section}

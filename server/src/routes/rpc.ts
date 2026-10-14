@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { logAudit } from './audit';
 import { AppException, NotFoundException, BusinessException } from '../exceptions';
 import { todayDateString, currentMonthBounds } from '../utils/dateHelpers';
@@ -32,7 +32,7 @@ async function auditLog(userEmail: string, action: string, targetTable: string, 
 console.log('🔧 RPC router initializing...');
 
 // POST /api/rpc/return_asset
-router.post('/return_asset', requireAuth, async (req: Request, res: Response) => {
+router.post('/return_asset', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const { p_asset_id } = req.body;
@@ -83,7 +83,7 @@ router.post('/return_asset', requireAuth, async (req: Request, res: Response) =>
 });
 
 // POST /api/rpc/send_to_repair
-router.post('/send_to_repair', requireAuth, async (req: Request, res: Response) => {
+router.post('/send_to_repair', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const { p_asset_id, p_notes } = req.body;
@@ -135,7 +135,7 @@ router.post('/send_to_repair', requireAuth, async (req: Request, res: Response) 
 });
 
 // POST /api/rpc/exit_repair
-router.post('/exit_repair', requireAuth, async (req: Request, res: Response) => {
+router.post('/exit_repair', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const { p_asset_id, p_notes, p_cost } = req.body;
@@ -200,7 +200,7 @@ router.post('/exit_repair', requireAuth, async (req: Request, res: Response) => 
 });
 
 // POST /api/rpc/retire_asset
-router.post('/retire_asset', requireAuth, async (req: Request, res: Response) => {
+router.post('/retire_asset', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const { p_asset_id, p_notes } = req.body;
@@ -256,13 +256,14 @@ router.post('/retire_asset', requireAuth, async (req: Request, res: Response) =>
 });
 
 // POST /api/rpc/get_asset_stats
-router.post('/get_asset_stats', requireAuth, async (req: Request, res: Response) => {
+router.post('/get_asset_stats', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const [stats] = await db.query(`
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'in_stock' THEN 1 ELSE 0 END) as in_stock,
         SUM(CASE WHEN status = 'assigned' THEN 1 ELSE 0 END) as assigned,
+        SUM(CASE WHEN status = 'on_loan' THEN 1 ELSE 0 END) as on_loan,
         SUM(CASE WHEN status = 'repair' THEN 1 ELSE 0 END) as repair,
         SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) as retired
       FROM assets
@@ -278,7 +279,7 @@ router.post('/get_asset_stats', requireAuth, async (req: Request, res: Response)
 
 // POST /api/rpc/get_dashboard_kpis - KPIs croisés pour la page d'accueil
 // (valeur du parc, coût supplies du mois, incidents ouverts, enchères actives)
-router.post('/get_dashboard_kpis', requireAuth, async (_req: Request, res: Response) => {
+router.post('/get_dashboard_kpis', requireAuth, requireAdmin, async (_req: Request, res: Response) => {
     try {
         const { from, to } = currentMonthBounds();
 

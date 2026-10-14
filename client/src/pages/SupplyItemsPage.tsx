@@ -98,7 +98,7 @@ export default function SupplyItemsPage() {
             </button>
             <h2 style={{ margin: 0, letterSpacing: 0.2 }}>Items</h2>
             <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 13 }}>
-              Le catalogue — un article regroupe tous ses lots d'achat. Stock calculé depuis le ledger, jamais stocké.
+              The catalogue — an item groups all of its purchase lots. Stock is computed from the ledger, never stored.
             </p>
           </div>
         </div>

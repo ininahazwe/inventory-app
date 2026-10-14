@@ -374,3 +374,183 @@ export function getIncidentResolvedEmail(
         `,
     };
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// PRÊTS DE MATÉRIEL (module loans)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const loanShell = (title: string, accent: string, body: string, ctaUrl: string, ctaLabel: string) => `
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: Arial, sans-serif;">
+      <h2 style="color: ${accent};">${title}</h2>
+      ${body}
+      <div style="margin: 30px 0; text-align: center;">
+          <a href="${ctaUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${accent}; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">${ctaLabel}</a>
+      </div>
+      <p style="font-size: 13px; color: #6b7280;">Assets Management System</p>
+  </div>`;
+
+const loanFacts = (rows: Array<[string, string]>, background: string, accent: string) => `
+  <div style="background-color: ${background}; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid ${accent};">
+      ${rows.map(([k, v]) => `<p style="margin: 0 0 8px 0;"><strong>${k}:</strong> ${v}</p>`).join('')}
+  </div>`;
+
+/** Aux admins : une demande de prêt attend une décision. */
+export function getLoanRequestedAdminEmail(
+    recipients: string[],
+    assetLabel: string,
+    borrowerEmail: string,
+    startDate: string,
+    dueDate: string,
+    purpose: string | null,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Request pending — ${assetLabel}`,
+        html: loanShell(
+            '📥 New loan request',
+            '#2563eb',
+            `<p><strong>${borrowerEmail}</strong> is asking to borrow a piece of equipment.</p>` +
+            loanFacts([
+                ['Asset', assetLabel],
+                ['From', startDate],
+                ['Due back', dueDate],
+                ['Purpose', purpose || '—'],
+            ], '#eff6ff', '#2563eb'),
+            loanUrl,
+            'Review request'
+        ),
+    };
+}
+
+/** À l'emprunteur : sa demande est approuvée ou refusée. */
+export function getLoanDecisionEmail(
+    borrowerEmail: string,
+    assetLabel: string,
+    decision: 'approved' | 'rejected',
+    startDate: string,
+    dueDate: string,
+    notes: string | null,
+    loanUrl: string
+): EmailPayload {
+    const approved = decision === 'approved';
+    const accent = approved ? '#16a34a' : '#b91c1c';
+    return {
+        to: borrowerEmail,
+        subject: `[Loan] ${approved ? 'Approved' : 'Declined'} — ${assetLabel}`,
+        html: loanShell(
+            approved ? '✅ Loan approved' : '❌ Loan declined',
+            accent,
+            approved
+                ? `<p>Your loan request has been approved. Collect the equipment from IT and return it by the due date below.</p>` +
+                  loanFacts([['Asset', assetLabel], ['From', startDate], ['Due back', dueDate], ['Note', notes || '—']], '#f0fdf4', accent)
+                : `<p>Your loan request was declined.</p>` +
+                  loanFacts([['Asset', assetLabel], ['Reason', notes || '—']], '#fef2f2', accent),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}
+
+/** À l'emprunteur (copie admins) : le matériel aurait dû être rendu. */
+export function getLoanOverdueReminderEmail(
+    recipients: string[],
+    assetLabel: string,
+    borrowerEmail: string,
+    dueDate: string,
+    daysLate: number,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Overdue (${daysLate}d) — ${assetLabel}`,
+        html: loanShell(
+            '⏰ Equipment overdue',
+            '#b45309',
+            `<p>This loan is <strong>${daysLate} day${daysLate === 1 ? '' : 's'}</strong> past its return date. ` +
+            `Please return the equipment to IT, or request an extension.</p>` +
+            loanFacts([
+                ['Asset', assetLabel],
+                ['Borrower', borrowerEmail],
+                ['Was due', dueDate],
+            ], '#fffbeb', '#b45309'),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}
+
+/** À l'emprunteur : accusé de retour — ce qui a été constaté, et quand. */
+export function getLoanReturnedEmail(
+    borrowerEmail: string,
+    assetLabel: string,
+    conditionIn: string,
+    daysLate: number,
+    loanUrl: string
+): EmailPayload {
+    const clean = conditionIn === 'good' || conditionIn === 'fair';
+    const accent = clean ? '#16a34a' : '#b91c1c';
+    return {
+        to: borrowerEmail,
+        subject: `[Loan] Returned — ${assetLabel}`,
+        html: loanShell(
+            '📦 Equipment returned',
+            accent,
+            `<p>The loan below has been closed. This email is your receipt.</p>` +
+            loanFacts([
+                ['Asset', assetLabel],
+                ['Condition on return', conditionIn],
+                ['Returned', daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'on time'],
+            ], clean ? '#f0fdf4' : '#fef2f2', accent),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}
+
+/** Rappel : prêt approuvé dont la date de début est passée sans retrait. */
+export function getLoanPickupReminderEmail(
+    recipients: string[],
+    assetLabel: string,
+    borrowerEmail: string,
+    startDate: string,
+    graceDaysLeft: number,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Not picked up — ${assetLabel}`,
+        html: loanShell(
+            '📦 Equipment not picked up',
+            '#b45309',
+            `<p>This approved loan was due to start on <strong>${startDate}</strong> and the equipment has not been collected. ` +
+            `The reservation will be released automatically in <strong>${graceDaysLeft} day${graceDaysLeft === 1 ? '' : 's'}</strong> ` +
+            `unless it is picked up.</p>` +
+            loanFacts([['Asset', assetLabel], ['Borrower', borrowerEmail], ['Planned start', startDate]], '#fffbeb', '#b45309'),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}
+
+/** À l'emprunteur : réservation libérée faute de retrait. */
+export function getLoanAutoCancelledEmail(
+    recipients: string[],
+    assetLabel: string,
+    startDate: string,
+    graceDays: number,
+    loanUrl: string
+): EmailPayload {
+    return {
+        to: recipients,
+        subject: `[Loan] Reservation released — ${assetLabel}`,
+        html: loanShell(
+            '🚫 Reservation released',
+            '#6b7280',
+            `<p>The equipment was not picked up within ${graceDays} day${graceDays === 1 ? '' : 's'} of the planned start date, ` +
+            `so the reservation has been released. Submit a new request if you still need it.</p>` +
+            loanFacts([['Asset', assetLabel], ['Planned start', startDate]], '#f9fafb', '#6b7280'),
+            loanUrl,
+            'View loan'
+        ),
+    };
+}

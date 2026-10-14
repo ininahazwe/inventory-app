@@ -13,10 +13,12 @@ describe('startScheduler', () => {
         }
     });
 
-    it('registers the auto-close and SLA jobs', () => {
+    it('registers the auto-close, SLA and loan-overdue jobs', () => {
         startScheduler();
         expect(schedule.scheduledJobs['auctions-auto-close']).toBeDefined();
         expect(schedule.scheduledJobs['incidents-sla-check']).toBeDefined();
+        expect(schedule.scheduledJobs['loans-overdue-check']).toBeDefined();
+        expect(schedule.scheduledJobs['loans-noshow-check']).toBeDefined();
     });
 
     it('does not throw when called a second time (idempotent guard)', () => {

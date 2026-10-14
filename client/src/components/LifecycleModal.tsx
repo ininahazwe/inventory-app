@@ -50,7 +50,7 @@ export default function LifecycleModal({
       if (action === "exit_repair" && cost.trim()) {
         const parsed = Number(cost.replace(",", "."));
         if (Number.isNaN(parsed) || parsed < 0) {
-          setError("Le coût doit être un nombre positif");
+          setError("Cost must be a positive number");
           return;
         }
         costValue = Math.round(parsed * 100) / 100;
@@ -64,8 +64,8 @@ export default function LifecycleModal({
       // Le modal sera fermé par le parent après succès
 
     } catch (err: any) {
-      console.error("Erreur dans LifecycleModal:", err);
-      setError(err.message || "Une erreur est survenue");
+      console.error("LifecycleModal error:", err);
+      setError(err.message || "Something went wrong");
     } finally {
       setIsSubmitting(false);
     }
@@ -158,7 +158,7 @@ export default function LifecycleModal({
 
         {action === "exit_repair" && (
           <div className="span-2">
-            <label className="label">Coût de la réparation (optionnel)</label>
+            <label className="label">Repair cost (optional)</label>
             <input
               className="field"
               type="text"
