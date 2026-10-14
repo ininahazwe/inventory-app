@@ -11,9 +11,10 @@ const num = (v: unknown): number => {
 
 type StatsData = {
   total: number;           // All assets (including retired)
-  available: number;       // Non-retired assets (in_stock + assigned + repair)
+  available: number;       // Non-retired assets (in_stock + assigned + on_loan + repair)
   inStock: number;
   assigned: number;
+  onLoan: number;
   repair: number;
   retired: number;         // Newly tracked
   categories: Array<{ name: string; count: number }>
@@ -35,6 +36,7 @@ export default function InventoryStats({
     available: 0,
     inStock: 0,
     assigned: 0,
+    onLoan: 0,
     repair: 0,
     retired: 0,
     categories: []
@@ -46,7 +48,7 @@ export default function InventoryStats({
 
     // ✅ Agrégation SQL côté serveur — plus de fetch limité à 1000 lignes recalculé en JS.
     Promise.all([
-      rpc<{ total: number; in_stock: number; assigned: number; repair: number; retired: number }>('get_asset_stats'),
+      rpc<{ total: number; in_stock: number; assigned: number; on_loan: number; repair: number; retired: number }>('get_asset_stats'),
       api.get<{ id: number; name: string; type: string; assets_count: number }[]>('/categories?type=asset'),
     ]).then(([statsRes, catsRes]) => {
       const s = statsRes.data;
@@ -55,9 +57,10 @@ export default function InventoryStats({
       const totalCount = num(s?.total);
       const inStockCount = num(s?.in_stock);
       const assignedCount = num(s?.assigned);
+      const onLoanCount = num(s?.on_loan);
       const repairCount = num(s?.repair);
       const retiredCount = num(s?.retired);
-      const availableCount = inStockCount + assignedCount + repairCount; // Exclude retired
+      const availableCount = inStockCount + assignedCount + onLoanCount + repairCount; // Exclude retired
 
       const categorized = cats
         .map(c => ({ name: c.name, count: num(c.assets_count) }))
@@ -73,6 +76,7 @@ export default function InventoryStats({
         available: availableCount,
         inStock: inStockCount,
         assigned: assignedCount,
+        onLoan: onLoanCount,
         repair: repairCount,
         retired: retiredCount,
         categories: categorized.sort((a, b) => b.count - a.count),
@@ -115,6 +119,9 @@ export default function InventoryStats({
         }}>
           <StatBox label="In Stock" value={stats.inStock} bg="#e8f5e8" color="#2d5a2d" />
           <StatBox label="Assigned" value={stats.assigned} bg="#e8f0ff" color="var(--brand)" />
+          {stats.onLoan > 0 && (
+            <StatBox label="On Loan" value={stats.onLoan} bg="#ede9fe" color="#7c3aed" />
+          )}
           {stats.repair > 0 && (
             <StatBox label="In Repair" value={stats.repair} bg="#fff3cd" color="#b98b46" />
           )}

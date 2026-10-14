@@ -51,3 +51,29 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction) {
         next();
     }
 }
+
+/** Admin or super_admin only (must run after requireAuth). */
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+    const user = req.user as AuthUser | undefined;
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+}
+
+export function isAdminUser(user?: { role?: string } | null): boolean {
+    return !!user && (user.role === 'admin' || user.role === 'super_admin');
+}
+
+/**
+ * SQL condition: asset `a` is "entrusted" to the user, i.e. actively assigned
+ * to them (by user id or email) or currently checked out to them on a loan.
+ * Requires the query to alias assets as `a`. Params: [uid, email, email].
+ */
+export const ENTRUSTED_SQL = `(
+    EXISTS (SELECT 1 FROM assignments x WHERE x.asset_id = a.id AND x.status = 'active'
+            AND (x.assigned_user_id = ? OR x.assignee_email = ?))
+    OR EXISTS (SELECT 1 FROM loans l WHERE l.asset_id = a.id AND l.status = 'checked_out'
+            AND l.borrower_email = ?)
+)`;
+export const entrustedParams = (u: { uid?: string; email?: string }) => [u.uid ?? '', u.email ?? '', u.email ?? ''];

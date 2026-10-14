@@ -23,22 +23,22 @@ export function LifecycleActions({
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {status !== "repair" && (
                     <button className="pill" onClick={sendToRepair} disabled={busy}>
-                        {busy ? "…" : "Mettre en réparation"}
+                        {busy ? "…" : "Send for repair"}
                     </button>
                 )}
                 {status === "repair" && (
                     <button className="pill" onClick={exitRepair} disabled={busy}>
-                        {busy ? "…" : "Sortie de réparation"}
+                        {busy ? "…" : "Return from repair"}
                     </button>
                 )}
                 {status !== "retired" && (
                     <button className="pill" onClick={retireAsset} disabled={busy}>
-                        {busy ? "…" : "Retirer définitivement"}
+                        {busy ? "…" : "Retire permanently"}
                     </button>
                 )}
                 {status === "assigned" && (
                     <button className="pill" onClick={returnAsset} disabled={busy}>
-                        {busy ? "…" : "Marquer comme retourné"}
+                        {busy ? "…" : "Mark as returned"}
                     </button>
                 )}
             </div>

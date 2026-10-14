@@ -14,7 +14,7 @@ export default function PrintQRLabel({ assetId, assetLabel }: PrintQRLabelProps)
   const handlePrint = () => {
     const printWindow = window.open("", "_blank", "width=400,height=300");
     if (!printWindow) {
-      alert("Impossible d'ouvrir la fenêtre d'impression. Vérifiez les popups.");
+      alert("Could not open the print window. Please check your popup blocker.");
       return;
     }
 

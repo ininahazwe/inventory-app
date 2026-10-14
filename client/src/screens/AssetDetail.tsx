@@ -13,6 +13,7 @@ import AuditLog from '../components/AuditLog';
 import AssetTimeline from '../components/AssetTimeline';
 import PublicAssetCard from './PublicAssetCard';
 import { IncidentForm } from '../components/IncidentForm';
+import { assetStatusLabel } from '../lib/assetStatus';
 
 type Asset = {
   id: number;
@@ -153,10 +154,15 @@ export default function AssetDetail() {
     return getWarrantyStatus(asset?.warranty_end);
   }, [asset?.warranty_end]);
 
+  const [notAllowed, setNotAllowed] = useState(false);
+
   const load = async () => {
     setErr(null);
     const { data: a, error: ea } = await api.get<Asset>(`/assets/${assetId}`);
-    if (ea) { setErr(ea); return; }
+    if (ea) {
+      if (/not assigned to you/i.test(ea)) setNotAllowed(true); else setErr(ea);
+      return;
+    }
     setAsset(a);
   };
 
@@ -205,7 +211,7 @@ export default function AssetDetail() {
   const returnAsset = async () => {
     setBusy(true);
     const { error } = await rpc('return_asset', { p_asset_id: assetId });
-    if (error) setErr(`Erreur : ${error}`);
+    if (error) setErr(`Error: ${error}`);
     else await load();
     setBusy(false);
   };
@@ -216,7 +222,7 @@ export default function AssetDetail() {
     const { error } = await api.delete(`/assets/${assetId}`);
     setBusy(false);
     if (error) {
-      setErr(`Erreur : ${error}`);
+      setErr(`Error: ${error}`);
       return;
     }
     setDeleteConfirmOpen(false);
@@ -303,7 +309,7 @@ export default function AssetDetail() {
     setSavingEdit(true);
     setErrEdit(null);
     try {
-      if (!edLabel.trim()) throw new Error('Label requis');
+      if (!edLabel.trim()) throw new Error('Label is required');
 
       const category_id = await getOrCreateCategoryId(edCategoryName);
 
@@ -312,7 +318,7 @@ export default function AssetDetail() {
         const normalized = edPrice.replace(',', '.');
         priceNum = parseFloat(normalized);
         if (isNaN(priceNum)) {
-          throw new Error('Prix invalide');
+          throw new Error('Invalid price');
         }
         priceNum = parseFloat(priceNum.toFixed(2));
       }
@@ -334,15 +340,17 @@ export default function AssetDetail() {
       setEditOpen(false);
       await load();
     } catch (e: unknown) {
-      setErrEdit(e instanceof Error ? e.message : 'Erreur');
+      setErrEdit(e instanceof Error ? e.message : 'Error');
     }
     finally {
       setSavingEdit(false);
     }
   };
 
-  if (!authChecked) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Vérification…</p></div></main>;
+  if (!authChecked) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Checking access…</p></div></main>;
   if (!isAuthenticated) return <PublicAssetCard />;
+  // Signed-in non-admin scanning/opening an asset that isn't theirs: show the public card only.
+  if (notAllowed) return <PublicAssetCard />;
   if (loading) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Loading…</p></div></main>;
   if (!asset) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Asset not found</p>{err && <p style={{ padding: 24, color: 'crimson' }}>{err}</p>}</div></main>;
 
@@ -354,7 +362,7 @@ export default function AssetDetail() {
         <motion.div className="shell-body" variants={sweep} initial="initial" animate="animate" exit="exit">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 48 }}>
             <h2 style={{ margin: 0 }}>{asset.label}</h2>
-            <span style={{ padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: '1px solid var(--line)', color: asset.status === 'assigned' || asset.status === 'repair' ? '#fff' : 'var(--ink)', background: asset.status === 'assigned' ? 'var(--brand)' : asset.status === 'repair' ? '#b98b46' : asset.status === 'retired' ? '#eee' : '#f4f1ee' }}>{asset.status}</span>
+            <span style={{ padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: '1px solid var(--line)', color: asset.status === 'assigned' || asset.status === 'repair' || asset.status === 'on_loan' ? '#fff' : 'var(--ink)', background: asset.status === 'assigned' ? 'var(--brand)' : asset.status === 'on_loan' ? '#7c3aed' : asset.status === 'repair' ? '#b98b46' : asset.status === 'retired' ? '#eee' : '#f4f1ee' }}>{assetStatusLabel(asset.status)}</span>
           </div>
 
           <section className="infos">
@@ -362,14 +370,14 @@ export default function AssetDetail() {
               <Info label="Serial number" value={asset.serial_no || '—'} />
               <Info label="Category" value={asset.category_name || '—'} />
               <Info label="Purchase date" value={formatDate(asset.purchased_at)} />
-              <Info label="Purchase price" value={asset.purchase_price != null ? `$${asset.purchase_price.toFixed(2)}` : '—'} />
-              <Info label="Supplier" value={asset.supplier || '—'} />
+              {isAdmin && <Info label="Purchase price" value={asset.purchase_price != null ? `$${asset.purchase_price.toFixed(2)}` : '—'} />}
+              {isAdmin && <Info label="Supplier" value={asset.supplier || '—'} />}
               <Info label="Warranty end" value={warrantyStatus.text} />
               <Info label="Funder" value={asset.funder || '—'} />
-              <Info
+              {isAdmin && <Info
                 label="Total maintenance cost"
                 value={asset.total_repair_cost ? `GH₵${asset.total_repair_cost.toFixed(2)}` : '—'}
-              />
+              />}
               {asset.notes && <Info className="span-2" label="Notes" value={asset.notes} />}
             </div>
 
@@ -383,9 +391,9 @@ export default function AssetDetail() {
             </div>
 
             <div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                {asset.status !== 'assigned' ? <button className="pill" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill admin" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
-              </div>
+              {isAdmin && <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                {asset.status !== 'assigned' ? <button className="pill admin" onClick={() => setAssignOpen(true)} disabled={busy}>{busy ? '…' : 'Assign'}</button> : <button className="pill admin" onClick={() => setReturnOpen(true)} disabled={busy}>{busy ? '…' : 'Mark as Returned'}</button>}
+              </div>}
               {asset.photo_url && (
                 <div style={{ marginTop: 12 }}>
                   <img src={asset.photo_url} alt={asset.label} style={{ maxWidth: 200, maxHeight: 200, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line)' }} />
@@ -394,7 +402,7 @@ export default function AssetDetail() {
             </div>
           </section>
 
-          {asset.status !== 'retired' && (
+          {isAdmin && asset.status !== 'retired' && (
             <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
               <h3 style={{ margin: '8px 0' }}>Lifecycle</h3>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -410,17 +418,17 @@ export default function AssetDetail() {
                 formulaire de demande. Masqué si l'asset n'est pas marqué « prêtable »
                 (interrupteur de /inventory) ou s'il est retiré/vendu — le serveur
                 refuserait la demande de toute façon. */}
-            {asset.is_lendable === 1 && asset.status !== 'retired' && asset.status !== 'auctioned' && (
-              <button className="pill" onClick={() => navigate(`/loans/new?asset_id=${asset.id}`)} style={{ background: 'rgb(231, 223, 248)' }}>🔁 Lend this</button>
+            {isAdmin && asset.is_lendable === 1 && asset.status !== 'retired' && asset.status !== 'auctioned' && (
+              <button className="pill admin" onClick={() => navigate(`/loans/new?asset_id=${asset.id}`)} style={{ background: 'rgb(231, 223, 248)' }}>🔁 Lend this</button>
             )}
-            <button className="pill" onClick={() => setShowIncidentForm(true)} style={{ background: '#b98b46' }}>📋 Report an incident</button>
-            <button className="pill" onClick={openEdit} disabled={busy}>{busy ? '…' : 'Edit'}</button>
+            <button className="pill admin" onClick={() => setShowIncidentForm(true)} style={{ background: '#b98b46' }}>📋 Report an incident</button>
+            {isAdmin && <button className="pill admin" onClick={openEdit} disabled={busy}>{busy ? '…' : 'Edit'}</button>}
             {isAdmin && <button className="pill" style={{ background: '#dc3545', color: 'white' }} onClick={() => setDeleteConfirmOpen(true)} disabled={busy}>{busy ? '…' : 'Delete'}</button>}
           </div>
 
           {err && <p style={{ color: 'crimson', marginTop: 16 }}>{err}</p>}
 
-          <Modal open={showIncidentForm} onClose={() => setShowIncidentForm(false)} title="Signaler un incident">
+          <Modal open={showIncidentForm} onClose={() => setShowIncidentForm(false)} title="Report an incident">
             <IncidentForm assetId={asset.id} assetLabel={asset.label} onCreated={incidentId => { setShowIncidentForm(false); navigate(`/incidents/${incidentId}`); }} onCancel={() => setShowIncidentForm(false)} />
           </Modal>
         </motion.div>
@@ -486,10 +494,12 @@ export default function AssetDetail() {
           <AssetTimeline assetId={asset.id} />
         </section>
 
-        <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
-          <h3 style={{ margin: '8px 0' }}>📋 Complete Audit History</h3>
-          <AuditLog entityType="assets" entityId={asset.id.toString()} />
-        </section>
+        {isAdmin && (
+          <section style={{ borderTop: '1px solid var(--line)', margin: '20px 6px' }}>
+            <h3 style={{ margin: '8px 0' }}>📋 Complete Audit History</h3>
+            <AuditLog entityType="assets" entityId={asset.id.toString()} />
+          </section>
+        )}
       </div>
     </motion.main>
   );

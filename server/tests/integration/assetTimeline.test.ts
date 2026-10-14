@@ -111,15 +111,32 @@ describe('GET /api/assets/:id/timeline', () => {
     });
 
     it('limits a non-admin to their own loans', async () => {
-        withLoans([]);
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([{ id: 1 }]))   // asset exists
+            .mockResolvedValueOnce(mockRows([{ id: 1 }]))   // entrusted to the user
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]))
+            .mockResolvedValueOnce(mockRows([]));            // loans
 
         await request(app)
             .get('/api/assets/1/timeline')
             .set(asUser({ email: 'me@mfwa.org', role: 'user' }));
 
-        const loanCall = mockedExecute.mock.calls[5];
+        const loanCall = mockedExecute.mock.calls[6];
         expect(String(loanCall[0])).toContain('borrower_email = ?');
         expect(loanCall[1]).toEqual([1, 'me@mfwa.org', 'me@mfwa.org']);
+    });
+
+    it('403s a non-admin on an asset that is not entrusted to them', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([{ id: 1 }]))
+            .mockResolvedValueOnce(mockRows([]));
+        const res = await request(app)
+            .get('/api/assets/1/timeline')
+            .set(asUser({ email: 'me@mfwa.org', role: 'user' }));
+        expect(res.status).toBe(403);
     });
 
     it('lets an admin see every loan of the asset', async () => {

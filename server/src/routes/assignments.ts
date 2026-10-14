@@ -2,14 +2,14 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { AppException, NotFoundException, BusinessException } from '../exceptions';
 import { todayDateString } from '../utils/dateHelpers';
 
 const router = Router();
 
 // GET /api/assignments - List all assignments
-router.get('/', requireAuth, async (req: Request, res: Response) => {
+router.get('/', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const [assignments] = await db.query(
             `SELECT a.id, a.asset_id, a.assignee_name, a.assignee_email, a.assigned_user_id,
@@ -30,7 +30,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 });
 
 // GET /api/assignments/assignees - List unique assignees
-router.get('/assignees', requireAuth, async (req: Request, res: Response) => {
+router.get('/assignees', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const { page = 1, limit = 10, q = '' } = req.query;
         const pageNum = parseInt(page as string) || 1;
@@ -76,7 +76,7 @@ router.get('/assignees', requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/assignments - Créer un assignment (user et/ou location)
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const { asset_id, assigned_user_id, location_id } = req.body;
 

@@ -36,7 +36,7 @@ function styleFor(type: string) {
 function formatWhen(at: string): string {
   const d = new Date(at);
   if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export default function AssetTimeline({ assetId }: { assetId: number }) {

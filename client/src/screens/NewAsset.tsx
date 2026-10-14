@@ -64,7 +64,7 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setSaving(true);
     try {
-      if (!label.trim()) throw new Error('Le libellé est obligatoire.');
+      if (!label.trim()) throw new Error('Label is required.');
       const category_id = await getOrCreateCategoryId(categoryName);
       const { data: inserted, error } = await api.post<{ id: number }>('/assets', {
         label: label.trim(), serial_no: serial.trim() || null, category_id,
@@ -75,13 +75,13 @@ export default function NewAsset({ onCreated, onCancel }: Props) {
         photo_url: photoUrl,
       });
       if (error) throw new Error(error);
-      if (!inserted?.id) throw new Error('ID non retourné');
+      if (!inserted?.id) throw new Error('No ID returned');
       setLabel(''); setSerial(''); setCategoryName(''); setPurchasedAt('');
       setPurchasePrice(''); setSupplier(''); setFunder(''); setWarrantyEnd(''); setNotes('');
       setPhotoUrl(null);
       onCreated?.();
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Erreur lors de l'enregistrement.");
+      setErr(e instanceof Error ? e.message : "Error while saving the asset.");
     } finally {
       setSaving(false);
     }

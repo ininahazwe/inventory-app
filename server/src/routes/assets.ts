@@ -1,20 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin, isAdminUser, ENTRUSTED_SQL, entrustedParams } from '../middleware/auth';
 import { logAudit } from './audit';
 import {AuthUser} from "../types/requests";
 import { calendarDaysLate } from '../utils/dateHelpers';
 
 const router = Router();
 
-const requireAdmin = (req: Request, res: Response, next: Function) => {
-    const user = (req as any).user;
-    if (!user || (user.role !== 'super_admin' && user.role !== 'admin')) {
-        return res.status(403).json({ error: 'Admin access required' });
-    }
-    next();
-};
 
 // ✅ Helper: clean date to YYYY-MM-DD format
 const cleanDate = (dateStr: any): string | null => {
@@ -76,6 +69,16 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
             whereConditions.push('a.is_lendable = 1');
         }
 
+        // Non-admins: only assets entrusted to them. Exception: the loan-request
+        // picker (?lendable=1) lists lendable assets for everyone, minus assignee details.
+        const listUser = (req as any).user;
+        const listIsAdmin = isAdminUser(listUser);
+        const listRestricted = !listIsAdmin && lendable !== '1';
+        if (listRestricted) {
+            whereConditions.push(ENTRUSTED_SQL);
+            params.push(...entrustedParams(listUser));
+        }
+
         const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
 
         const countQuery = `
@@ -108,6 +111,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         params.push(pageSize, offset);
 
         const [assets] = await db.query(dataQuery, params);
+        if (!listIsAdmin && !listRestricted) {
+            (assets as any[]).forEach(r => { r.assignee_name = null; r.assignee_email = null; });
+        }
 
         logger.info(`Fetched ${(assets as any[]).length} assets`, 'ASSETS');
         return res.json({
@@ -124,6 +130,16 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
     try {
         const id = String(req.params.id);
+        const detailUser = (req as any).user;
+        if (!isAdminUser(detailUser)) {
+            const [ok] = await db.query(
+                `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                [id, ...entrustedParams(detailUser)]
+            );
+            if (!(ok as any[]).length) {
+                return res.status(403).json({ error: 'This asset is not assigned to you' });
+            }
+        }
 
         const [asset] = await db.query(`
             SELECT
@@ -180,7 +196,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/assets - Create new asset
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const { label, serial_no, category_id, status, funder, purchase_price, photo_url, purchased_at, warranty_end, supplier, notes } = req.body;
         const user = (req as any).user;
@@ -236,7 +252,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 });
 
 // PUT /api/assets/:id - Update asset
-router.put('/:id', requireAuth, async (req: Request, res: Response) => {
+router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     // ✅ Type id correctly (req.params.id is string | string[])
     const id = String(req.params.id);
     const assetId = parseInt(id, 10);
@@ -361,7 +377,7 @@ router.patch('/:id/lendable', requireAuth, requireAdmin, async (req: Request, re
 // DELETE /api/assets/:id - Supprimer un asset
 // ✅ Requiert auth + admin
 
-router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
         const user = req.user as AuthUser;
         const assetId = parseInt(req.params.id as string, 10);
@@ -449,6 +465,17 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
         if (!(assetCheck as any[]).length) {
             return res.status(404).json({ error: 'Asset not found' });
         }
+        const tlUser = (req as any).user;
+        const tlIsAdmin = isAdminUser(tlUser);
+        if (!tlIsAdmin) {
+            const [ok] = await db.execute(
+                `SELECT a.id FROM assets a WHERE a.id = ? AND ${ENTRUSTED_SQL}`,
+                [assetId, ...entrustedParams(tlUser)]
+            );
+            if (!(ok as any[]).length) {
+                return res.status(403).json({ error: 'This asset is not assigned to you' });
+            }
+        }
 
         const [assignmentRows] = await db.execute(
             `SELECT id, assignee_name, assignee_email, assigned_at, returned_at, status, created_at
@@ -503,7 +530,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
 
         const events: TimelineEvent[] = [];
 
-        for (const r of assignmentRows as any[]) {
+        for (const r of (assignmentRows as any[]).filter(x => tlIsAdmin || x.assignee_email === tlUser.email)) {
             const who = r.assignee_name || r.assignee_email || 'user';
             events.push({
                 type: 'assignment',
@@ -519,7 +546,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of lifecycleRows as any[]) {
+        for (const r of (tlIsAdmin ? (lifecycleRows as any[]) : [])) {
             const cost = r.cost != null ? Number(r.cost) : null;
             events.push({
                 type: r.event_type || 'lifecycle',
@@ -531,7 +558,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of incidentRows as any[]) {
+        for (const r of (incidentRows as any[]).filter(x => tlIsAdmin || x.reported_by_email === tlUser.email)) {
             events.push({
                 type: 'incident',
                 at: new Date(r.created_at).toISOString(),
@@ -542,7 +569,7 @@ router.get('/:id/timeline', requireAuth, async (req: Request, res: Response) => 
             });
         }
 
-        for (const r of auctionRows as any[]) {
+        for (const r of (tlIsAdmin ? (auctionRows as any[]) : [])) {
             const highest = r.current_highest_bid != null ? `GH₵${Number(r.current_highest_bid).toFixed(2)}` : '—';
             events.push({
                 type: 'auction',
