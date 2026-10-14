@@ -33,11 +33,11 @@ router.post('/test-email', requireAuth, requireAdmin, async (req, res) => {
         const code = String(err?.response?.data?.error || err?.code || '');
         let hint = 'Check the server logs and the Google credentials.';
         if (/No access, refresh token/i.test(message)) {
-            hint = 'REFRESH_TOKEN is empty or not loaded by the server. Check the variable (config below) and restart the server.';
+            hint = 'GMAIL_REFRESH_TOKEN is empty or not loaded by the server. Check the variable (config below) and restart the server.';
         } else if (/invalid_grant/i.test(code + message)) {
-            hint = 'The REFRESH_TOKEN is expired, revoked, or was issued for a different CLIENT_ID/CLIENT_SECRET or Google account. Generate a new one.';
+            hint = 'The REFRESH_TOKEN is expired, revoked, or was issued for a different GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET or Google account. Generate a new one.';
         } else if (/invalid_client|unauthorized_client/i.test(code + message)) {
-            hint = 'CLIENT_ID / CLIENT_SECRET are wrong or do not match the refresh token.';
+            hint = 'GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET are wrong or do not match the refresh token.';
         } else if (/insufficient|scope/i.test(message)) {
             hint = 'The token was not granted the Gmail send scope (https://www.googleapis.com/auth/gmail.send).';
         } else if (/has not been used|disabled|accessNotConfigured/i.test(message)) {

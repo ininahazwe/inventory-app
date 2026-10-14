@@ -2,17 +2,23 @@
 import { google } from 'googleapis';
 import { logger } from "../middleware/logger";
 
+// New names GMAIL_*; legacy names (CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN) still accepted.
+function gmailEnv(name: string, legacy: string): string {
+    return (process.env[name] || process.env[legacy] || '').trim();
+}
+
+
 const SENDER_EMAIL = process.env.EMAIL_USER || '';
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
 
 const oAuth2Client = new google.auth.OAuth2(
-    (process.env.CLIENT_ID || '').trim(),
-    (process.env.CLIENT_SECRET || '').trim(),
+    gmailEnv('GMAIL_CLIENT_ID','CLIENT_ID'),
+    gmailEnv('GMAIL_CLIENT_SECRET','CLIENT_SECRET'),
     'https://developers.google.com/oauthplayground'
 );
 
 oAuth2Client.setCredentials({
-    refresh_token: (process.env.REFRESH_TOKEN || '').trim()
+    refresh_token: gmailEnv('GMAIL_REFRESH_TOKEN','REFRESH_TOKEN')
 });
 
 const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
@@ -78,9 +84,9 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
 export function emailConfigStatus() {
     return {
         EMAIL_USER: !!process.env.EMAIL_USER,
-        CLIENT_ID: !!process.env.CLIENT_ID,
-        CLIENT_SECRET: !!process.env.CLIENT_SECRET,
-        REFRESH_TOKEN: !!process.env.REFRESH_TOKEN,
+        GMAIL_CLIENT_ID: !!gmailEnv('GMAIL_CLIENT_ID','CLIENT_ID'),
+        GMAIL_CLIENT_SECRET: !!gmailEnv('GMAIL_CLIENT_SECRET','CLIENT_SECRET'),
+        GMAIL_REFRESH_TOKEN: !!gmailEnv('GMAIL_REFRESH_TOKEN','REFRESH_TOKEN'),
         FRONTEND_URL: !!process.env.FRONTEND_URL,
         sender: `${SENDER_NAME} <${SENDER_EMAIL}>`,
     };
