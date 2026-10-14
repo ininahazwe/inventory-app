@@ -110,7 +110,7 @@ export default function SupplyItemDetailPage() {
   // UTC pour ne pas dépendre du fuseau du navigateur.
   const formatDate = (dateString: string) => {
     const [y, m, d] = dateString.split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('fr-FR', {
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', {
       year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
     });
   };

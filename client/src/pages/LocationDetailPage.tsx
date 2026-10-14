@@ -62,7 +62,7 @@ export default function LocationDetailPage() {
   // jour précédent pour un fuseau à offset négatif).
   const formatDate = (dateString: string) => {
     const [y, m, d] = dateString.split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('fr-FR', {
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

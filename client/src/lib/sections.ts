@@ -15,6 +15,8 @@ export interface SectionDef {
   description: string;
   icon: string;
   color: string;
+  /** Hidden from the hub (and guarded) for non-admin users. */
+  adminOnly?: boolean;
 }
 
 // Pastel tints in the same hue family as each section's existing saturated
@@ -37,6 +39,7 @@ export const SECTIONS: SectionDef[] = [
     description: 'Consumables & stock',
     icon: '📋︎',
     color: '#DCEAE6', // tint of .pill.green #213547
+    adminOnly: true,
   },
   {
     key: 'auctions',

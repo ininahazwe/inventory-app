@@ -31,6 +31,7 @@ import LocationDetailPage from "./pages/LocationDetailPage.tsx";
 import LoansPage from "./pages/LoansPage.tsx";
 import LoanRequestFormPage from "./pages/LoanRequestFormPage.tsx";
 import LoanDetailPage from "./pages/LoanDetailPage.tsx";
+import RequireAdmin from "./components/RequireAdmin.tsx";
 
 const router = createBrowserRouter([
   {
@@ -59,19 +60,26 @@ const router = createBrowserRouter([
       { path: "/auctions", element: <AuctionsPage /> },
       { path: "/incidents/:id", element: <IncidentDetailPage /> },
       { path: "/incidents", element: <IncidentsPage /> },
-      { path: "/supplies/create", element: <SupplyReceiptFormPage /> },
-      { path: "/supplies/:id/edit", element: <SupplyReceiptFormPage /> },
-      { path: "/supplies/issue", element: <SupplyIssueFormPage /> },
-      { path: "/supplies/adjust", element: <SupplyAdjustFormPage /> },
-      { path: "/supplies", element: <SuppliesPage /> },
-      { path: "/supply-items", element: <SupplyItemsPage /> },
-      { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
       { path: "/loans/new", element: <LoanRequestFormPage /> },
       { path: "/loans/:id", element: <LoanDetailPage /> },
       { path: "/loans", element: <LoansPage /> },
-      { path: "/locations", element: <LocationsPage /> },
-      { path: "/locations/:id", element: <LocationDetailPage /> },
       { path: "/assignees", element: <AssigneesPage /> },
+
+      // Supplies module (and locations): admins only
+      {
+        element: <RequireAdmin />,
+        children: [
+        { path: "/supplies/create", element: <SupplyReceiptFormPage /> },
+        { path: "/supplies/:id/edit", element: <SupplyReceiptFormPage /> },
+        { path: "/supplies/issue", element: <SupplyIssueFormPage /> },
+        { path: "/supplies/adjust", element: <SupplyAdjustFormPage /> },
+        { path: "/supplies", element: <SuppliesPage /> },
+        { path: "/supply-items", element: <SupplyItemsPage /> },
+        { path: "/supply-items/:id", element: <SupplyItemDetailPage /> },
+        { path: "/locations", element: <LocationsPage /> },
+        { path: "/locations/:id", element: <LocationDetailPage /> },
+        ],
+      },
     ],
   },
 ]);
