@@ -11,6 +11,7 @@ import { todayDateString } from '../lib/dateHelpers';
 import { usePermissions } from '../hooks/usePermissions';
 import { useLoans } from '../hooks/useLoans';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type AssetOption = {
   id: number;
   label: string;
@@ -115,7 +116,7 @@ export default function LoanRequestFormPage() {
     navigate(`/loans/${data.id}`);
   };
 
-  if (loading) return <Layout><div style={{ padding: 20, textAlign: 'center' }}>Loading…</div></Layout>;
+  if (loading) return <Layout><SkeletonDetail /></Layout>;
 
   const field: React.CSSProperties = { width: '100%', padding: 8, marginTop: 8, border: '1px solid #ddd', borderRadius: 4, boxSizing: 'border-box' };
 

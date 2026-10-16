@@ -10,6 +10,7 @@ import { api } from '../lib/apiClient';
 import { usePermissions } from '../hooks/usePermissions';
 import { useLoans, LOAN_STATUS_LABEL, LOAN_STATUS_COLOR, type Loan, type LoanEvent, type ConditionIn } from '../hooks/useLoans';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type LoanFull = Loan & { events: LoanEvent[] };
 type LocationOption = { id: number; name: string; floor: string | null };
 
@@ -74,7 +75,7 @@ export default function LoanDetailPage() {
     await reload();
   };
 
-  if (loading) return <Layout><div style={{ padding: 20, textAlign: 'center' }}>Loading…</div></Layout>;
+  if (loading) return <Layout><SkeletonDetail /></Layout>;
   if (!loan) return <Layout><div style={{ padding: 20, textAlign: 'center' }}>Loan not found. <Link to="/loans">Back to loans</Link></div></Layout>;
 
   const overdue = loan.status === 'checked_out' && Number(loan.is_overdue) === 1;

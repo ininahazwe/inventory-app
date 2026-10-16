@@ -1,15 +1,20 @@
 // src/screens/IncidentsList.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIncidents } from '../hooks/useIncidents';
 import type { Incident } from '../hooks/useIncidents';
 import { IncidentBadge } from '../components/IncidentBadge';
 import { usePermissions } from '../hooks/usePermissions';
 
+import { SkeletonListRows } from '../components/Skeleton';
 export const IncidentsList: React.FC = () => {
   const navigate = useNavigate();
   const { isAdmin } = usePermissions();
   const { incidents, loading, error, fetchIncidents } = useIncidents();
+  // loading starts false before the first fetch fires: treat 'never loaded yet' as loading too
+  const hasLoaded = useRef(false);
+  if (loading) hasLoaded.current = true;
+  const showSkeleton = loading || (!hasLoaded.current && !error);
 
   const [filters, setFilters] = useState({
     status: '',
@@ -85,13 +90,12 @@ export const IncidentsList: React.FC = () => {
         </select>
 
         <div style={{ color: 'var(--muted)', fontSize: '13px', marginLeft: 'auto' }}>
-          {loading && 'Loading...'}
           {error && <span style={{ color: '#991b1b' }}>Error: {error}</span>}
         </div>
       </div>
 
       {/* Table */}
-      {filteredIncidents.length > 0 ? (
+      {showSkeleton ? <SkeletonListRows rows={6} /> : filteredIncidents.length > 0 ? (
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

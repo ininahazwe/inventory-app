@@ -7,6 +7,7 @@ import Layout from "../Layout.tsx";
 import Modal from "../components/Modal.tsx";
 import { SectionRevealCover } from "../components/SectionRevealCover";
 
+import { SkeletonListRows } from '../components/Skeleton';
 interface Auction {
   id: number;
   asset_id: number;
@@ -59,7 +60,7 @@ export default function AuctionsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [filter, setFilter] = useState<'active' | 'ended' | 'all'>('active');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -249,7 +250,7 @@ export default function AuctionsPage() {
 
         {/* Table */}
         {loading ? (
-          <p>Loading...</p>
+          <SkeletonListRows rows={6} />
         ) : auctions.length === 0 ? (
           <p>No auctions found</p>
         ) : (

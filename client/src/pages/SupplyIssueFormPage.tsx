@@ -11,6 +11,7 @@ import { api } from '../lib/apiClient';
 import { todayDateString } from '../lib/dateHelpers';
 import Layout from '../Layout';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type SupplyItemOption = {
   id: number;
   code: string;
@@ -178,7 +179,7 @@ export default function SupplyIssueFormPage() {
   if (loading) {
     return (
       <Layout>
-        <div style={{ padding: 20, textAlign: 'center' }}>Loading…</div>
+        <SkeletonDetail />
       </Layout>
     );
   }

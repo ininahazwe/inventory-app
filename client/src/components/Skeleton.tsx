@@ -57,3 +57,16 @@ export function SkeletonListRows({ rows = 6 }: { rows?: number }) {
     </SkeletonGroup>
   );
 }
+
+/** Generic detail / form page: title line + a few content blocks. */
+export function SkeletonDetail({ blocks = 3 }: { blocks?: number }) {
+  return (
+    <SkeletonGroup style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
+      <Skeleton width="35%" height={28} />
+      <Skeleton width="55%" height={14} style={{ marginTop: 10 }} />
+      {Array.from({ length: blocks }).map((_, i) => (
+        <Skeleton key={i} height={110} radius={8} style={{ marginTop: 20 }} />
+      ))}
+    </SkeletonGroup>
+  );
+}

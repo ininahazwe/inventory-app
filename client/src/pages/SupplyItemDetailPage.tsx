@@ -8,6 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
 import Layout from "../Layout.tsx";
 
+import { SkeletonDetail } from '../components/Skeleton';
 const PAGE_SIZE = 20;
 
 type ItemStock = {
@@ -143,7 +144,7 @@ export default function SupplyItemDetailPage() {
     return (
       <Layout>
         <div className="shell-inner">
-          <p style={{ padding: 20, color: 'var(--muted)' }}>Loading…</p>
+          <SkeletonDetail />
         </div>
       </Layout>
     );

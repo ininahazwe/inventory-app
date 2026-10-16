@@ -5,6 +5,7 @@ import { api, auth } from '../lib/apiClient';
 import { useToast } from '../hooks/useToast';
 import Layout from '../Layout';
 
+import { SkeletonDetail } from '../components/Skeleton';
 interface Auction {
   id: number;
   asset_id: number;
@@ -160,7 +161,7 @@ export default function AuctionDetailPage() {
     return (
       <Layout>
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 12px', textAlign: 'center' }}>
-          <p>Loading auction...</p>
+          <SkeletonDetail />
         </div>
       </Layout>
     );

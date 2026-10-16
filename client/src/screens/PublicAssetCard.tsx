@@ -7,6 +7,7 @@ import Modal from "../components/Modal";
 import { IncidentForm } from "../components/IncidentForm"; // 📋 Import de ton formulaire d'incident
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 
+import { SkeletonDetail } from '../components/Skeleton';
 type PublicAsset = {
   id: number;
   label: string;
@@ -80,7 +81,7 @@ export default function PublicAssetCard() {
   if (loading) return (
     <div className="public-asset-shell">
       <div className="public-asset-card">
-        <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Chargement…</p>
+        <SkeletonDetail blocks={2} />
       </div>
     </div>
   );

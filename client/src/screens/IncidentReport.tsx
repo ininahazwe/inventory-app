@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/apiClient';
 import { IncidentForm } from '../components/IncidentForm';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type Asset = { id: number; label: string };
 
 export const IncidentReport: React.FC = () => {
@@ -41,9 +42,7 @@ export const IncidentReport: React.FC = () => {
 
   if (loadingAsset) {
     return (
-      <div className="main-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <p style={{ color: 'var(--muted)' }}>Loading...</p>
-      </div>
+      <SkeletonDetail />
     );
   }
 

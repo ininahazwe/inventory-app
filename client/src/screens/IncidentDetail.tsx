@@ -6,6 +6,7 @@ import type { Incident } from '../hooks/useIncidents';
 import { IncidentBadge } from '../components/IncidentBadge';
 import { usePermissions } from '../hooks/usePermissions';
 
+import { SkeletonDetail } from '../components/Skeleton';
 export const IncidentDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -90,9 +91,7 @@ export const IncidentDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="main-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <p style={{ color: 'var(--muted)' }}>Loading...</p>
-      </div>
+      <SkeletonDetail />
     );
   }
 

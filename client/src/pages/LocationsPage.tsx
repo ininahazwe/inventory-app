@@ -6,6 +6,7 @@ import { api } from '../lib/apiClient';
 import Layout from "../Layout.tsx";
 import Modal from "../components/Modal.tsx";
 
+import { SkeletonTableRows } from '../components/Skeleton';
 const PAGE_SIZE = 10;
 
 type Location = {
@@ -24,7 +25,7 @@ export default function LocationsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Modal create/edit
@@ -173,10 +174,10 @@ export default function LocationsPage() {
           </tr>
           </thead>
           <tbody>
-          {paginated.length === 0 ? (
+          {loading ? <SkeletonTableRows rows={8} cols={3} /> : paginated.length === 0 ? (
             <tr>
               <td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
-                {loading ? 'Loading…' : 'No locations found'}
+                No locations found
               </td>
             </tr>
           ) : paginated.map(loc => (

@@ -23,6 +23,7 @@ import { todayDateString } from '../lib/dateHelpers';
 import { usePermissions } from '../hooks/usePermissions';
 import Layout from '../Layout';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type SupplyItemOption = {
   id: number;
   code: string;
@@ -152,7 +153,7 @@ export default function SupplyAdjustFormPage() {
   if (loading || permissionsLoading) {
     return (
       <Layout>
-        <div style={{ padding: 20, textAlign: 'center' }}>Loading…</div>
+        <SkeletonDetail />
       </Layout>
     );
   }

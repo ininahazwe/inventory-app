@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
-import { auth, token } from "./lib/apiClient";
+import { auth } from "./lib/apiClient";
 import "./styles/theme.css";
 import "./styles/login.css";
 import logo from "./assets/mfwa-logo.png";

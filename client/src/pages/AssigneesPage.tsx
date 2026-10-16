@@ -5,6 +5,7 @@ import { rpc } from '../lib/apiClient';
 import Layout from "../Layout.tsx";
 import Modal from "../components/Modal.tsx";
 
+import { SkeletonTableRows } from '../components/Skeleton';
 const PAGE_SIZE = 10;
 
 type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin'; created_at: string; created_by_email: string | null; };
@@ -13,7 +14,7 @@ export default function AssigneesPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newEmail, setNewEmail] = useState('');
@@ -140,8 +141,8 @@ export default function AssigneesPage() {
         <table className="table">
           <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
           <tbody>
-          {paginatedUsers.length === 0 ? (
-            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{loading ? 'Chargement…' : 'Aucun utilisateur'}</td></tr>
+          {loading ? <SkeletonTableRows rows={8} cols={5} /> : paginatedUsers.length === 0 ? (
+            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
           ) : paginatedUsers.map(user => (
             <tr key={user.id}>
               <td>{user.email}</td>

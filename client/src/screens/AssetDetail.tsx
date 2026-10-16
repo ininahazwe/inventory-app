@@ -15,6 +15,7 @@ import PublicAssetCard from './PublicAssetCard';
 import { IncidentForm } from '../components/IncidentForm';
 import { assetStatusLabel } from '../lib/assetStatus';
 
+import { SkeletonDetail } from '../components/Skeleton';
 type Asset = {
   id: number;
   label: string;
@@ -351,7 +352,7 @@ export default function AssetDetail() {
   if (!isAuthenticated) return <PublicAssetCard />;
   // Signed-in non-admin scanning/opening an asset that isn't theirs: show the public card only.
   if (notAllowed) return <PublicAssetCard />;
-  if (loading) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Loading…</p></div></main>;
+  if (loading) return <main className="shell"><div className="shell-inner"><SkeletonDetail /></div></main>;
   if (!asset) return <main className="shell"><div className="shell-inner"><p style={{ padding: 24 }}>Asset not found</p>{err && <p style={{ padding: 24, color: 'crimson' }}>{err}</p>}</div></main>;
 
   return (
