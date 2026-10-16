@@ -7,6 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../Layout';
 import { usePermissions } from '../hooks/usePermissions';
 import { SectionRevealCover } from '../components/SectionRevealCover';
+import { SkeletonStatRow, SkeletonListRows } from '../components/Skeleton';
 import { useLoans, LOAN_STATUS_LABEL, LOAN_STATUS_COLOR, type Loan, type LoanStatus } from '../hooks/useLoans';
 
 type Tab = { key: string; label: string; query: string };
@@ -81,6 +82,7 @@ export default function LoansPage() {
           </button>
         </div>
 
+        {!stats && <SkeletonStatRow count={6} height={64} />}
         {stats && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '20px 0' }}>
             <StatCard label="Pending approval" value={stats.pending} color="#b45309" />
@@ -123,7 +125,7 @@ export default function LoansPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1.2fr', padding: '8px 12px', background: '#f4f1ee', fontSize: 12, fontWeight: 600, color: '#666' }}>
             <div>Asset</div><div>Borrower</div><div>From</div><div>Due</div><div>Status</div>
           </div>
-          {loading && <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>Loading…</div>}
+          {loading && <SkeletonListRows rows={6} />}
           {!loading && visible.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: '#999' }}>
               No loans in this view{isAdmin ? '' : ' — only your own loans are shown'}.

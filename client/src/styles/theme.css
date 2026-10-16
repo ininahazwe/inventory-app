@@ -355,3 +355,18 @@ tbody {background: #f7f7f7}
 @media (prefers-reduced-motion: reduce) {
     .section-tile { transition: none !important; }
 }
+
+/* ── Loading skeletons ───────────────────────────────────────────────────
+   Placeholders with the final layout's size, so content swaps in without
+   shifting the page. They fade in after 150 ms: fast loads show nothing. */
+.skel-delay { opacity: 0; animation: skelAppear .2s ease-out .15s forwards; }
+@keyframes skelAppear { to { opacity: 1; } }
+.skel {
+  display: block;
+  background: linear-gradient(90deg, #e9e4e1 25%, #f4f1ee 37%, #e9e4e1 63%);
+  background-size: 400% 100%;
+  animation: skelShimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+@keyframes skelShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } .skel-delay { animation-duration: 0s; animation-delay: 0s; } }

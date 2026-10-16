@@ -1,6 +1,7 @@
 // src/screens/Home.tsx
 import React from "react";
 import { useEffect, useMemo, useState } from 'react';
+import { SkeletonTableRows } from '../components/Skeleton';
 import { api, rpc } from '../lib/apiClient';
 import { usePermissions } from '../hooks/usePermissions';
 import { Link } from 'react-router-dom';
@@ -32,6 +33,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
   const [returnAssetLabel, setReturnAssetLabel]   = useState<string>('');
   const [exporting, setExporting]                 = useState(false);
   const [lendableError, setLendableError]         = useState<string | null>(null);
+  const [loaded, setLoaded]                       = useState(false);
 
   // Interrupteur « prêtable » : mise à jour optimiste, annulée si le serveur refuse.
   // Le changement ne passe que par la route dédiée (PATCH /assets/:id/lendable).
@@ -57,6 +59,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
     const { data } = await api.get<{ data: Row[]; pagination: { total: number } }>(`/assets?${params}`);
     setRows((data as any)?.data ?? []);
     setTotalCount((data as any)?.pagination?.total ?? 0);
+    setLoaded(true);
   }, [qLabel, qCategory, currentPage]);
 
   useEffect(() => { load(); }, [load]);
@@ -155,7 +158,8 @@ export default function Home({ onNew }: { onNew: () => void }) {
       <table className="table">
         <thead><tr style={{ background: '#8D86C9' }}><th>Name</th><th>Category</th><th className="status">Status</th><th className="status">Funder</th><th>Assigned to</th>{isAdmin && <th className="status" title="Shown in the equipment list of the Loans module when on">Lendable</th>}{isAdmin && <th></th>}</tr></thead>
         <tbody>
-        {rows.map(r => (
+        {!loaded && <SkeletonTableRows rows={ITEMS_PER_PAGE > 10 ? 10 : ITEMS_PER_PAGE} cols={isAdmin ? 7 : 5} />}
+        {loaded && rows.map(r => (
           <tr key={r.id}>
             <td><Link className="asset-link" to={`/asset/${r.id}`}>{r.label}</Link>{r.serial_no && <div style={{ color: 'var(--muted)', fontSize: 12 }}>SN: {r.serial_no}</div>}</td>
             <td>{r.category_name ?? '—'}</td>
@@ -179,7 +183,7 @@ export default function Home({ onNew }: { onNew: () => void }) {
             </div></td>}
           </tr>
         ))}
-        {rows.length === 0 && <tr><td colSpan={isAdmin ? 7 : 5} style={{ padding: 16, color: 'var(--muted)' }}>{isAdmin ? 'No result' : 'No asset is currently assigned to you'}</td></tr>}
+        {loaded && rows.length === 0 && <tr><td colSpan={isAdmin ? 7 : 5} style={{ padding: 16, color: 'var(--muted)' }}>{isAdmin ? 'No result' : 'No asset is currently assigned to you'}</td></tr>}
         </tbody>
       </table>
 

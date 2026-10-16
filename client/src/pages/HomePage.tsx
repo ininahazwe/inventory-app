@@ -13,6 +13,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import Layout from "../Layout";
 import { SECTIONS, type SectionDef } from "../lib/sections";
 import { usePermissions } from "../hooks/usePermissions";
+import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 
 const EXPAND_DURATION = 0.45;
 
@@ -97,7 +98,7 @@ function SectionTile({
 export default function HomePage() {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, loading: permsLoading } = usePermissions();
   const visibleSections = SECTIONS.filter((sec) => isAdmin || !sec.adminOnly);
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
@@ -126,7 +127,14 @@ export default function HomePage() {
             gap: 20,
           }}
         >
-          {visibleSections.map((section) => (
+          {permsLoading && (
+            <SkeletonGroup style={{ display: 'contents' }}>
+              {SECTIONS.filter((sec) => !sec.adminOnly).map((sec) => (
+                <div key={sec.key} style={{ aspectRatio: '1' }}><Skeleton height="100%" radius={28} /></div>
+              ))}
+            </SkeletonGroup>
+          )}
+          {!permsLoading && visibleSections.map((section) => (
             <SectionTile
               key={section.key}
               section={section}
