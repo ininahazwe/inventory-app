@@ -63,7 +63,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
           <input type="email" className="input" placeholder="user@example.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} disabled={adding} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Rôle</label>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Role</label>
           <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin')} disabled={adding}>
             <option value="user">User</option>
             <option value="admin">Admin</option>
@@ -73,7 +73,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
       </form>
 
       <table className="table">
-        <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
+        <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Role</th><th style={{ width: 130 }}>Created</th><th style={{ width: 120 }}>By</th><th style={{ width: 180 }}></th></tr></thead>
         <tbody>
         {users.length === 0 ? (
           <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
@@ -95,7 +95,7 @@ export default function UserManagementPanel({ onClose }: { onClose?: () => void 
               <div style={{ display: 'flex', gap: 6 }}>
                 {editingUser?.id === user.id ? (
                   <>
-                    <button className="pill" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => handleChangeRole(user.id, editingUser.role)}>Save</button>
+                    <button className="pill admin" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => handleChangeRole(user.id, editingUser.role)}>Save</button>
                     <button className="pill" style={{ fontSize: 11, padding: '5px 8px', background: '#bbb' }} onClick={() => setEditingUser(null)}>Cancel</button>
                   </>
                 ) : (

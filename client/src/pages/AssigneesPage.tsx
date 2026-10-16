@@ -130,7 +130,7 @@ export default function AssigneesPage() {
             <input type="email" className="input" placeholder="user@example.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} disabled={adding} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Rôle</label>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Role</label>
             <select className="input" value={newRole} onChange={e => setNewRole(e.target.value as 'user' | 'admin')} disabled={adding}>
               <option value="user">User</option>
               <option value="admin">Admin</option>
@@ -150,7 +150,7 @@ export default function AssigneesPage() {
         </div>
 
         <table className="table">
-          <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th className="status" style={{ width: 120 }} title="Reçoit les mails de notification destinés aux admins (nouvelle demande de prêt, incidents, rappels)">Notifications</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
+          <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Role</th><th className="status" style={{ width: 120 }} title="Reçoit les mails de notification destinés aux admins (nouvelle demande de prêt, incidents, rappels)">Notifications</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
           <tbody>
           {loading ? <SkeletonTableRows rows={8} cols={6} /> : paginatedUsers.length === 0 ? (
             <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
