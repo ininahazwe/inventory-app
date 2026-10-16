@@ -1,5 +1,5 @@
 import React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -10,13 +10,23 @@ import logo from "./assets/mfwa-logo.png";
 import { Link } from 'react-router-dom';
 import { useToast } from './hooks/useToast';
 import ToastContainer from './components/ToastContainer';
-import {usePermissions} from "./hooks/usePermissions.ts";
+import {usePermissions, getCachedUser} from "./hooks/usePermissions.ts";
+import { InsideShellContext } from "./components/ShellContext";
 import Modal from './components/Modal';
 import AuditDashboard from './components/AuditDashboard';
 import { GoogleSignInButton } from './components/GoogleSignInButton';
 
+// Pages still wrap themselves in <Layout>, but the real header/shell now lives
+// once at route level (AppShell) so it is not unmounted on every navigation.
+// Inside the shell, <Layout> is a transparent pass-through.
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [email, setEmail] = useState<string | null>(null);
+  const insideShell = useContext(InsideShellContext);
+  if (insideShell) return <>{children}</>;
+  return <LayoutShell>{children}</LayoutShell>;
+}
+
+export function LayoutShell({ children }: { children: React.ReactNode }) {
+  const [email, setEmail] = useState<string | null>(() => getCachedUser()?.email ?? null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -32,13 +42,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const { isAdmin, isSuperAdmin } = usePermissions();
 
+  const { userInfo } = usePermissions();
   useEffect(() => {
-    if (token.get()) {
-      auth.getUser().then(({ data }) => {
-        if (data) setEmail(data.email);
-      });
-    }
-  }, []);
+    if (userInfo?.email) setEmail(userInfo.email);
+  }, [userInfo]);
 
   const logout = async () => {
     await auth.signOut();

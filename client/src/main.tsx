@@ -32,6 +32,7 @@ import LoansPage from "./pages/LoansPage.tsx";
 import LoanRequestFormPage from "./pages/LoanRequestFormPage.tsx";
 import LoanDetailPage from "./pages/LoanDetailPage.tsx";
 import RequireAdmin from "./components/RequireAdmin.tsx";
+import AppShell from "./components/AppShell.tsx";
 
 const router = createBrowserRouter([
   {
@@ -46,6 +47,8 @@ const router = createBrowserRouter([
   // ✅ ROUTES AUTHENTIFIÉES - Nécessitent AuthGateWrapper
   {
     element: <AuthGateWrapper />,
+    children: [{
+    element: <AppShell />,
     children: [
       { path: "/", element: <HomePage /> },
       { path: "/inventory", element: <InventoryPage /> },
@@ -81,6 +84,7 @@ const router = createBrowserRouter([
         ],
       },
     ],
+    }],
   },
 ]);
 

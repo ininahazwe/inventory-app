@@ -46,8 +46,8 @@ export default function AuthGateWrapper() {
       <AnimatePresence mode="wait">
         <motion.div
           key="app"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
           <Outlet />
@@ -62,8 +62,8 @@ export default function AuthGateWrapper() {
       <AnimatePresence mode="wait">
         <motion.div
           key="app"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
           <Outlet />
