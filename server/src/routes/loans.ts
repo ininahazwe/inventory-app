@@ -3,6 +3,7 @@
 // Les routes ne font que : valider l'entrée, ouvrir une transaction, appeler le
 // service, journaliser dans audit_log, notifier par mail (jamais bloquant).
 // Toute la logique d'états et de disponibilité vit dans le service.
+import { getAdminNotificationEmails } from '../services/notificationRecipients';
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
@@ -74,8 +75,7 @@ async function notify(payload: any, context: string): Promise<void> {
 }
 
 async function adminEmails(): Promise<string[]> {
-    const [rows] = await db.query(`SELECT email FROM users WHERE role IN ('admin','super_admin')`);
-    return (rows as any[]).map(u => u.email).filter(Boolean);
+    return getAdminNotificationEmails();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

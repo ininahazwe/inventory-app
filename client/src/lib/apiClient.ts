@@ -90,6 +90,7 @@ const rpcRouteMap: Record<string, { method: 'GET' | 'POST'; path: (params: any) 
   'add_user': { method: 'POST', path: () => '/users' },
   'change_user_role': { method: 'POST', path: () => '/users/role' },
   'delete_user': { method: 'POST', path: () => '/users/delete' },
+  'set_user_notifications': { method: 'POST', path: () => '/users/notifications' },
 };
 
 // ─── RPC Generic Call ────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [users] = await db.query(
-            'SELECT id, email, role, created_at, created_by FROM users ORDER BY email'
+            'SELECT id, email, role, created_at, created_by, notify_admin FROM users ORDER BY email'
         );
         logger.info(`Fetched all users`, 'USERS');
         return res.json(users || []);
@@ -184,6 +184,29 @@ router.post('/role', requireAuth, async (req: Request, res: Response) => {
         return res.json({ success: true });
     } catch (err) {
         logger.error('PUT /users/change_role error:', err as Error);
+        return res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// Toggle whether an admin / super_admin receives the admin notification emails.
+router.post('/notifications', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const { p_user_id, p_enabled } = req.body;
+        if (!p_user_id || typeof p_enabled !== 'boolean') {
+            return res.status(400).json({ error: 'p_user_id et p_enabled (boolean) requis' });
+        }
+        const [result] = await db.query('UPDATE users SET notify_admin = ? WHERE id = ?', [p_enabled ? 1 : 0, p_user_id]);
+        if ((result as any)?.affectedRows === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        logger.info(`Admin notifications ${p_enabled ? 'enabled' : 'disabled'} for user ${p_user_id} by ${user.email}`, 'USERS');
+        return res.json({ success: true, notify_admin: p_enabled ? 1 : 0 });
+    } catch (err) {
+        logger.error('POST /users/notifications error:', err as Error);
         return res.status(500).json({ error: (err as Error).message });
     }
 });

@@ -8,7 +8,7 @@ import Modal from "../components/Modal.tsx";
 import { SkeletonTableRows } from '../components/Skeleton';
 const PAGE_SIZE = 10;
 
-type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin'; created_at: string; created_by_email: string | null; };
+type User = { id: string; email: string; role: 'user' | 'admin' | 'super_admin'; created_at: string; created_by_email: string | null; notify_admin?: number; };
 
 export default function AssigneesPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -56,6 +56,17 @@ export default function AssigneesPage() {
     const { error } = await rpc('change_user_role', { p_user_id: userId, p_new_role: role });
     if (error) setError(error);
     else { setEditingUser(null); await load(); }
+  };
+
+  // Optimistic toggle: admins who should (not) receive admin notification emails.
+  const handleToggleNotify = async (user: User) => {
+    const next = user.notify_admin === 0 ? 1 : 0;
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, notify_admin: next } : u));
+    const { error } = await rpc('set_user_notifications', { p_user_id: user.id, p_enabled: next === 1 });
+    if (error) {
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, notify_admin: user.notify_admin } : u));
+      setError(error);
+    }
   };
 
   const handleDeleteUser = (user: User) => {
@@ -139,10 +150,10 @@ export default function AssigneesPage() {
         </div>
 
         <table className="table">
-          <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
+          <thead><tr style={{ background: '#8D86C9' }}><th>Email</th><th style={{ width: 120 }}>Rôle</th><th className="status" style={{ width: 120 }} title="Reçoit les mails de notification destinés aux admins (nouvelle demande de prêt, incidents, rappels)">Notifications</th><th style={{ width: 130 }}>Créé</th><th style={{ width: 120 }}>Par</th><th style={{ width: 180 }}></th></tr></thead>
           <tbody>
-          {loading ? <SkeletonTableRows rows={8} cols={5} /> : paginatedUsers.length === 0 ? (
-            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
+          {loading ? <SkeletonTableRows rows={8} cols={6} /> : paginatedUsers.length === 0 ? (
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Aucun utilisateur</td></tr>
           ) : paginatedUsers.map(user => (
             <tr key={user.id}>
               <td>{user.email}</td>
@@ -154,6 +165,19 @@ export default function AssigneesPage() {
                     <option value="super_admin">Super Admin</option>
                   </select>
                 ) : <span style={{ textTransform: 'capitalize' }}>{user.role}</span>}
+              </td>
+              <td className="status">
+                {user.role === 'user' ? <span style={{ color: 'var(--muted)' }}>—</span> : (
+                  <button
+                    type="button"
+                    role="switch"
+                    className="switch"
+                    aria-checked={user.notify_admin !== 0}
+                    aria-label={`${user.email}: receives admin notification emails`}
+                    title={user.notify_admin !== 0 ? 'Receives admin notification emails — click to turn off' : 'Does not receive admin notification emails — click to turn on'}
+                    onClick={() => handleToggleNotify(user)}
+                  />
+                )}
               </td>
               <td style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(user.created_at).toLocaleDateString()}</td>
               <td style={{ fontSize: 12, color: 'var(--muted)' }}>{user.created_by_email || '—'}</td>
@@ -180,7 +204,7 @@ export default function AssigneesPage() {
         {totalFilteredPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '16px 0' }}>
             <button
-              className="pill"
+              className="pill admin"
               onClick={() => setPage(p => p - 1)}
               disabled={page === 1}
               style={{ opacity: page === 1 ? 0.5 : 1 }}

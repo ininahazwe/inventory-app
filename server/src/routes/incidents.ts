@@ -1,3 +1,4 @@
+import { getAdminNotificationEmails } from '../services/notificationRecipients';
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
@@ -267,10 +268,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
         // Email aux super_admins
         try {
-            const [adminRows] = await db.query(
-                `SELECT email FROM users WHERE role = 'super_admin'`
-            );
-            const adminEmails = (adminRows as any[]).map((u) => u.email).filter(Boolean);
+            const adminEmails = await getAdminNotificationEmails(['super_admin']);
 
             if (adminEmails.length > 0) {
                 const [assetRows] = await db.query(
@@ -336,8 +334,7 @@ export async function checkIncidentSLA(): Promise<{ overdue: number; notified: n
         return { overdue: 0, notified: 0 };
     }
 
-    const [adminRows] = await db.query(`SELECT email FROM users WHERE role IN ('admin', 'super_admin')`);
-    const adminEmails = (adminRows as any[]).map(u => u.email).filter(Boolean);
+    const adminEmails = await getAdminNotificationEmails();
 
     let notified = 0;
     for (const incident of overdue) {
