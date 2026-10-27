@@ -74,6 +74,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
                 {isAdmin && (
                   <Link to="/supplies" className="pill color3">📋︎ Supplies</Link>
                 )}
+                <Link to="/memos" className="pill color5">✉︎ Memos</Link>
                 <Link to="/incidents" className="pill color4">🛠︎ Incidents</Link>
               </>
             )}

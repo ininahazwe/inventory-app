@@ -58,6 +58,14 @@ export const SECTIONS: SectionDef[] = [
     color: '#E7DFF8', // tint of the loan status purple #7c3aed
   },
   {
+    key: 'memos',
+    path: '/memos',
+    label: 'Memos',
+    description: 'Memos & signed approvals',
+    icon: '\u2709\uFE0E', // ✉ (text presentation, like the other tiles)
+    color: '#DDE8F4',
+  },
+  {
     key: 'incidents',
     path: '/incidents',
     label: 'Incidents',

@@ -36,6 +36,9 @@ export function createApp() {
         credentials: true,
     }));
 
+    // Pièces jointes des mémos : le corps de la requête EST le fichier (10 Mo max).
+    app.post('/api/memos/:id/attachments', express.raw({ type: () => true, limit: '10mb' }));
+
     // 1 Mo : une signature (data URL PNG) dépasse la limite par défaut de 100 Ko.
     app.use(express.json({ limit: '1mb' }));
     app.use(express.urlencoded({ extended: true }));

@@ -31,6 +31,10 @@ import LocationDetailPage from "./pages/LocationDetailPage.tsx";
 import LoansPage from "./pages/LoansPage.tsx";
 import LoanRequestFormPage from "./pages/LoanRequestFormPage.tsx";
 import LoanDetailPage from "./pages/LoanDetailPage.tsx";
+import MemosPage from "./pages/MemosPage.tsx";
+import MemoFormPage from "./pages/MemoFormPage.tsx";
+import MemoDetailPage from "./pages/MemoDetailPage.tsx";
+import MemoAdminPage from "./pages/MemoAdminPage.tsx";
 import RequireAdmin from "./components/RequireAdmin.tsx";
 import AppShell from "./components/AppShell.tsx";
 
@@ -66,12 +70,17 @@ const router = createBrowserRouter([
       { path: "/loans/new", element: <LoanRequestFormPage /> },
       { path: "/loans/:id", element: <LoanDetailPage /> },
       { path: "/loans", element: <LoansPage /> },
+      { path: "/memos/new", element: <MemoFormPage /> },
+      { path: "/memos/:id/edit", element: <MemoFormPage /> },
+      { path: "/memos/:id", element: <MemoDetailPage /> },
+      { path: "/memos", element: <MemosPage /> },
       { path: "/assignees", element: <AssigneesPage /> },
 
       // Supplies module (and locations): admins only
       {
         element: <RequireAdmin />,
         children: [
+        { path: "/memos/admin", element: <MemoAdminPage /> },
         { path: "/supplies/create", element: <SupplyReceiptFormPage /> },
         { path: "/supplies/:id/edit", element: <SupplyReceiptFormPage /> },
         { path: "/supplies/issue", element: <SupplyIssueFormPage /> },

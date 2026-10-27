@@ -2,13 +2,13 @@
 // Module « mémos et chaîne de validation » — REST au-dessus de services/memoService.ts.
 // Les routes valident l'entrée, ouvrent une transaction, appellent le service et
 // journalisent dans audit_log. Toute la logique d'états vit dans le service.
-// (E-mails, PDF et relances : phase 4 ; téléversement des pièces jointes : phase 3.)
+// (E-mails, PDF et relances : phase 4.)
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
 import { requireAuth, requireAdmin, isAdminUser } from '../middleware/auth';
 import { logAudit } from './audit';
-import { AppException, BusinessException, NotFoundException } from '../exceptions';
+import { AppException, BusinessException, ConflictException, NotFoundException } from '../exceptions';
 import {
     createMemoDraft,
     updateMemoDraft,
@@ -19,9 +19,13 @@ import {
     withdrawMemo,
     canViewMemo,
     memoCapabilities,
+    EDITABLE_STATUSES,
     type StepDecision,
 } from '../services/memoService';
 import { parsePngDataUrl, saveSignaturePng, readSignaturePng } from '../services/signatureStorage';
+import {
+    validateAttachment, saveAttachment, readAttachment, MAX_ATTACHMENTS_PER_REVISION,
+} from '../services/attachmentStorage';
 
 const router = Router();
 
@@ -457,6 +461,100 @@ router.get('/:id/steps/:stepId/signature', requireAuth, async (req: Request, res
         return res.send(png);
     } catch (err) {
         return fail(res, err, 'GET /memos/:id/steps/:stepId/signature');
+    }
+});
+
+// ─── Pièces jointes ─────────────────────────────────────────────────────────
+// Le corps de la requête est le fichier brut (express.raw, monté dans app.ts) ;
+// le nom voyage dans l'en-tête X-File-Name (encodé URI), le type dans Content-Type.
+
+// POST /api/memos/:id/attachments — l'auteur, brouillon ou mémo retourné, révision courante
+router.post('/:id/attachments', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const file = validateAttachment(req.header('x-file-name'), req.header('content-type'), req.body);
+        const kind = ['budget', 'invoice', 'scan', 'other'].includes(String(req.header('x-attachment-kind')))
+            ? String(req.header('x-attachment-kind')) : 'other';
+
+        const [rows] = await db.query('SELECT id, author_email, status, revision_no FROM memos WHERE id = ?', [id]);
+        const memo = (rows as any[])[0];
+        if (!memo) throw new NotFoundException('Memo not found');
+        if (String(memo.author_email).toLowerCase() !== String(user.email).toLowerCase()) {
+            return res.status(403).json({ error: 'Only the author can attach files' });
+        }
+        if (!EDITABLE_STATUSES.includes(memo.status)) {
+            throw new ConflictException('Attachments can only change while the memo is a draft or returned');
+        }
+        const [cnt] = await db.query('SELECT COUNT(*) AS n FROM memo_attachments WHERE memo_id = ? AND revision_no = ?', [id, memo.revision_no]);
+        if (Number((cnt as any[])[0]?.n) >= MAX_ATTACHMENTS_PER_REVISION) {
+            throw new BusinessException(`At most ${MAX_ATTACHMENTS_PER_REVISION} attachments per memo`);
+        }
+
+        const { relPath, sha256 } = await saveAttachment(file.data);
+        const [ins] = await db.query(
+            `INSERT INTO memo_attachments (memo_id, revision_no, kind, original_name, stored_path, mime_type, size_bytes, sha256, uploaded_by_email)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, memo.revision_no, kind, file.name, relPath, file.mime, file.data.length, sha256, user.email]
+        );
+        await logAudit(user.email, 'memo_attachment_added', 'memos', id, null, { name: file.name, sha256 });
+        return res.status(201).json({ id: (ins as any).insertId, original_name: file.name, size_bytes: file.data.length });
+    } catch (err) {
+        return fail(res, err, 'POST /memos/:id/attachments');
+    }
+});
+
+// GET /api/memos/:id/attachments/:attId — téléchargement (même visibilité que le mémo)
+router.get('/:id/attachments/:attId', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const attId = parseId(req.params.attId);
+        const [mRows] = await db.query('SELECT id, author_email, status FROM memos WHERE id = ?', [id]);
+        const memo = (mRows as any[])[0];
+        if (!memo) throw new NotFoundException('Memo not found');
+        if (!(await canViewMemo(db as any, memo, user))) {
+            return res.status(403).json({ error: 'You do not have access to this memo' });
+        }
+        const [aRows] = await db.query(
+            'SELECT original_name, stored_path, mime_type FROM memo_attachments WHERE id = ? AND memo_id = ?', [attId, id]);
+        const att = (aRows as any[])[0];
+        if (!att) throw new NotFoundException('Attachment not found');
+        const data = await readAttachment(att.stored_path);
+        res.set({
+            'Content-Type': att.mime_type,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(att.original_name)}`,
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'private, max-age=0',
+        });
+        return res.send(data);
+    } catch (err) {
+        return fail(res, err, 'GET /memos/:id/attachments/:attId');
+    }
+});
+
+// DELETE /api/memos/:id/attachments/:attId — l'auteur, tant que le mémo est modifiable
+router.delete('/:id/attachments/:attId', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const attId = parseId(req.params.attId);
+        const [rows] = await db.query('SELECT id, author_email, status, revision_no FROM memos WHERE id = ?', [id]);
+        const memo = (rows as any[])[0];
+        if (!memo) throw new NotFoundException('Memo not found');
+        if (String(memo.author_email).toLowerCase() !== String(user.email).toLowerCase()) {
+            return res.status(403).json({ error: 'Only the author can remove attachments' });
+        }
+        if (!EDITABLE_STATUSES.includes(memo.status)) {
+            throw new ConflictException('Attachments can only change while the memo is a draft or returned');
+        }
+        // Seule la révision courante : les pièces des révisions passées font partie de l'historique.
+        const [del] = await db.query('DELETE FROM memo_attachments WHERE id = ? AND memo_id = ? AND revision_no = ?', [attId, id, memo.revision_no]);
+        if (!(del as any).affectedRows) throw new NotFoundException('Attachment not found');
+        await logAudit(user.email, 'memo_attachment_removed', 'memos', id, null, { attachment_id: attId });
+        return res.json({ success: true });
+    } catch (err) {
+        return fail(res, err, 'DELETE /memos/:id/attachments/:attId');
     }
 });
 

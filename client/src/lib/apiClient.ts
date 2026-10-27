@@ -18,7 +18,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   requiresAuth = true
-): Promise<{ data: T | null; error: string | null }> {
+): Promise<{ data: T | null; error: string | null; code?: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (requiresAuth) {
@@ -35,7 +35,7 @@ async function request<T>(
     });
 
     const json = await res.json().catch(() => null);
-    if (!res.ok) return { data: null, error: json?.error || `Error ${res.status}` };
+    if (!res.ok) return { data: null, error: json?.error || `Error ${res.status}`, code: json?.code };
     return { data: json as T, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : 'Network error' };
