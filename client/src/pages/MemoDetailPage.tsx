@@ -7,6 +7,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import Layout from '../Layout';
 import { SkeletonDetail } from '../components/Skeleton';
 import SignaturePad from '../components/SignaturePad';
+import { token } from '../lib/apiClient';
 import MemoAttachments from '../components/MemoAttachments';
 import { MemoStatusBadge } from './MemosPage';
 import {
@@ -78,6 +79,16 @@ export default function MemoDetailPage() {
     if (res.error) { setError(res.error); return; }
     setMessage(ok); setPanel(null); setComment(''); setPayRef('');
     await reload();
+  };
+
+  const downloadPdf = async () => {
+    setError(null);
+    const res = await fetch(`/api/memos/${memoId}/pdf`, { headers: { Authorization: `Bearer ${token.get() || ''}` } });
+    if (!res.ok) { setError((await res.json().catch(() => null))?.error || `Error ${res.status}`); return; }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = `${(memo?.reference || `memo-${memoId}`).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   if (loading) return <Layout><SkeletonDetail /></Layout>;
@@ -172,6 +183,7 @@ export default function MemoDetailPage() {
 
         {/* ── Actions ─────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button disabled={busy} style={btn('#374151')} onClick={downloadPdf}>⬇ PDF</button>
           {cap.edit && <Link to={`/memos/${memo.id}/edit`} style={{ ...btn('#2563eb'), textDecoration: 'none' }}>{memo.status === 'returned' ? 'Revise & resubmit' : 'Edit'}</Link>}
           {cap.decide && (
             <>

@@ -9,6 +9,13 @@ import os from 'os';
 import path from 'path';
 import { createTestApp, mockRows, mockOk, asUser } from '../helpers/testApp';
 import { db } from '../../src/database/connection';
+import { notifyMemoEvent } from '../../src/services/memoMailer';
+
+// Les e-mails ont leurs propres tests (unit/memoMailer) : ici on vérifie seulement qu'ils sont déclenchés.
+jest.mock('../../src/services/memoMailer', () => ({
+    notifyMemoEvent: jest.fn().mockResolvedValue(undefined),
+    checkMemosWaiting: jest.fn(),
+}));
 
 const mockedExecute = db.execute as jest.Mock;
 const mockedQuery = db.query as jest.Mock;
@@ -172,7 +179,44 @@ describe('writes', () => {
         const res = await request(app).patch('/api/memos/5/decision').set(asUser(MANAGER)).send({ decision: 'approve', comment: 'ok' });
         expect(res.status).toBe(200);
         expect(res.body).toMatchObject({ success: true, status: 'in_review' });
+        expect(notifyMemoEvent).toHaveBeenCalledWith('decided', 5, MANAGER.email, expect.anything());
         expect(mockedQuery.mock.calls.some(c => /audit_log/.test(c[0]) && c[1].includes('memo_approve'))).toBe(true);
+    });
+
+    it('notifies after a successful decision, and not after a refused one', async () => {
+        (notifyMemoEvent as jest.Mock).mockClear();
+        mockedExecute.mockResolvedValueOnce(mockRows([memoRow()]))
+            .mockResolvedValueOnce(mockRows([stepRow(0, 'submit', 1, 'done', 'Agent'), stepRow(1, 'recommend', 2, 'active')]));
+        await request(app).patch('/api/memos/5/decision').set(asUser(AUTHOR)).send({ decision: 'approve' });   // 403 : son propre mémo
+        expect(notifyMemoEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('GET /api/memos/:id/pdf', () => {
+    const app = createTestApp();
+    const binary = (res: any, cb: any) => { const c: Buffer[] = []; res.on('data', (d: Buffer) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); };
+
+    it('is refused (403) to someone who cannot see the memo', async () => {
+        mockedQuery.mockResolvedValueOnce(mockRows([memoRow()]));
+        mockedExecute.mockResolvedValueOnce(mockRows([]));
+        expect((await request(app).get('/api/memos/5/pdf').set(asUser(STRANGER))).status).toBe(403);
+    });
+
+    it('is 404 for an unknown memo', async () => {
+        mockedQuery.mockResolvedValueOnce(mockRows([]));
+        expect((await request(app).get('/api/memos/99/pdf').set(asUser(AUTHOR))).status).toBe(404);
+    });
+
+    it('streams a real PDF named after the reference to the author', async () => {
+        mockedQuery
+            .mockResolvedValueOnce(mockRows([memoRow({ type_name: 'Request for funds', to_label: 'Director', from_label: 'Agent', memo_date: '2026-10-20' })]))
+            .mockResolvedValueOnce(mockRows([{ ...stepRow(0, 'submit', 1, 'done', 'Agent'), acted_by_email: AUTHOR.email, image_path: null }, stepRow(1, 'recommend', 2, 'active')]))
+            .mockResolvedValueOnce(mockRows([]));
+        const res = await request(app).get('/api/memos/5/pdf').set(asUser(AUTHOR)).buffer(true).parse(binary);
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('application/pdf');
+        expect(res.headers['content-disposition']).toContain('MFWA-MEMO-2026-0012.pdf');
+        expect((res.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
     });
 });
 

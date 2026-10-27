@@ -7,6 +7,7 @@ import { logger } from './middleware/logger';
 import { runAutoCloseAuctions } from './routes/auctions';
 import { checkIncidentSLA } from './routes/incidents';
 import { checkLoansOverdue, checkLoansNoShow } from './routes/loans';
+import { checkMemosWaiting } from './services/memoMailer';
 
 let started = false;
 
@@ -65,5 +66,18 @@ export function startScheduler(): void {
         }
     });
 
-    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00, loan overdue check daily 08:30, loan no-show check daily 08:45)', 'SCHEDULER');
+    // Du lundi au vendredi à 09:00 — relance des titulaires dont un mémo attend la signature
+    // depuis MEMO_REMINDER_DAYS jours (2 par défaut). Après les vagues de prêts/incidents.
+    schedule.scheduleJob('memos-waiting-check', '0 9 * * 1-5', async () => {
+        try {
+            const { waiting, reminded } = await checkMemosWaiting();
+            if (waiting > 0) {
+                logger.info(`[scheduler] memos waiting: ${waiting} late, ${reminded} reminded`, 'SCHEDULER');
+            }
+        } catch (err) {
+            logger.error('[scheduler] memos waiting check failed:', err as Error);
+        }
+    });
+
+    logger.info('Internal scheduler started (auctions auto-close hourly, incident SLA check daily 08:00, loan overdue check daily 08:30, loan no-show check daily 08:45, memo reminders weekdays 09:00)', 'SCHEDULER');
 }
