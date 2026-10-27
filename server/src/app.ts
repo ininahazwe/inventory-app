@@ -17,6 +17,7 @@ import supplyReceiptsRoutes from './routes/supplyReceipts';
 import supplyIssuesRoutes from './routes/supplyIssues';
 import supplyAdjustmentsRoutes from './routes/supplyAdjustments';
 import loansRoutes from './routes/loans';
+import memosRoutes from './routes/memos';
 import auditRoutes from './routes/audit';
 import auctionsRouter from './routes/auctions';
 import { errorHandler } from './middleware/errorHandler';
@@ -35,7 +36,8 @@ export function createApp() {
         credentials: true,
     }));
 
-    app.use(express.json());
+    // 1 Mo : une signature (data URL PNG) dépasse la limite par défaut de 100 Ko.
+    app.use(express.json({ limit: '1mb' }));
     app.use(express.urlencoded({ extended: true }));
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -55,6 +57,7 @@ export function createApp() {
     app.use('/api/supply-issues', requireAuth, requireAdmin, supplyIssuesRoutes);
     app.use('/api/supply-adjustments', requireAuth, requireAdmin, supplyAdjustmentsRoutes);
     app.use('/api/loans', loansRoutes);
+    app.use('/api/memos', memosRoutes);
     app.use('/api/incidents', incidentsRoutes);
     app.use('/api/users', usersRoutes);
     app.use('/api/rpc', rpcRoutes);
