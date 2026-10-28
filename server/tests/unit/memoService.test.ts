@@ -218,6 +218,30 @@ describe('submitMemo', () => {
         expect(s.params(4)[0]).toBe(AUTHOR);
     });
 
+    it('says so when the author is the only holder of a level, and separates it from an empty level', async () => {
+        const script = (holders: any[]) => scriptedTx([
+            ['FOR UPDATE', rows([memo()])],
+            ['FROM memo_types', rows([{ id: 1, requires_amount: 0 }])],
+            ['FROM memo_chain_steps', rows(chainRows)],
+            ['LEFT JOIN memo_position_holders', rows(holders)],
+        ]);
+        // Manager : l'auteur en est le seul titulaire (n = 0 hors auteur, total = 1)
+        const only: any = await submitMemo(script([
+            { id: 2, label: 'Manager', n: 0, total: 1 }, { id: 3, label: 'Director', n: 1, total: 1 }, { id: 4, label: 'Finance', n: 1, total: 1 },
+        ]).tx, 5, AUTHOR).catch(e => e);
+        expect(only.statusCode).toBe(409);
+        expect(only.message).toContain('you are the only active holder of: Manager');
+        expect(only.message).toContain('assign someone else');
+        expect(only.message).not.toContain('no active holder is set');
+
+        // Les deux cas à la fois : Finance vide, Manager occupé seulement par l'auteur
+        const both: any = await submitMemo(script([
+            { id: 2, label: 'Manager', n: 0, total: 1 }, { id: 3, label: 'Director', n: 1, total: 1 }, { id: 4, label: 'Finance', n: 0, total: 0 },
+        ]).tx, 5, AUTHOR).catch(e => e);
+        expect(both.message).toContain('no active holder is set for: Finance');
+        expect(both.message).toContain('you are the only active holder of: Manager');
+    });
+
     it('refuses without a registered signature (400, code SIGNATURE_REQUIRED) — invariant 8', async () => {
         const s = scriptedTx([
             ['FOR UPDATE', rows([memo()])],

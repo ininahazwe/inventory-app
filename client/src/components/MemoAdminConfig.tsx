@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { Spinner } from './MemoSpinner';
 import {
-  memosApi, type AdminConfig, type AdminProject, type AdminTemplate, type AdminType, type ChainKind, type ChainStepDraft,
+  memosApi, currencyOptions, type AdminConfig, type AdminProject, type AdminTemplate, type AdminType, type ChainKind, type ChainStepDraft,
 } from '../hooks/useMemos';
 
 type Result = { error: string | null };
@@ -39,7 +39,9 @@ export function ProjectsTab({ config, busyKey, act }: Common) {
           <input style={{ ...field, flex: '1 1 110px' }} placeholder="Code, e.g. EU-2026" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
           <input style={{ ...field, flex: '3 1 220px' }} placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           <input style={{ ...field, flex: '2 1 150px' }} placeholder="Donor (optional)" value={form.donor} onChange={e => setForm({ ...form, donor: e.target.value })} />
-          <input style={{ ...field, width: 80 }} placeholder="EUR" maxLength={3} value={form.default_currency} onChange={e => setForm({ ...form, default_currency: e.target.value.toUpperCase() })} />
+          <select style={{ ...field, width: 90 }} value={form.default_currency} onChange={e => setForm({ ...form, default_currency: e.target.value })}>
+            <option value="">Currency</option>{currencyOptions(form.default_currency).map(c => <option key={c}>{c}</option>)}
+          </select>
           <button style={primary} disabled={!!busyKey || !form.code.trim() || !form.title.trim()}
             onClick={async () => { if (await act('project-new', () => memosApi.createProject(form))) setForm({ code: '', title: '', donor: '', default_currency: '' }); }}>
             {busyKey === 'project-new' && <Spinner />}Add project
@@ -55,7 +57,9 @@ export function ProjectsTab({ config, busyKey, act }: Common) {
               <strong style={{ width: 110 }}>{p.code}</strong>
               <input style={{ ...field, flex: '3 1 220px' }} value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} />
               <input style={{ ...field, flex: '2 1 150px' }} placeholder="Donor" value={edit.donor} onChange={e => setEdit({ ...edit, donor: e.target.value })} />
-              <input style={{ ...field, width: 80 }} maxLength={3} placeholder="EUR" value={edit.default_currency} onChange={e => setEdit({ ...edit, default_currency: e.target.value.toUpperCase() })} />
+              <select style={{ ...field, width: 90 }} value={edit.default_currency} onChange={e => setEdit({ ...edit, default_currency: e.target.value })}>
+                <option value="">Currency</option>{currencyOptions(edit.default_currency).map(c => <option key={c}>{c}</option>)}
+              </select>
               <button style={primary} disabled={!!busyKey || !edit.title.trim()}
                 onClick={async () => { if (await act(`project-${p.id}`, () => memosApi.patchProject(p.id, edit))) setEditId(null); }}>
                 {busyKey === `project-${p.id}` && <Spinner />}Save

@@ -11,7 +11,7 @@ import { SkeletonDetail } from '../components/Skeleton';
 import SignaturePad from '../components/SignaturePad';
 import MemoAttachments from '../components/MemoAttachments';
 import { Spinner, MEMO_ANIMATIONS } from '../components/MemoSpinner';
-import { memosApi, SIGNATURE_REQUIRED, type MemoMeta, type MemoFull, type MemoFields } from '../hooks/useMemos';
+import { memosApi, SIGNATURE_REQUIRED, DEFAULT_CURRENCY, currencyOptions, type MemoMeta, type MemoFull, type MemoFields } from '../hooks/useMemos';
 import { todayDateString } from '../lib/dateHelpers';
 
 const field: React.CSSProperties = { width: '100%', padding: 8, marginTop: 4, border: '1px solid #ddd', borderRadius: 4, boxSizing: 'border-box', background: '#fff' };
@@ -41,7 +41,7 @@ export default function MemoFormPage() {
   const [body, setBody] = useState('');
   const [memoDate, setMemoDate] = useState(todayDateString());
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY);
   const [projectId, setProjectId] = useState<number | ''>('');
   const [activityRef, setActivityRef] = useState('');
 
@@ -58,7 +58,7 @@ export default function MemoFormPage() {
         setToLabel(data.to_label || ''); setFromLabel(data.from_label || '');
         setSubject(data.subject || ''); setBody(data.body || '');
         setMemoDate((data.memo_date || todayDateString()).slice(0, 10));
-        setAmount(data.amount ? String(data.amount) : ''); setCurrency(data.currency || 'USD');
+        setAmount(data.amount ? String(data.amount) : ''); setCurrency(data.currency || DEFAULT_CURRENCY);
         setProjectId(data.project_id || ''); setActivityRef(data.activity_ref || '');
         setManagerEmail(data.manager_email || '');
       } else if (m.types[0]) {
@@ -192,7 +192,7 @@ export default function MemoFormPage() {
                     <label style={{ ...label, flex: '2 1 120px' }}>Amount<input style={field} type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} /></label>
                     <label style={{ ...label, flex: '1 1 80px' }}>Currency
                       <select style={field} value={currency} onChange={e => setCurrency(e.target.value)}>
-                        {['USD', 'EUR', 'BIF'].map(c => <option key={c}>{c}</option>)}
+                        {currencyOptions(currency).map(c => <option key={c}>{c}</option>)}
                       </select>
                     </label>
                   </>

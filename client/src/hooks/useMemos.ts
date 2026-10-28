@@ -106,6 +106,13 @@ export type MemoFields = {
 
 export const SIGNATURE_REQUIRED = 'SIGNATURE_REQUIRED';
 
+/** Devises proposées, dans cet ordre : le cedi (GHS) en premier, puis USD et EUR. */
+export const CURRENCIES = ['GHS', 'USD', 'EUR'] as const;
+export const DEFAULT_CURRENCY = CURRENCIES[0];
+/** La liste, plus la devise déjà enregistrée si elle n'en fait pas partie (ancien mémo ou projet). */
+export const currencyOptions = (current?: string | null): string[] =>
+  current && !(CURRENCIES as readonly string[]).includes(current) ? [...CURRENCIES, current] : [...CURRENCIES];
+
 /** Récupère une image protégée (JWT) et renvoie une URL d'objet affichable dans <img>. */
 export async function fetchImageUrl(path: string): Promise<string | null> {
   try {

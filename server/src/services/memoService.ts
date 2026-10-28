@@ -395,7 +395,8 @@ export async function submitMemo(
     // autre que l'auteur, sinon le mémo resterait bloqué.
     const positionIds = [...new Set(chain.map(s => s.position_id))];
     const [holderRows] = await tx.execute(
-        `SELECT p.id, p.label, COUNT(h.id) AS n
+        `SELECT p.id, p.label, COUNT(h.id) AS n,
+                (SELECT COUNT(*) FROM memo_position_holders x WHERE x.position_id = p.id AND x.is_active = 1) AS total
          FROM memo_positions p
          LEFT JOIN memo_position_holders h
                 ON h.position_id = p.id AND h.is_active = 1 AND h.user_email <> ?
@@ -403,11 +404,18 @@ export async function submitMemo(
          GROUP BY p.id, p.label`,
         [actorEmail, ...positionIds]
     );
-    const empty = (holderRows as any[]).filter(r => !Number(r.n)).map(r => r.label);
-    if (empty.length) {
-        throw new ConflictException(
-            `Cannot submit — no active holder is set for: ${empty.join(', ')}. Ask an administrator to assign one.`
-        );
+    const blocked = (holderRows as any[]).filter(r => !Number(r.n));
+    if (blocked.length) {
+        // Deux causes différentes, deux messages : niveau vide, ou niveau dont l'auteur est le seul titulaire
+        // (il ne peut pas décider sur son propre mémo : il faut quelqu'un d'autre).
+        const nobody = blocked.filter(r => !Number(r.total || 0)).map(r => r.label);
+        const onlyYou = blocked.filter(r => Number(r.total || 0) > 0).map(r => r.label);
+        const parts: string[] = [];
+        if (nobody.length) parts.push(`no active holder is set for: ${nobody.join(', ')}. Ask an administrator to assign one.`);
+        if (onlyYou.length) {
+            parts.push(`you are the only active holder of: ${onlyYou.join(', ')}. You cannot decide on your own memo, so an administrator must assign someone else to ${onlyYou.length > 1 ? 'these levels' : 'this level'}.`);
+        }
+        throw new ConflictException(`Cannot submit — ${parts.join(' Also, ')}`);
     }
 
     // Manager choisi par l'auteur : il doit être titulaire actif du niveau de recommandation

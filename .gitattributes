@@ -1,1 +1,22 @@
+# Fins de ligne : le dépôt et les copies de travail utilisent LF (Mac, Windows, Linux),
+# pour que Git ne signale pas des fichiers « modifiés » parce qu'un poste Windows a écrit du CRLF.
+* text=auto eol=lf
+
+# Scripts de déploiement (exécutés sous Linux) : toujours LF
 deploy/*.sh text eol=lf
+
+# Scripts Windows : CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Fichiers binaires : jamais touchés
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
