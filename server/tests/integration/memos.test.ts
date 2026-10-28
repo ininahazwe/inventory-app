@@ -10,6 +10,7 @@ import path from 'path';
 import { createTestApp, mockRows, mockOk, asUser } from '../helpers/testApp';
 import { db } from '../../src/database/connection';
 import { notifyMemoEvent } from '../../src/services/memoMailer';
+import crypto from 'crypto';
 
 // Les e-mails ont leurs propres tests (unit/memoMailer) : ici on vérifie seulement qu'ils sont déclenchés.
 jest.mock('../../src/services/memoMailer', () => ({
@@ -205,6 +206,38 @@ describe('GET /api/memos/:id/pdf', () => {
     it('is 404 for an unknown memo', async () => {
         mockedQuery.mockResolvedValueOnce(mockRows([]));
         expect((await request(app).get('/api/memos/99/pdf').set(asUser(AUTHOR))).status).toBe(404);
+    });
+
+    describe('released memo: the archived final PDF is served as is', () => {
+        let dir: string;
+        beforeAll(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-pdf-int-')); process.env.MEMO_STORAGE_DIR = dir; });
+        afterAll(() => { delete process.env.MEMO_STORAGE_DIR; fs.rmSync(dir, { recursive: true, force: true }); });
+
+        const archived = (content: Buffer): Record<string, any> => {
+            const sha = crypto.createHash('sha256').update(content).digest('hex');
+            const rel = `final-pdfs/${sha}.pdf`;
+            fs.mkdirSync(path.join(dir, 'final-pdfs'), { recursive: true });
+            fs.writeFileSync(path.join(dir, rel), content);
+            return memoRow({ status: 'released', pdf_path: rel, pdf_sha256: sha });
+        };
+
+        it('returns the stored bytes with their fingerprint, without re-rendering', async () => {
+            const content = Buffer.from('%PDF-1.4 final archived');
+            mockedQuery.mockResolvedValueOnce(mockRows([archived(content)]));
+            const res = await request(app).get('/api/memos/5/pdf').set(asUser(AUTHOR)).buffer(true).parse(binary);
+            expect(res.status).toBe(200);
+            expect((res.body as Buffer).equals(content)).toBe(true);
+            expect(res.headers['x-pdf-sha256']).toBe(crypto.createHash('sha256').update(content).digest('hex'));
+            expect(mockedQuery).toHaveBeenCalledTimes(1);
+        });
+
+        it('refuses (500) rather than serve a file that no longer matches its fingerprint', async () => {
+            const row = archived(Buffer.from('%PDF-1.4 original'));
+            fs.writeFileSync(path.join(dir, row.pdf_path), Buffer.from('%PDF-1.4 tampered'));
+            mockedQuery.mockResolvedValueOnce(mockRows([row]));
+            const res = await request(app).get('/api/memos/5/pdf').set(asUser(AUTHOR));
+            expect(res.status).toBe(500);
+        });
     });
 
     it('streams a real PDF named after the reference to the author', async () => {

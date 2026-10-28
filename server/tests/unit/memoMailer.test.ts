@@ -133,6 +133,16 @@ describe('checkMemosWaiting', () => {
         expect(send).not.toHaveBeenCalled();
     });
 
+    it('when Gmail refuses the mail (sendEmail returns false) nothing is recorded as sent', async () => {
+        send.mockResolvedValue(false);
+        query
+            .mockResolvedValueOnce(rows([waiting(1, '2026-10-20T10:00:00Z')]))
+            .mockResolvedValueOnce(rows([step(1, 'recommend', 2, 'active')]))
+            .mockResolvedValueOnce(rows([{ user_email: 'manager@mfwa.org' }]));
+        expect(await checkMemosWaiting(NOW)).toEqual({ waiting: 1, reminded: 0 });
+        expect(execute).not.toHaveBeenCalled();           // pas d'évènement « reminder » : on réessaiera demain
+    });
+
     it('honours MEMO_REMINDER_DAYS', async () => {
         process.env.MEMO_REMINDER_DAYS = '10';
         query.mockResolvedValueOnce(rows([waiting(1, '2026-10-20T10:00:00Z')]));

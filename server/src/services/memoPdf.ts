@@ -7,6 +7,7 @@
 // ni la base ni le disque — c'est la route qui les prépare.
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
+import { MFWA_LOGO_PNG_BASE64 } from '../assets/memoLogo';
 
 export type PdfStep = {
     step_no: number;
@@ -98,7 +99,12 @@ export function buildMemoPdf(input: { memo: PdfMemo; steps: PdfStep[]; attachmen
         const ensure = (h: number) => { if (doc.y + h > doc.page.height - doc.page.margins.bottom - 30) doc.addPage(); };
 
         // ── En-tête ──────────────────────────────────────────────
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('MFWA', L, 50);
+        let logoDrawn = false;
+        try {
+            doc.image(Buffer.from(MFWA_LOGO_PNG_BASE64, 'base64'), L, 33, { fit: [160, 46] });
+            logoDrawn = true;
+        } catch { /* logo illisible : on retombe sur le nom */ }
+        if (!logoDrawn) doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('MFWA', L, 50);
         doc.font('Helvetica').fontSize(9).fillColor('#6b7280')
             .text(printable(memo.type_name), L, 50, { width: W, align: 'right' })
             .text(printable(memo.reference || 'No reference yet'), L, 63, { width: W, align: 'right' });

@@ -60,8 +60,9 @@ export function buildMemoMail(s: MailSpec) {
 async function safeSend(payload: ReturnType<typeof buildMemoMail>, ctx: string): Promise<boolean> {
     if (!payload.to.length) return false;
     try {
-        await sendEmail(payload);
-        return true;
+        const sent = await sendEmail(payload);       // renvoie false (sans lever) si Gmail refuse
+        if (!sent) logger.error(`Memo notification not delivered (${ctx}) to [${payload.to.join(', ')}] — see the EMAIL log line above`, 'MEMOS');
+        return sent !== false;
     } catch (err) {
         logger.error(`Memo notification failed (${ctx}):`, err as Error);
         return false;

@@ -23,7 +23,7 @@ import {
     type StepDecision,
 } from '../services/memoService';
 import { parsePngDataUrl, saveSignaturePng, readSignaturePng } from '../services/signatureStorage';
-import { buildMemoPdf } from '../services/memoPdf';
+import { MEMO_PDF_SELECT, renderMemoPdf, pdfFileName, archiveFinalPdf, readArchivedPdf } from '../services/memoFinalPdf';
 import { notifyMemoEvent } from '../services/memoMailer';
 import {
     validateAttachment, saveAttachment, readAttachment, MAX_ATTACHMENTS_PER_REVISION,
@@ -562,52 +562,46 @@ router.delete('/:id/attachments/:attId', requireAuth, async (req: Request, res: 
 
 // ─── PDF officiel ───────────────────────────────────────────────────────────
 
-// GET /api/memos/:id/pdf — même visibilité que la fiche. Un mémo non final est
-// imprimé avec un bandeau « non valide » ; le tampon n'apparaît qu'aux états finaux.
+// GET /api/memos/:id/pdf — même visibilité que la fiche. Un mémo non final est généré à la
+// demande avec un bandeau « non valide » ; un mémo décaissé a un PDF FINAL archivé au
+// décaissement (sinon archivé à la première demande) et servi tel quel, empreinte vérifiée.
 router.get('/:id/pdf', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const id = parseId(req.params.id);
 
-        const [rows] = await db.query(
-            `SELECT m.*, ty.name AS type_name, pr.code AS project_code, pr.title AS project_title
-             FROM memos m JOIN memo_types ty ON ty.id = m.type_id
-                  LEFT JOIN memo_projects pr ON pr.id = m.project_id
-             WHERE m.id = ?`,
-            [id]
-        );
-        const memo = (rows as any[])[0];
+        const [rows] = await db.query(MEMO_PDF_SELECT, [id]);
+        let memo = (rows as any[])[0];
         if (!memo) throw new NotFoundException('Memo not found');
         if (!(await canViewMemo(db as any, memo, user))) {
             return res.status(403).json({ error: 'You do not have access to this memo' });
         }
 
-        const [stepRows] = await db.query(
-            `SELECT s.step_no, s.kind, s.status, s.acted_by_email, s.acted_at, s.comment, p.label AS position_label,
-                    sg.image_path
-             FROM memo_steps s JOIN memo_positions p ON p.id = s.position_id
-                  LEFT JOIN user_signatures sg ON sg.id = s.signature_id
-             WHERE s.memo_id = ? AND s.revision_no = ? ORDER BY s.step_no`,
-            [id, memo.revision_no]
-        );
-        const steps = [];
-        for (const s of ((stepRows as any[]) || [])) {
-            let signature: Buffer | null = null;
-            if (s.image_path) { try { signature = await readSignaturePng(s.image_path); } catch { signature = null; } }
-            steps.push({ ...s, signature });
+        let pdf: Buffer | null = null;
+        let sha256: string | null = null;
+        if (memo.status === 'released') {
+            if (!memo.pdf_path) {
+                try {
+                    await archiveFinalPdf(id);
+                    const [again] = await db.query(MEMO_PDF_SELECT, [id]);
+                    memo = (again as any[])[0] || memo;
+                } catch (err) {
+                    logger.error(`Memo #${id}: final PDF could not be archived, serving a fresh render:`, err as Error);
+                }
+            }
+            if (memo.pdf_path) {
+                pdf = await readArchivedPdf(memo);
+                sha256 = memo.pdf_sha256;
+            }
         }
-        const [attRows] = await db.query(
-            `SELECT original_name, size_bytes, sha256 FROM memo_attachments WHERE memo_id = ? AND revision_no = ? ORDER BY id`,
-            [id, memo.revision_no]
-        );
+        if (!pdf) pdf = await renderMemoPdf(memo);
 
-        const pdf = await buildMemoPdf({ memo, steps, attachments: (attRows as any[]) || [] });
-        const fileName = `${memo.reference ? String(memo.reference).replace(/[^A-Za-z0-9]+/g, '-') : `memo-${id}-draft`}.pdf`;
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="${fileName}"`,
+            'Content-Disposition': `attachment; filename="${pdfFileName(memo)}"`,
             'X-Content-Type-Options': 'nosniff',
             'Cache-Control': 'private, max-age=0',
+            ...(sha256 ? { 'X-PDF-SHA256': sha256 } : {}),
         });
         return res.send(pdf);
     } catch (err) {
@@ -703,6 +697,10 @@ router.patch('/:id/release', requireAuth, async (req: Request, res: Response) =>
         );
         await logAudit(user.email, `memo_${req.body.decision === 'refuse' ? 'release_refused' : 'released'}`, 'memos', id, null,
             { release_reference: req.body?.release_reference || null, comment: req.body?.comment || null });
+        if (result.newStatus === 'released') {
+            // Non bloquant : le décaissement est acquis ; sinon le PDF sera archivé à la première demande.
+            try { await archiveFinalPdf(id); } catch (err) { logger.error(`Memo #${id}: final PDF archiving failed:`, err as Error); }
+        }
         await notifyMemoEvent(req.body.decision === 'refuse' ? 'refused' : 'released', id, user.email, { comment: req.body?.comment || null });
         return res.json({ success: true, id, status: result.newStatus });
     } catch (err) {
