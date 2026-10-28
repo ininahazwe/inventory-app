@@ -72,6 +72,7 @@ export default function MemoAdminPage() {
           <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>
             Who may recommend, approve or release at each level. Add a person by email (they must already have an account); a deputy acts for the holder.
             The author of a memo can never decide on their own memo. When a level has several managers, the author can choose which one recommends the memo.
+            <strong> Memos is open to administrators and to the people listed here, at any level:</strong> add the people who may write memos to the Agent level.
           </p>
         )}
         {error && <div style={{ padding: 12, margin: '12px 0', background: '#f8d7da', color: '#721c24', borderRadius: 4 }}>❌ {error}</div>}
@@ -88,10 +89,12 @@ export default function MemoAdminPage() {
               <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
                 <h2 style={{ fontSize: 17, margin: 0 }}>{p.label}</h2>
                 <span style={{ fontSize: 12, color: !isAgent && activeCount === 0 ? '#b91c1c' : '#999' }}>
-                  {isAgent ? 'Authors — no signatory needed' : activeCount === 0 ? '⚠️ nobody assigned — memos cannot be submitted' : `${activeCount} active`}
+                  {isAgent
+                    ? (activeCount === 0 ? 'Authors — nobody declared yet: only administrators can open Memos' : `Authors — ${activeCount} may write memos`)
+                    : activeCount === 0 ? '⚠️ nobody assigned — memos cannot be submitted' : `${activeCount} active`}
                 </span>
               </div>
-              {!isAgent && (
+              {(
                 <>
                   {p.holders.length === 0 && <div style={{ color: '#999', fontSize: 14, margin: '8px 0' }}>No one yet.</div>}
                   {p.holders.map(h => (

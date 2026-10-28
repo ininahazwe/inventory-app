@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { useToast } from './hooks/useToast';
 import ToastContainer from './components/ToastContainer';
 import {usePermissions, getCachedUser} from "./hooks/usePermissions.ts";
+import { useMemoAccess } from "./hooks/useMemoAccess";
 import { InsideShellContext } from "./components/ShellContext";
 import Modal from './components/Modal';
 import AuditDashboard from './components/AuditDashboard';
@@ -41,6 +42,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const { toasts, removeToast } = useToast();
 
   const { isAdmin, isSuperAdmin } = usePermissions();
+  const { allowed: memoAllowed } = useMemoAccess();
 
   const { userInfo } = usePermissions();
   useEffect(() => {
@@ -74,7 +76,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
                 {isAdmin && (
                   <Link to="/supplies" className="pill color3">📋︎ Supplies</Link>
                 )}
-                <Link to="/memos" className="pill color5">✉︎ Memos</Link>
+                {memoAllowed && <Link to="/memos" className="pill color5">✉︎ Memos</Link>}
                 <Link to="/incidents" className="pill color4">🛠︎ Incidents</Link>
               </>
             )}

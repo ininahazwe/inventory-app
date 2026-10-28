@@ -6,7 +6,8 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
 import { logger } from '../middleware/logger';
-import { requireAuth, requireAdmin, isAdminUser } from '../middleware/auth';
+import { requireAuth as baseRequireAuth, requireAdmin, isAdminUser } from '../middleware/auth';
+import { hasMemoAccess } from '../services/memoAccess';
 import { logAudit } from './audit';
 import { AppException, BusinessException, ConflictException, NotFoundException } from '../exceptions';
 import {
@@ -35,6 +36,11 @@ import {
 } from '../services/attachmentStorage';
 
 const router = Router();
+
+// L'authentification est faite une seule fois par requête : `router.use` ci-dessous l'exécute,
+// les `requireAuth` posés sur chaque route deviennent alors sans effet (pas de seconde requête de rôle).
+const requireAuth = (req: Request, res: Response, next: (err?: any) => void) =>
+    (req as any).user ? next() : baseRequireAuth(req, res, next);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -125,6 +131,32 @@ function visibleClause(user: { email: string; role?: string }): { sql: string; p
         params: [user.email, user.email, user.email],
     };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACCÈS AU MODULE — admins et personnes déclarées dans /memos/admin
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/memos/access — { access: boolean } : l'interface s'en sert pour afficher ou non Memos.
+// Volontairement avant le garde-fou ci-dessous (il doit répondre aussi à ceux qui n'ont pas accès).
+router.get('/access', requireAuth, async (req: Request, res: Response) => {
+    try {
+        return res.json({ access: await hasMemoAccess((req as any).user) });
+    } catch (err) {
+        return fail(res, err, 'GET /memos/access');
+    }
+});
+
+// Toutes les routes suivantes : admin, ou titulaire / suppléant actif d'un niveau (agent inclus).
+router.use(requireAuth, async (req: Request, res: Response, next: (err?: any) => void) => {
+    try {
+        if (await hasMemoAccess((req as any).user)) return next();
+        return res.status(403).json({
+            error: 'Memos are restricted to administrators and to the people listed in Memo administration. Ask an administrator to add you.',
+        });
+    } catch (err) {
+        return fail(res, err, 'memo access check');
+    }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES SPÉCIFIQUES — avant /:id
@@ -307,9 +339,6 @@ router.post('/admin/positions/:code/holders', requireAuth, requireAdmin, async (
         const email = String(req.body?.email || '').trim().toLowerCase();
         const holderRole = req.body?.holder_role === 'deputy' ? 'deputy' : 'holder';
         if (!email) throw new BusinessException('email is required');
-        if (code === 'agent') {
-            throw new BusinessException("The 'agent' level has no holders: any signed-in user can write a memo");
-        }
 
         const [pRows] = await db.query('SELECT id FROM memo_positions WHERE code = ? AND is_active = 1', [code]);
         const position = (pRows as any[])[0];

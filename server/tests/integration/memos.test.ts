@@ -10,6 +10,7 @@ import path from 'path';
 import { createTestApp, mockRows, mockOk, asUser } from '../helpers/testApp';
 import { db } from '../../src/database/connection';
 import { notifyMemoEvent } from '../../src/services/memoMailer';
+import { hasMemoAccess } from '../../src/services/memoAccess';
 import crypto from 'crypto';
 
 // Les e-mails ont leurs propres tests (unit/memoMailer) : ici on vérifie seulement qu'ils sont déclenchés.
@@ -17,6 +18,11 @@ jest.mock('../../src/services/memoMailer', () => ({
     notifyMemoEvent: jest.fn().mockResolvedValue(undefined),
     checkMemosWaiting: jest.fn(),
 }));
+
+// L'accès au module (admin ou personne déclarée) a ses propres tests ci-dessous et dans unit/memoAccess :
+// ici il est ouvert par défaut pour ne pas ajouter une requête à chaque scénario.
+jest.mock('../../src/services/memoAccess', () => ({ hasMemoAccess: jest.fn().mockResolvedValue(true) }));
+const mockedAccess = hasMemoAccess as jest.Mock;
 
 const mockedExecute = db.execute as jest.Mock;
 const mockedQuery = db.query as jest.Mock;
@@ -38,7 +44,7 @@ const stepRow = (no: number, kind: string, pos: number, status: string, label = 
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const PNG_URL = `data:image/png;base64,${PNG_B64}`;
 
-beforeEach(() => { mockedExecute.mockReset(); mockedQuery.mockReset(); });
+beforeEach(() => { mockedExecute.mockReset(); mockedQuery.mockReset(); mockedAccess.mockReset(); mockedAccess.mockResolvedValue(true); });
 
 describe('GET /api/memos', () => {
     const app = createTestApp();
@@ -274,8 +280,15 @@ describe('admin: holders per level', () => {
         expect(res.body).toMatchObject({ level: 'director', email: 'dir@mfwa.org', holder_role: 'deputy' });
     });
 
-    it('refuses holders on the agent level (400) and unknown users (404)', async () => {
-        expect((await request(app).post('/api/memos/admin/positions/agent/holders').set(asUser(ADMIN)).send({ email: 'x@mfwa.org' })).status).toBe(400);
+    it('accepts holders on the agent level (they are the declared authors) and refuses unknown users (404)', async () => {
+        mockedQuery
+            .mockResolvedValueOnce(mockRows([{ id: 1 }]))                      // niveau agent
+            .mockResolvedValueOnce(mockRows([{ email: 'writer@mfwa.org' }]))   // utilisateur
+            .mockResolvedValueOnce(mockOk({ insertId: 9 }))                    // insert
+            .mockResolvedValueOnce(mockOk());                                  // audit
+        const ok = await request(app).post('/api/memos/admin/positions/agent/holders').set(asUser(ADMIN)).send({ email: 'writer@mfwa.org' });
+        expect(ok.status).toBe(201);
+        expect(ok.body.level).toBe('agent');
 
         mockedQuery.mockResolvedValueOnce(mockRows([{ id: 3 }])).mockResolvedValueOnce(mockRows([]));
         expect((await request(app).post('/api/memos/admin/positions/director/holders').set(asUser(ADMIN)).send({ email: 'ghost@mfwa.org' })).status).toBe(404);
@@ -402,5 +415,33 @@ describe('PATCH /api/memos/:id/assignee (choice of the manager)', () => {
         mockedExecute.mockReset();
         script([]);
         expect((await request(app).patch('/api/memos/5/assignee').set(asUser(AUTHOR)).send({ email: 'nobody@mfwa.org' })).status).toBe(400);
+    });
+});
+
+describe('access to the module (admins and declared people only)', () => {
+    const app = createTestApp();
+
+    it('403 on every memo route for someone who is not declared — before any data is read', async () => {
+        mockedAccess.mockResolvedValue(false);
+        for (const [method, url] of [
+            ['get', '/api/memos'], ['get', '/api/memos/meta'], ['get', '/api/memos/stats'], ['get', '/api/memos/5'],
+            ['post', '/api/memos'], ['get', '/api/memos/5/pdf'], ['get', '/api/memos/signature'], ['patch', '/api/memos/5/submit'],
+        ] as const) {
+            const res = await (request(app) as any)[method](url).set(asUser(STRANGER)).send({});
+            expect(res.status).toBe(403);
+            expect(res.body.error).toMatch(/Memo administration/);
+        }
+        expect(mockedQuery).not.toHaveBeenCalled();
+        expect(mockedExecute).not.toHaveBeenCalled();
+    });
+
+    it('GET /access tells the interface, even to someone without access', async () => {
+        mockedAccess.mockResolvedValueOnce(false);
+        const no = await request(app).get('/api/memos/access').set(asUser(STRANGER));
+        expect(no.status).toBe(200);
+        expect(no.body).toEqual({ access: false });
+        mockedAccess.mockResolvedValueOnce(true);
+        expect((await request(app).get('/api/memos/access').set(asUser(AUTHOR))).body).toEqual({ access: true });
+        expect(mockedAccess).toHaveBeenLastCalledWith(expect.objectContaining({ email: AUTHOR.email }));
     });
 });

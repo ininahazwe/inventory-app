@@ -84,8 +84,9 @@ export default function MemosPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             {isAdmin && (
               <button onClick={() => navigate('/memos/admin')}
-                style={{ padding: '10px 14px', background: '#f4f1ee', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                Signatories
+                title="Signatories, projects, memo types and approval chains"
+                style={{ padding: '10px 14px', background: '#f4f1ee', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                ⚙ Administration
               </button>
             )}
             <button onClick={() => navigate('/memos/new')}

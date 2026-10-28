@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import Layout from "../Layout";
 import { SECTIONS, type SectionDef } from "../lib/sections";
+import { useMemoAccess } from "../hooks/useMemoAccess";
 import { usePermissions } from "../hooks/usePermissions";
 import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 
@@ -99,7 +100,9 @@ export default function HomePage() {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
   const { isAdmin, loading: permsLoading } = usePermissions();
-  const visibleSections = SECTIONS.filter((sec) => isAdmin || !sec.adminOnly);
+  const { allowed: memoAllowed } = useMemoAccess();
+  // Memos: admins and people declared in /memos/admin only.
+  const visibleSections = SECTIONS.filter((sec) => (isAdmin || !sec.adminOnly) && (sec.key !== 'memos' || memoAllowed));
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const handleActivate = (section: SectionDef) => {

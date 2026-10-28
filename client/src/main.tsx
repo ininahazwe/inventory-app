@@ -36,6 +36,7 @@ import MemoFormPage from "./pages/MemoFormPage.tsx";
 import MemoDetailPage from "./pages/MemoDetailPage.tsx";
 import MemoAdminPage from "./pages/MemoAdminPage.tsx";
 import RequireAdmin from "./components/RequireAdmin.tsx";
+import RequireMemoAccess from "./components/RequireMemoAccess.tsx";
 import AppShell from "./components/AppShell.tsx";
 
 const router = createBrowserRouter([
@@ -70,10 +71,16 @@ const router = createBrowserRouter([
       { path: "/loans/new", element: <LoanRequestFormPage /> },
       { path: "/loans/:id", element: <LoanDetailPage /> },
       { path: "/loans", element: <LoansPage /> },
-      { path: "/memos/new", element: <MemoFormPage /> },
-      { path: "/memos/:id/edit", element: <MemoFormPage /> },
-      { path: "/memos/:id", element: <MemoDetailPage /> },
-      { path: "/memos", element: <MemosPage /> },
+      // Memos: admins and people declared in /memos/admin
+      {
+        element: <RequireMemoAccess />,
+        children: [
+          { path: "/memos/new", element: <MemoFormPage /> },
+          { path: "/memos/:id/edit", element: <MemoFormPage /> },
+          { path: "/memos/:id", element: <MemoDetailPage /> },
+          { path: "/memos", element: <MemosPage /> },
+        ],
+      },
       { path: "/assignees", element: <AssigneesPage /> },
 
       // Supplies module (and locations): admins only
