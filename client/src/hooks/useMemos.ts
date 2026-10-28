@@ -52,8 +52,21 @@ export type ChainTemplate = { id: number; type_id: number; name: string; is_defa
 export type MemoProject = { id: number; code: string; title: string; donor: string | null; default_currency: string | null };
 export type MemoMeta = {
   types: MemoType[]; templates: ChainTemplate[]; projects: MemoProject[];
+  managers: Array<{ position_code: string; email: string; holder_role: 'holder' | 'deputy' }>;
   signature: { id: number; source: string; created_at: string } | null;
 };
+
+// ─── Administration (projets, types, circuits) ─────────────────────────────
+export type ChainKind = 'recommend' | 'approve' | 'release';
+export type AdminChainStep = { step_no: number; kind: ChainKind; label: string; position_code: string; position_label: string; holders: number };
+export type AdminTemplate = { id: number; type_id: number; name: string; is_default: number; is_active: number; memo_count: number; steps: AdminChainStep[] };
+export type AdminType = {
+  id: number; code: string; name: string; requires_amount: number; requires_project: number; requires_attachment: number;
+  is_active: number; memo_count: number; templates: AdminTemplate[];
+};
+export type AdminProject = { id: number; code: string; title: string; donor: string | null; default_currency: string | null; is_active: number; memo_count: number };
+export type AdminConfig = { types: AdminType[]; projects: AdminProject[]; levels: Array<{ code: string; label: string }> };
+export type ChainStepDraft = { kind: ChainKind; position_code: string; label: string };
 
 export type MemoRow = {
   id: number; reference: string | null; type_id: number; author_email: string;
@@ -65,7 +78,7 @@ export type MemoRow = {
 };
 
 export type MemoStep = {
-  id: number; revision_no: number; step_no: number; kind: string; label: string; status: string;
+  id: number; revision_no: number; step_no: number; kind: string; label: string; status: string; assigned_email: string | null;
   acted_by_email: string | null; acted_at: string | null; comment: string | null;
   signed: number; position_code: string; position_label: string;
 };
@@ -76,19 +89,19 @@ export type MemoEvent = {
 };
 export type MemoCapabilities = {
   edit: boolean; submit: boolean; withdraw: boolean; decide: boolean;
-  release: boolean; reinstruct: boolean; waiting_for: string | null;
+  release: boolean; reinstruct: boolean; reassign: boolean; waiting_for: string | null;
 };
 export type MemoFull = MemoRow & {
   body: string | null; to_label: string; from_label: string; activity_ref: string | null;
   project_id: number | null; project_title: string | null; project_donor: string | null; release_reference: string | null;
-  template_id: number | null;
+  template_id: number | null; manager_email: string | null;
   steps: MemoStep[]; attachments: any[]; events: MemoEvent[]; capabilities: MemoCapabilities;
 };
 
 export type MemoFields = {
   type_id: number; template_id?: number | null; to_label: string; from_label: string;
   subject: string; body: string; memo_date: string; amount?: string | number | null;
-  currency?: string | null; project_id?: number | null; activity_ref?: string | null;
+  currency?: string | null; project_id?: number | null; activity_ref?: string | null; manager_email?: string | null;
 };
 
 export const SIGNATURE_REQUIRED = 'SIGNATURE_REQUIRED';
@@ -127,9 +140,18 @@ export const memosApi = {
   release: (id: number, body: { decision: 'release' | 'refuse'; release_reference?: string; comment?: string }) =>
     api.patch<{ success: boolean; status: MemoStatus }>(`/memos/${id}/release`, body),
   reinstruct: (id: number, comment: string) => api.patch(`/memos/${id}/reinstruct`, { comment }),
+  reassign: (id: number, email: string | null) => api.patch<{ success: boolean; assigned_email: string | null }>(`/memos/${id}/assignee`, { email }),
   withdraw: (id: number, reason?: string) => api.patch(`/memos/${id}/withdraw`, { reason }),
   saveSignature: (image: string, source: 'drawn' | 'typed' | 'uploaded') =>
     api.post<{ success: boolean }>('/memos/signature', { image, source }),
+  adminConfig: () => api.get<AdminConfig>('/memos/admin/config'),
+  createProject: (b: { code: string; title: string; donor?: string; default_currency?: string }) => api.post<{ id: number }>('/memos/admin/projects', b),
+  patchProject: (id: number, b: Partial<{ title: string; donor: string; default_currency: string; is_active: boolean }>) => api.patch(`/memos/admin/projects/${id}`, b),
+  createType: (b: { code: string; name: string; requires_amount?: boolean; requires_project?: boolean; requires_attachment?: boolean }) => api.post<{ id: number }>('/memos/admin/types', b),
+  patchType: (id: number, b: Partial<{ name: string; requires_amount: boolean; requires_project: boolean; requires_attachment: boolean; is_active: boolean }>) => api.patch(`/memos/admin/types/${id}`, b),
+  createChain: (typeId: number, b: { name: string; steps: ChainStepDraft[]; is_default?: boolean }) => api.post<{ id: number }>(`/memos/admin/types/${typeId}/templates`, b),
+  patchChain: (id: number, b: Partial<{ name: string; is_default: boolean; is_active: boolean }>) => api.patch(`/memos/admin/templates/${id}`, b),
+  saveChain: (id: number, steps: ChainStepDraft[]) => api.put(`/memos/admin/templates/${id}/chain`, { steps }),
   positions: () => api.get<any[]>('/memos/admin/positions'),
   addHolder: (code: string, email: string, holder_role: 'holder' | 'deputy') =>
     api.post(`/memos/admin/positions/${code}/holders`, { email, holder_role }),

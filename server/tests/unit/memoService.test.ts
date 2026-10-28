@@ -13,6 +13,7 @@ import {
     updateMemoDraft,
     canViewMemo,
     memoCapabilities,
+    reassignManager,
     SIGNATURE_REQUIRED,
 } from '../../src/services/memoService';
 import { scriptedTx, rows, ok } from '../helpers/scriptedTx';
@@ -160,10 +161,11 @@ describe('submitMemo', () => {
         const step0 = s.calls.find(c => /INSERT INTO memo_steps/.test(c[0]) && /'submit'/.test(c[0]))!;
         expect(step0[1]).toEqual([5, 1, 1, AUTHOR, SIG.id, SIG.sha256]);
 
-        // pas 1..3 : 3 lignes de 7 valeurs, seul le premier actif
+        // pas 1..3 : 3 lignes de 8 valeurs (la dernière = manager assigné), seul le premier actif
         const frozen = s.calls.filter(c => /INSERT INTO memo_steps/.test(c[0]))[1][1] as any[];
-        expect(frozen).toHaveLength(21);
-        expect([frozen[6], frozen[13], frozen[20]]).toEqual(['active', 'pending', 'pending']);
+        expect(frozen).toHaveLength(24);
+        expect([frozen[6], frozen[14], frozen[22]]).toEqual(['active', 'pending', 'pending']);
+        expect([frozen[7], frozen[15], frozen[23]]).toEqual([null, null, null]);   // aucun manager choisi
 
         const ev = s.calls[s.calls.length - 1][1] as any[];
         expect(ev[3]).toBe('submitted');
@@ -528,5 +530,109 @@ describe('memoCapabilities', () => {
         const steps = [step(2, 'approve', 3, 'done'), step(3, 'release', 4, 'refused')];
         expect(memoCapabilities(m, steps, u(DIRECTOR), [3])).toMatchObject({ reinstruct: true, withdraw: true, release: false });
         expect(memoCapabilities(m, steps, u(FINANCE), [4])).toMatchObject({ reinstruct: false });
+    });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('choice of the manager', () => {
+    const CHOSEN = 'manager2@mfwa.org';
+    const submitScript = (m: any, holderAnswer: any) => [
+        ['FOR UPDATE', rows([m])],
+        ['FROM memo_types', rows([{ id: 1, requires_amount: 1, requires_project: 0, requires_attachment: 1 }])],
+        ['FROM memo_attachments', rows([{ n: 1 }])],
+        ['FROM memo_chain_steps', rows(chainRows)],
+        ['LEFT JOIN memo_position_holders', rows([{ id: 2, label: 'Manager', n: 2 }, { id: 3, label: 'Director', n: 1 }, { id: 4, label: 'Finance', n: 1 }])],
+        ['FROM memo_position_holders WHERE position_id', holderAnswer],
+    ] as any;
+
+    it('freezes the chosen manager on the recommendation step only', async () => {
+        const s = scriptedTx([
+            ...submitScript(memo({ manager_email: CHOSEN.toUpperCase() }), holder),
+            ['FROM user_signatures', rows([SIG])],
+            ['INSERT INTO memo_sequences', ok()], ['SELECT last_number', rows([{ last_number: 12 }])],
+            ["FROM memo_positions WHERE code = 'agent'", rows([{ id: 1 }])],
+            ['INSERT INTO memo_steps', ok()], ['INSERT INTO memo_steps', ok()],
+            ["UPDATE memos SET status = 'in_review'", ok()], ['INSERT INTO memo_events', ok()],
+        ]);
+        await submitMemo(s.tx, 5, AUTHOR);
+        s.done();
+        expect(s.params(6)).toEqual([2, CHOSEN.toUpperCase()]);                  // contrôle titulaire du niveau Manager
+        const frozen = s.calls.filter(c => /INSERT INTO memo_steps/.test(c[0]))[1][1] as any[];
+        expect([frozen[7], frozen[15], frozen[23]]).toEqual([CHOSEN, null, null]);
+        const ev = s.calls[s.calls.length - 1][1] as any[];
+        expect(JSON.parse(ev[7]).manager).toBe(CHOSEN);
+    });
+
+    it('refuses a chosen manager who is no longer an active holder (409)', async () => {
+        const s = scriptedTx(submitScript(memo({ manager_email: CHOSEN }), notHolder));
+        await expect(submitMemo(s.tx, 5, AUTHOR)).rejects.toMatchObject({ statusCode: 409 });
+    });
+
+    it('only the assigned manager can decide; another manager of the level gets 403', async () => {
+        const assigned = fullChain(1).map(x => (x.step_no === 1 ? { ...x, assigned_email: CHOSEN } : x));
+        const s = scriptedTx([
+            ['FOR UPDATE', rows([memo({ status: 'in_review', current_step_no: 1, reference: 'R' })])],
+            ['FROM memo_steps s', rows(assigned)],
+            ['FROM memo_position_holders WHERE position_id', holder],
+        ]);
+        await expect(decideStep(s.tx, 5, MANAGER, 'approve')).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('capabilities: decide only for the assignee; reassign for the author and admins while at the recommendation', () => {
+        const m = memo({ status: 'in_review', current_step_no: 1 });
+        const steps = fullChain(1).map(x => (x.step_no === 1 ? { ...x, assigned_email: CHOSEN } : x));
+        expect(memoCapabilities(m, steps, { email: MANAGER }, [2]).decide).toBe(false);
+        expect(memoCapabilities(m, steps, { email: CHOSEN }, [2]).decide).toBe(true);
+        expect(memoCapabilities(m, steps, { email: CHOSEN }, [2]).waiting_for).toBe(`Manager (${CHOSEN})`);
+        expect(memoCapabilities(m, steps, { email: AUTHOR }, [1]).reassign).toBe(true);
+        expect(memoCapabilities(m, steps, { email: 'root@mfwa.org', role: 'admin' }, []).reassign).toBe(true);
+        expect(memoCapabilities(m, steps, { email: MANAGER }, [2]).reassign).toBe(false);
+        expect(memoCapabilities(memo({ status: 'in_review', current_step_no: 2 }), fullChain(2), { email: AUTHOR }, [1]).reassign).toBe(false);
+    });
+
+    describe('reassignManager', () => {
+        const inRev = () => memo({ status: 'in_review', current_step_no: 1, reference: 'R' });
+        const base = (extra: any[]) => [
+            ['FOR UPDATE', rows([inRev()])],
+            ['FROM memo_steps s', rows(fullChain(1))],
+            ...extra,
+        ] as any;
+
+        it('updates the step and the memo, and journals « reassigned »', async () => {
+            const s = scriptedTx(base([
+                ['FROM memo_position_holders WHERE position_id', holder],
+                ['UPDATE memo_steps SET assigned_email', ok()],
+                ['UPDATE memos SET manager_email', ok()],
+                ['INSERT INTO memo_events', ok()],
+            ]));
+            const r = await reassignManager(s.tx, 5, AUTHOR, false, ` ${CHOSEN} `);
+            s.done();
+            expect(r.assignee).toBe(CHOSEN);
+            expect(s.params(4)).toEqual([CHOSEN, 101]);
+            expect((s.calls[s.calls.length - 1][1] as any[])[3]).toBe('reassigned');
+        });
+
+        it('null reopens the step to the whole level', async () => {
+            const assigned = fullChain(1).map(x => (x.step_no === 1 ? { ...x, assigned_email: CHOSEN } : x));
+            const s = scriptedTx([
+                ['FOR UPDATE', rows([inRev()])], ['FROM memo_steps s', rows(assigned)],
+                ['UPDATE memo_steps SET assigned_email', ok()], ['UPDATE memos SET manager_email', ok()], ['INSERT INTO memo_events', ok()],
+            ]);
+            const r = await reassignManager(s.tx, 5, 'root@mfwa.org', true, null);
+            s.done();
+            expect(r).toMatchObject({ assignee: null, previous: CHOSEN });
+        });
+
+        it('403 for someone else, 409 outside the recommendation step, 400 for a non-holder or the author', async () => {
+            await expect(reassignManager(scriptedTx([['FOR UPDATE', rows([inRev()])]]).tx, 5, MANAGER, false, CHOSEN)).rejects.toMatchObject({ statusCode: 403 });
+            await expect(reassignManager(scriptedTx([['FOR UPDATE', rows([memo({ status: 'approved' })])]]).tx, 5, AUTHOR, false, CHOSEN)).rejects.toMatchObject({ statusCode: 409 });
+            await expect(reassignManager(scriptedTx([
+                ['FOR UPDATE', rows([memo({ status: 'in_review', current_step_no: 2 })])], ['FROM memo_steps s', rows(fullChain(2))],
+            ]).tx, 5, AUTHOR, false, CHOSEN)).rejects.toMatchObject({ statusCode: 409 });
+            await expect(reassignManager(scriptedTx(base([['FROM memo_position_holders WHERE position_id', notHolder]])).tx, 5, AUTHOR, false, CHOSEN))
+                .rejects.toMatchObject({ statusCode: 400 });
+            await expect(reassignManager(scriptedTx(base([])).tx, 5, AUTHOR, false, AUTHOR)).rejects.toMatchObject({ statusCode: 400 });
+        });
     });
 });

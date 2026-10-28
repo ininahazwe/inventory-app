@@ -17,6 +17,7 @@ import {
     decideRelease,
     reinstructRelease,
     withdrawMemo,
+    reassignManager,
     canViewMemo,
     memoCapabilities,
     EDITABLE_STATUSES,
@@ -25,6 +26,10 @@ import {
 import { parsePngDataUrl, saveSignaturePng, readSignaturePng } from '../services/signatureStorage';
 import { MEMO_PDF_SELECT, renderMemoPdf, pdfFileName, archiveFinalPdf, readArchivedPdf } from '../services/memoFinalPdf';
 import { notifyMemoEvent } from '../services/memoMailer';
+import {
+    loadAdminConfig, createProject, updateProject, createType, updateType,
+    createTemplate, updateTemplate, replaceChain,
+} from '../services/memoAdminService';
 import {
     validateAttachment, saveAttachment, readAttachment, MAX_ATTACHMENTS_PER_REVISION,
 } from '../services/attachmentStorage';
@@ -69,6 +74,7 @@ function pickFields(body: any) {
         currency: body.currency === undefined ? undefined : (body.currency ? String(body.currency).toUpperCase() : null),
         project_id: body.project_id === undefined ? undefined : (body.project_id ? parseInt(String(body.project_id), 10) : null),
         activity_ref: body.activity_ref === undefined ? undefined : (body.activity_ref ? String(body.activity_ref) : null),
+        manager_email: body.manager_email === undefined ? undefined : (body.manager_email ? String(body.manager_email).trim().toLowerCase() : null),
     };
 }
 
@@ -95,7 +101,8 @@ const TO_ACT_SQL = `(
             SELECT 1 FROM memo_steps s
               JOIN memo_position_holders h ON h.position_id = s.position_id AND h.user_email = ? AND h.is_active = 1
              WHERE s.memo_id = m.id AND s.revision_no = m.revision_no
-               AND s.step_no = m.current_step_no AND s.status = 'active'))
+               AND s.step_no = m.current_step_no AND s.status = 'active'
+               AND (s.assigned_email IS NULL OR s.assigned_email = ?)))
         OR (m.status = 'release_refused' AND EXISTS (
             SELECT 1 FROM memo_steps s
               JOIN memo_position_holders h ON h.position_id = s.position_id AND h.user_email = ? AND h.is_active = 1
@@ -104,7 +111,7 @@ const TO_ACT_SQL = `(
                                  WHERE s2.memo_id = m.id AND s2.revision_no = m.revision_no AND s2.kind = 'approve')))
     )
 )`;
-const toActParams = (email: string) => [email, email, email];
+const toActParams = (email: string) => [email, email, email, email];
 
 /** Périmètre de lecture imposé côté serveur (jamais seulement masqué dans l'interface). */
 function visibleClause(user: { email: string; role?: string }): { sql: string; params: any[] } {
@@ -147,6 +154,14 @@ router.get('/meta', requireAuth, async (req: Request, res: Response) => {
         const [projects] = await db.query(
             `SELECT id, code, title, donor, default_currency FROM memo_projects WHERE is_active = 1 ORDER BY code`
         );
+        // Titulaires des niveaux « recommander » : l'auteur peut y choisir son manager.
+        const [managers] = await db.query(
+            `SELECT DISTINCT p.code AS position_code, h.user_email AS email, h.holder_role
+             FROM memo_chain_steps cs
+                  JOIN memo_positions p ON p.id = cs.position_id
+                  JOIN memo_position_holders h ON h.position_id = p.id AND h.is_active = 1
+             WHERE cs.kind = 'recommend' ORDER BY h.user_email`
+        );
         const [sig] = await db.query(
             `SELECT id, source, created_at FROM user_signatures WHERE user_email = ? AND is_active = 1 ORDER BY id DESC LIMIT 1`,
             [user.email]
@@ -161,6 +176,7 @@ router.get('/meta', requireAuth, async (req: Request, res: Response) => {
             types: types || [],
             templates: ((templates as any[]) || []).map(t => ({ ...t, steps: stepsByTemplate.get(t.id) || [] })),
             projects: projects || [],
+            managers: managers || [],
             signature: (sig as any[])[0] || null,
         });
     } catch (err) {
@@ -338,6 +354,107 @@ router.patch('/admin/holders/:id', requireAuth, requireAdmin, async (req: Reques
     }
 });
 
+// ─── Administration : projets, types de mémo et circuits ────────────────────
+
+// GET /api/memos/admin/config — types, modèles de circuit (avec pas), projets, niveaux
+router.get('/admin/config', requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+        return res.json(await loadAdminConfig(db as any));
+    } catch (err) {
+        return fail(res, err, 'GET /memos/admin/config');
+    }
+});
+
+// POST /api/memos/admin/projects — { code, title, donor?, default_currency? }
+router.post('/admin/projects', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const r = await db.transaction(async (tx) => createProject(tx as any, req.body || {}));
+        await logAudit(user.email, 'memo_project_created', 'memo_projects', r.id, null, req.body);
+        return res.status(201).json({ success: true, id: r.id });
+    } catch (err) {
+        return fail(res, err, 'POST /memos/admin/projects');
+    }
+});
+
+// PATCH /api/memos/admin/projects/:id — { title?, donor?, default_currency?, is_active? }
+router.patch('/admin/projects/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        await db.transaction(async (tx) => updateProject(tx as any, id, req.body || {}));
+        await logAudit(user.email, 'memo_project_changed', 'memo_projects', id, null, req.body);
+        return res.json({ success: true, id });
+    } catch (err) {
+        return fail(res, err, 'PATCH /memos/admin/projects/:id');
+    }
+});
+
+// POST /api/memos/admin/types — { code, name, requires_*?, steps? } (crée aussi le circuit « Standard »)
+router.post('/admin/types', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const r = await db.transaction(async (tx) => createType(tx as any, req.body || {}));
+        await logAudit(user.email, 'memo_type_created', 'memo_types', r.typeId, null, req.body);
+        return res.status(201).json({ success: true, id: r.typeId, template_id: r.templateId });
+    } catch (err) {
+        return fail(res, err, 'POST /memos/admin/types');
+    }
+});
+
+// PATCH /api/memos/admin/types/:id — { name?, requires_amount?, requires_project?, requires_attachment?, is_active? }
+router.patch('/admin/types/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        await db.transaction(async (tx) => updateType(tx as any, id, req.body || {}));
+        await logAudit(user.email, 'memo_type_changed', 'memo_types', id, null, req.body);
+        return res.json({ success: true, id });
+    } catch (err) {
+        return fail(res, err, 'PATCH /memos/admin/types/:id');
+    }
+});
+
+// POST /api/memos/admin/types/:id/templates — { name, steps, is_default? }
+router.post('/admin/types/:id/templates', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const r = await db.transaction(async (tx) => createTemplate(tx as any, id, req.body || {}));
+        await logAudit(user.email, 'memo_chain_created', 'memo_chain_templates', r.templateId, null, req.body);
+        return res.status(201).json({ success: true, id: r.templateId });
+    } catch (err) {
+        return fail(res, err, 'POST /memos/admin/types/:id/templates');
+    }
+});
+
+// PATCH /api/memos/admin/templates/:id — { name?, is_default?, is_active? }
+router.patch('/admin/templates/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        await db.transaction(async (tx) => updateTemplate(tx as any, id, req.body || {}));
+        await logAudit(user.email, 'memo_chain_changed', 'memo_chain_templates', id, null, req.body);
+        return res.json({ success: true, id });
+    } catch (err) {
+        return fail(res, err, 'PATCH /memos/admin/templates/:id');
+    }
+});
+
+// PUT /api/memos/admin/templates/:id/chain — { steps: [{ kind, position_code, label? }] }
+// Ne touche pas aux mémos déjà soumis : leur circuit est figé dans memo_steps.
+router.put('/admin/templates/:id/chain', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const r = await db.transaction(async (tx) => replaceChain(tx as any, id, req.body?.steps));
+        await logAudit(user.email, 'memo_chain_steps_replaced', 'memo_chain_templates', id, null, req.body);
+        return res.json({ success: true, id, steps: r.steps });
+    } catch (err) {
+        return fail(res, err, 'PUT /memos/admin/templates/:id/chain');
+    }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LECTURES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -399,7 +516,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
         }
 
         const [steps] = await db.query(
-            `SELECT s.id, s.revision_no, s.step_no, s.kind, s.position_id, s.label, s.status, s.acted_by_email,
+            `SELECT s.id, s.revision_no, s.step_no, s.kind, s.position_id, s.label, s.status, s.assigned_email, s.acted_by_email,
                     s.acted_at, s.comment, (s.signature_id IS NOT NULL) AS signed, s.signature_sha256,
                     p.code AS position_code, p.label AS position_label
              FROM memo_steps s JOIN memo_positions p ON p.id = s.position_id
@@ -662,6 +779,22 @@ router.patch('/:id/submit', requireAuth, async (req: Request, res: Response) => 
         return res.json({ success: true, id, status: 'in_review', reference: result.reference });
     } catch (err) {
         return fail(res, err, 'PATCH /memos/:id/submit');
+    }
+});
+
+// PATCH /api/memos/:id/assignee — { email: string | null } : change le manager (auteur ou admin)
+router.patch('/:id/assignee', requireAuth, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const id = parseId(req.params.id);
+        const email = req.body?.email ? String(req.body.email) : null;
+        const result = await db.transaction(async (tx) => reassignManager(tx as any, id, user.email, isAdminUser(user), email));
+        await logAudit(user.email, 'memo_manager_changed', 'memos', id, null, { from: result.previous, to: result.assignee });
+        logger.info(`Memo #${id}: manager ${result.previous || 'any'} → ${result.assignee || 'any'} by ${user.email}`, 'MEMOS');
+        await notifyMemoEvent('reassigned', id, user.email);
+        return res.json({ success: true, id, assigned_email: result.assignee });
+    } catch (err) {
+        return fail(res, err, 'PATCH /memos/:id/assignee');
     }
 });
 

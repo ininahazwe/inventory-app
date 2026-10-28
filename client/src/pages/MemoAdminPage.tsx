@@ -1,12 +1,15 @@
 // src/pages/MemoAdminPage.tsx
-// Admin : qui signe à chaque niveau du circuit (titulaires et suppléants).
-// Les niveaux sont fixes (agent / manager / director / finance) ; l'admin ne
-// gère que les personnes. Un niveau sans titulaire bloque les soumissions.
+// Admin Mémos, en trois onglets :
+//  - Signatories : qui signe à chaque niveau (titulaires et suppléants). Les niveaux sont
+//    fixes (agent / manager / director / finance) ; un niveau sans titulaire bloque les soumissions.
+//  - Projects : les projets / bailleurs proposés à la rédaction.
+//  - Types & chains : les types de mémo et leurs circuits de validation.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../Layout';
 import { SkeletonDetail } from '../components/Skeleton';
-import { memosApi } from '../hooks/useMemos';
+import { ProjectsTab, TypesTab } from '../components/MemoAdminConfig';
+import { memosApi, type AdminConfig } from '../hooks/useMemos';
 
 type Holder = { id: number; user_email: string; holder_role: 'holder' | 'deputy'; is_active: number };
 type Position = { id: number; code: string; label: string; is_active: number; holders: Holder[] };
@@ -16,6 +19,25 @@ export default function MemoAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { email: string; role: 'holder' | 'deputy' }>>({});
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'holders' | 'projects' | 'types'>('holders');
+  const [config, setConfig] = useState<AdminConfig | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const loadConfig = useCallback(async () => {
+    const { data, error: e } = await memosApi.adminConfig();
+    if (e) setError(e); else setConfig(data as AdminConfig);
+  }, []);
+  // Les onglets Projects et Types lisent la même configuration ; les titulaires (« holders »)
+  // alimentent l'avertissement « personne d'assigné » : on recharge tout au changement d'onglet.
+  useEffect(() => { if (tab !== 'holders') loadConfig(); }, [tab, loadConfig]);
+  const act = async (key: string, fn: () => Promise<{ error: string | null }>): Promise<boolean> => {
+    setBusyKey(key); setError(null);
+    const { error: e } = await fn();
+    if (e) { setBusyKey(null); setError(e); return false; }
+    await loadConfig();
+    setBusyKey(null);
+    return true;
+  };
 
   const load = useCallback(async () => {
     const { data, error: e } = await memosApi.positions();
@@ -36,14 +58,28 @@ export default function MemoAdminPage() {
     <Layout>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: 20 }}>
         <Link to="/memos" style={{ fontSize: 13, color: '#666' }}>← All memos</Link>
-        <h1 style={{ margin: '10px 0 4px' }}>Memo signatories</h1>
-        <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>
-          Who may recommend, approve or release at each level. Add a person by email (they must already have an account); a deputy acts for the holder.
-          The author of a memo can never decide on their own memo.
-        </p>
+        <h1 style={{ margin: '10px 0 12px' }}>Memo administration</h1>
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee', marginBottom: 16 }}>
+          {([['holders', 'Signatories'], ['projects', 'Projects'], ['types', 'Types & chains']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => { setTab(k); setError(null); }}
+              style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14,
+                       borderBottom: tab === k ? '2px solid var(--brand)' : '2px solid transparent', color: tab === k ? 'var(--brand)' : '#666', fontWeight: tab === k ? 600 : 400 }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {tab === 'holders' && (
+          <p style={{ color: '#666', fontSize: 14, marginTop: 0 }}>
+            Who may recommend, approve or release at each level. Add a person by email (they must already have an account); a deputy acts for the holder.
+            The author of a memo can never decide on their own memo. When a level has several managers, the author can choose which one recommends the memo.
+          </p>
+        )}
         {error && <div style={{ padding: 12, margin: '12px 0', background: '#f8d7da', color: '#721c24', borderRadius: 4 }}>❌ {error}</div>}
 
-        {positions.map(p => {
+        {tab !== 'holders' && !config && !error && <SkeletonDetail />}
+        {tab === 'projects' && config && <ProjectsTab config={config} busyKey={busyKey} act={act} />}
+        {tab === 'types' && config && <TypesTab config={config} busyKey={busyKey} act={act} />}
+        {tab === 'holders' && positions.map(p => {
           const d = drafts[p.code] || { email: '', role: 'holder' as const };
           const activeCount = p.holders.filter(h => h.is_active).length;
           const isAgent = p.code === 'agent';

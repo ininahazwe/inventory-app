@@ -10,6 +10,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { SkeletonDetail } from '../components/Skeleton';
 import SignaturePad from '../components/SignaturePad';
 import MemoAttachments from '../components/MemoAttachments';
+import { Spinner, MEMO_ANIMATIONS } from '../components/MemoSpinner';
 import { memosApi, SIGNATURE_REQUIRED, type MemoMeta, type MemoFull, type MemoFields } from '../hooks/useMemos';
 import { todayDateString } from '../lib/dateHelpers';
 
@@ -29,6 +30,8 @@ export default function MemoFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPad, setShowPad] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);
+  const [action, setAction] = useState<'submit' | 'draft' | null>(null);   // bouton qui tourne
+  const [managerEmail, setManagerEmail] = useState('');
 
   const [typeId, setTypeId] = useState<number | ''>('');
   const [templateId, setTemplateId] = useState<number | ''>('');
@@ -57,6 +60,7 @@ export default function MemoFormPage() {
         setMemoDate((data.memo_date || todayDateString()).slice(0, 10));
         setAmount(data.amount ? String(data.amount) : ''); setCurrency(data.currency || 'USD');
         setProjectId(data.project_id || ''); setActivityRef(data.activity_ref || '');
+        setManagerEmail(data.manager_email || '');
       } else if (m.types[0]) {
         setTypeId(m.types[0].id);
       }
@@ -70,6 +74,15 @@ export default function MemoFormPage() {
   useEffect(() => { if (!templates.some(t => t.id === templateId)) setTemplateId(''); }, [templates]); // eslint-disable-line
 
   const missingLevels = (template?.steps || []).filter(s => s.holders === 0);
+  // Managers au choix : titulaires du niveau « recommander » du circuit, hors l'auteur.
+  const recommendStep = (template?.steps || []).find(s => s.kind === 'recommend') || null;
+  const me = (userInfo?.email || '').toLowerCase();
+  const managerChoices = recommendStep
+    ? (meta?.managers || []).filter(m => m.position_code === recommendStep.position_code && m.email.toLowerCase() !== me)
+    : [];
+  useEffect(() => {
+    if (managerEmail && !managerChoices.some(m => m.email.toLowerCase() === managerEmail.toLowerCase())) setManagerEmail('');
+  }, [template?.id, meta]); // eslint-disable-line
   const project = meta?.projects.find(p => p.id === projectId) || null;
 
   const payload = (): MemoFields => ({
@@ -77,6 +90,7 @@ export default function MemoFormPage() {
     to_label: toLabel, from_label: fromLabel, subject, body, memo_date: memoDate,
     amount: type?.requires_amount && amount ? amount : null, currency: amount ? currency : null,
     project_id: projectId ? Number(projectId) : null, activity_ref: activityRef || null,
+    manager_email: managerChoices.length > 1 && managerEmail ? managerEmail : null,
   });
 
   const save = async (): Promise<number | null> => {
@@ -101,21 +115,21 @@ export default function MemoFormPage() {
   };
 
   const onSaveDraft = async () => {
-    setBusy(true); setError(null);
+    setBusy(true); setAction('draft'); setError(null);
     const mid = await save();
-    setBusy(false);
+    setBusy(false); setAction(null);
     if (mid) navigate(memoId ? `/memos/${mid}` : `/memos/${mid}/edit`, { replace: true });
   };
 
   const onSubmit = async () => {
-    setBusy(true); setError(null);
+    setBusy(true); setAction('submit'); setError(null);
     const mid = await save();
     if (mid) {
       if (!memoId) window.history.replaceState(null, '', `/memos/${mid}/edit`);
       setExisting(prev => prev || ({ id: mid } as any));
       await trySubmit(mid);
     }
-    setBusy(false);
+    setBusy(false); setAction(null);
   };
 
   if (loading) return <Layout><SkeletonDetail /></Layout>;
@@ -128,6 +142,7 @@ export default function MemoFormPage() {
   return (
     <Layout>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: 20 }}>
+        <style>{MEMO_ANIMATIONS}</style>
         <Link to="/memos" style={{ fontSize: 13, color: '#666' }}>← All memos</Link>
         <h1 style={{ margin: '10px 0 4px' }}>{memoId ? (existing?.status === 'returned' ? 'Revise memo' : 'Edit memo') : 'New memo'}</h1>
         {existing?.reference && <p style={{ color: '#999', fontSize: 13, marginTop: 0 }}>{existing.reference} · revision {existing.revision_no}</p>}
@@ -153,6 +168,15 @@ export default function MemoFormPage() {
                 <select style={field} value={template?.id || ''} onChange={e => setTemplateId(Number(e.target.value))}>
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
+              </label>
+            )}
+            {managerChoices.length > 1 && (
+              <label style={label}>{recommendStep!.position_label} who will recommend this memo
+                <select style={field} value={managerEmail} onChange={e => setManagerEmail(e.target.value)}>
+                  <option value="">Any {recommendStep!.position_label} (all are notified)</option>
+                  {managerChoices.map(m => <option key={m.email} value={m.email}>{m.email}{m.holder_role === 'deputy' ? ' (deputy)' : ''}</option>)}
+                </select>
+                <span style={{ fontSize: 12, color: '#999' }}>If you pick one person, only they can sign this step and receive the e-mail. You can change it while it waits.</span>
               </label>
             )}
             <div style={{ display: 'flex', gap: 10 }}>
@@ -196,9 +220,9 @@ export default function MemoFormPage() {
             {!readOnly && (
               <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
                 <button disabled={busy} onClick={onSubmit} style={{ padding: '10px 18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                  {existing?.status === 'returned' ? 'Sign & resubmit' : 'Sign & submit'}
+                  {action === 'submit' && <Spinner />}{action === 'submit' ? 'Submitting…' : existing?.status === 'returned' ? 'Sign & resubmit' : 'Sign & submit'}
                 </button>
-                <button disabled={busy} onClick={onSaveDraft} style={{ padding: '10px 18px', background: '#f4f1ee', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Save draft</button>
+                <button disabled={busy} onClick={onSaveDraft} style={{ padding: '10px 18px', background: '#f4f1ee', border: 'none', borderRadius: 4, cursor: 'pointer' }}>{action === 'draft' && <Spinner color="#555" />}{action === 'draft' ? 'Saving…' : 'Save draft'}</button>
               </div>
             )}
           </div>
@@ -225,6 +249,7 @@ export default function MemoFormPage() {
               {(template?.steps || []).map(s => (
                 <li key={s.step_no} style={{ padding: '3px 0', color: s.holders === 0 ? '#b91c1c' : undefined }}>
                   {s.position_label} — {s.kind}{s.kind !== 'release' ? ' (signed)' : ' (payment reference)'}
+                  {s.kind === 'recommend' && managerEmail && managerChoices.length > 1 ? ` · ${managerEmail}` : ''}
                   {s.holders === 0 && ' ⚠️ no signatory assigned'}
                 </li>
               ))}

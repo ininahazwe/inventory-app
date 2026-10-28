@@ -329,3 +329,78 @@ describe('signature', () => {
         expect(res.status).toBe(403);
     });
 });
+
+describe('admin: projects, types and chains', () => {
+    const app = createTestApp();
+
+    it('is closed to non-admins (403) on every route', async () => {
+        for (const [method, url] of [
+            ['get', '/api/memos/admin/config'], ['post', '/api/memos/admin/projects'], ['patch', '/api/memos/admin/projects/1'],
+            ['post', '/api/memos/admin/types'], ['patch', '/api/memos/admin/types/1'], ['post', '/api/memos/admin/types/1/templates'],
+            ['patch', '/api/memos/admin/templates/1'], ['put', '/api/memos/admin/templates/1/chain'],
+        ] as const) {
+            expect((await (request(app) as any)[method](url).set(asUser(AUTHOR)).send({})).status).toBe(403);
+        }
+        expect(mockedExecute).not.toHaveBeenCalled();
+    });
+
+    it('creates a project (201, audited) and refuses a duplicate code (409)', async () => {
+        mockedExecute.mockResolvedValueOnce(mockRows([])).mockResolvedValueOnce(mockOk({ insertId: 7 }));
+        mockedQuery.mockResolvedValue(mockOk());
+        const res = await request(app).post('/api/memos/admin/projects').set(asUser(ADMIN)).send({ code: 'EU-2026', title: 'Media' });
+        expect(res.status).toBe(201);
+        expect(res.body.id).toBe(7);
+
+        mockedExecute.mockResolvedValueOnce(mockRows([{ id: 7 }]));
+        expect((await request(app).post('/api/memos/admin/projects').set(asUser(ADMIN)).send({ code: 'EU-2026', title: 'Media' })).status).toBe(409);
+    });
+
+    it('rejects an invalid chain (400) before touching the database', async () => {
+        const res = await request(app).put('/api/memos/admin/templates/3/chain').set(asUser(ADMIN))
+            .send({ steps: [{ kind: 'release', position_code: 'finance' }] });
+        expect(res.status).toBe(400);
+        expect(mockedExecute).not.toHaveBeenCalled();
+    });
+
+    it('lists the whole configuration in one call', async () => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([{ id: 1, code: 'funds_request', name: 'Request for funds' }]))
+            .mockResolvedValueOnce(mockRows([{ id: 3, type_id: 1, name: 'Standard', is_default: 1, is_active: 1 }]))
+            .mockResolvedValueOnce(mockRows([{ template_id: 3, step_no: 1, kind: 'approve', position_code: 'director', holders: 1 }]))
+            .mockResolvedValueOnce(mockRows([{ id: 1, code: 'P1' }]))
+            .mockResolvedValueOnce(mockRows([{ code: 'manager', label: 'Manager' }]));
+        const res = await request(app).get('/api/memos/admin/config').set(asUser(ADMIN));
+        expect(res.status).toBe(200);
+        expect(res.body.types[0].templates[0].steps).toHaveLength(1);
+        expect(res.body.levels).toEqual([{ code: 'manager', label: 'Manager' }]);
+    });
+});
+
+describe('PATCH /api/memos/:id/assignee (choice of the manager)', () => {
+    const app = createTestApp();
+    const script = (mgr: any) => {
+        mockedExecute
+            .mockResolvedValueOnce(mockRows([memoRow()]))                                              // FOR UPDATE
+            .mockResolvedValueOnce(mockRows([stepRow(0, 'submit', 1, 'done', 'Agent'), stepRow(1, 'recommend', 2, 'active')]))
+            .mockResolvedValueOnce(mockRows(mgr))                                                       // titulaire ?
+            .mockResolvedValueOnce(mockOk()).mockResolvedValueOnce(mockOk()).mockResolvedValueOnce(mockOk());
+        mockedQuery.mockResolvedValue(mockOk());                                                        // audit
+    };
+
+    it('the author changes the manager (200) and the new manager is notified', async () => {
+        script([{ 1: 1 }]);
+        const res = await request(app).patch('/api/memos/5/assignee').set(asUser(AUTHOR)).send({ email: 'Manager2@mfwa.org' });
+        expect(res.status).toBe(200);
+        expect(res.body.assigned_email).toBe('manager2@mfwa.org');
+        expect(notifyMemoEvent).toHaveBeenCalledWith('reassigned', 5, AUTHOR.email);
+    });
+
+    it('another user gets 403, and a non-holder as target gets 400', async () => {
+        mockedExecute.mockResolvedValueOnce(mockRows([memoRow()]));
+        expect((await request(app).patch('/api/memos/5/assignee').set(asUser(STRANGER)).send({ email: 'manager2@mfwa.org' })).status).toBe(403);
+
+        mockedExecute.mockReset();
+        script([]);
+        expect((await request(app).patch('/api/memos/5/assignee').set(asUser(AUTHOR)).send({ email: 'nobody@mfwa.org' })).status).toBe(400);
+    });
+});

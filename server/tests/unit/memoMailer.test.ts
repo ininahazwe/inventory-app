@@ -31,6 +31,34 @@ describe('notifyMemoEvent', () => {
         expect(send.mock.calls[0][0].subject).toContain('To sign');
     });
 
+    it('submitted with a chosen manager → only that manager is notified, not the other holders', async () => {
+        query
+            .mockResolvedValueOnce(rows([memo()]))
+            .mockResolvedValueOnce(rows([step(0, 'submit', 1, 'done'), step(1, 'recommend', 2, 'active', { assigned_email: 'Manager2@mfwa.org' })]))
+            .mockResolvedValueOnce(rows([{ user_email: 'manager1@mfwa.org' }, { user_email: 'manager2@mfwa.org' }]));
+        await notifyMemoEvent('submitted', 5, 'agent@mfwa.org');
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(send.mock.calls[0][0].to).toEqual(['manager2@mfwa.org']);
+    });
+
+    it('reassigned → the new manager is told; a manager who is no longer a holder falls back to the level', async () => {
+        query
+            .mockResolvedValueOnce(rows([memo()]))
+            .mockResolvedValueOnce(rows([step(1, 'recommend', 2, 'active', { assigned_email: 'manager2@mfwa.org' })]))
+            .mockResolvedValueOnce(rows([{ user_email: 'manager2@mfwa.org' }]));
+        await notifyMemoEvent('reassigned', 5, 'agent@mfwa.org');
+        expect(send.mock.calls[0][0].to).toEqual(['manager2@mfwa.org']);
+        expect(send.mock.calls[0][0].html).toContain('asked you to recommend');
+
+        send.mockClear();
+        query
+            .mockResolvedValueOnce(rows([memo()]))
+            .mockResolvedValueOnce(rows([step(1, 'recommend', 2, 'active', { assigned_email: 'gone@mfwa.org' })]))
+            .mockResolvedValueOnce(rows([{ user_email: 'manager1@mfwa.org' }]));
+        await notifyMemoEvent('submitted', 5, 'agent@mfwa.org');
+        expect(send.mock.calls[0][0].to).toEqual(['manager1@mfwa.org']);
+    });
+
     it('sends nothing (and does not throw) when the level has no holder', async () => {
         query
             .mockResolvedValueOnce(rows([memo()]))

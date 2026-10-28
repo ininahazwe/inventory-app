@@ -189,6 +189,7 @@ export type MemoFields = {
     currency?: string | null;
     project_id?: number | null;
     activity_ref?: string | null;
+    manager_email?: string | null;     // manager choisi pour la recommandation (NULL = tout manager du niveau)
 };
 
 const CURRENCY_RE = /^[A-Z]{3}$/;
@@ -232,8 +233,8 @@ export async function createMemoDraft(
     const today = new Date().toISOString().slice(0, 10);
     const [result] = await tx.execute(
         `INSERT INTO memos (type_id, template_id, author_uid, author_email, to_label, from_label, subject, body,
-                            memo_date, amount, currency, project_id, activity_ref, status, revision_no)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)`,
+                            memo_date, amount, currency, project_id, activity_ref, manager_email, status, revision_no)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)`,
         [
             input.type_id,
             template.id,
@@ -248,6 +249,7 @@ export async function createMemoDraft(
             input.currency || null,
             input.project_id ?? null,
             input.activity_ref || null,
+            input.manager_email || null,
         ]
     );
     const memoId = (result as any).insertId;
@@ -265,7 +267,7 @@ export async function createMemoDraft(
 }
 
 const UPDATABLE_COLUMNS: Array<keyof MemoFields> = [
-    'to_label', 'from_label', 'subject', 'body', 'memo_date', 'amount', 'currency', 'project_id', 'activity_ref',
+    'to_label', 'from_label', 'subject', 'body', 'memo_date', 'amount', 'currency', 'project_id', 'activity_ref', 'manager_email',
 ];
 
 /** Invariant 4 : seul l'auteur modifie, et seulement un brouillon ou un mémo retourné. */
@@ -408,6 +410,19 @@ export async function submitMemo(
         );
     }
 
+    // Manager choisi par l'auteur : il doit être titulaire actif du niveau de recommandation
+    // (un titulaire retiré entre-temps ne doit pas laisser le mémo sans destinataire).
+    const recommendStep = chain.find(s => s.kind === 'recommend');
+    let assignee: string | null = null;
+    if (memo.manager_email && recommendStep) {
+        if (sameEmail(memo.manager_email, actorEmail) || !(await isActiveHolder(tx, recommendStep.position_id, memo.manager_email))) {
+            throw new ConflictException(
+                `The selected manager (${memo.manager_email}) is no longer an active ${recommendStep.position_label}. Pick another one.`
+            );
+        }
+        assignee = String(memo.manager_email).trim().toLowerCase();
+    }
+
     const signature = await getActiveSignature(tx, actorEmail);
 
     const isResubmission = memo.revision_no > 1;
@@ -428,10 +443,11 @@ export async function submitMemo(
     // Pas 1..n : copie figée du circuit ; le premier est actif.
     const stepValues = chain.map((s, i) => [
         memoId, memo.revision_no, s.step_no, s.kind, s.position_id, s.label, i === 0 ? 'active' : 'pending',
+        s.kind === 'recommend' ? assignee : null,
     ]);
     await tx.execute(
-        `INSERT INTO memo_steps (memo_id, revision_no, step_no, kind, position_id, label, status)
-         VALUES ${stepValues.map(() => '(?,?,?,?,?,?,?)').join(',')}`,
+        `INSERT INTO memo_steps (memo_id, revision_no, step_no, kind, position_id, label, status, assigned_email)
+         VALUES ${stepValues.map(() => '(?,?,?,?,?,?,?,?)').join(',')}`,
         stepValues.flat()
     );
 
@@ -448,7 +464,10 @@ export async function submitMemo(
         from_status: memo.status,
         to_status: 'in_review',
         actor_email: actorEmail,
-        payload: { reference, steps: chain.map(s => ({ step_no: s.step_no, kind: s.kind, level: s.position_label })) },
+        payload: {
+            reference, steps: chain.map(s => ({ step_no: s.step_no, kind: s.kind, level: s.position_label })),
+            ...(assignee ? { manager: assignee } : {}),
+        },
     });
 
     return {
@@ -493,6 +512,9 @@ export async function decideStep(
     assertNotAuthor(memo, actorEmail);
     if (!(await isActiveHolder(tx, step.position_id, actorEmail))) {
         throw new ForbiddenException(`Only the ${step.position_label} level can act on this step`);
+    }
+    if (step.assigned_email && !sameEmail(step.assigned_email, actorEmail)) {
+        throw new ForbiddenException(`This memo is assigned to ${step.assigned_email} — only they can act on this step`);
     }
 
     const note = decision === 'approve' ? (comment || '').trim() || null
@@ -753,6 +775,50 @@ export async function withdrawMemo(
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Change le manager d'un mémo en attente de recommandation (auteur ou admin). `newEmail` null =
+ * rouvrir le pas à tout titulaire du niveau. Seul le pas actif de recommandation est concerné.
+ */
+export async function reassignManager(
+    tx: Executor,
+    memoId: number,
+    actorEmail: string,
+    actorIsAdmin: boolean,
+    newEmail: string | null
+): Promise<{ memo: any; step: any; previous: string | null; assignee: string | null }> {
+    const memo = await loadMemoForUpdate(tx, memoId);
+    if (!actorIsAdmin && !sameEmail(memo.author_email, actorEmail)) {
+        throw new ForbiddenException('Only the author or an administrator can change the manager');
+    }
+    if (memo.status !== 'in_review') {
+        throw new ConflictException('The manager can only be changed while the memo waits for the recommendation');
+    }
+    const steps = await loadSteps(tx, memoId, memo.revision_no);
+    const step = steps.find(x => x.step_no === memo.current_step_no);
+    if (!step || step.status !== 'active' || step.kind !== 'recommend') {
+        throw new ConflictException('The manager can only be changed while the memo waits at the recommendation step');
+    }
+
+    const target = newEmail && newEmail.trim() ? newEmail.trim().toLowerCase() : null;
+    if (target) {
+        if (sameEmail(target, memo.author_email)) throw new BusinessException('The author cannot be the manager of their own memo');
+        if (!(await isActiveHolder(tx, step.position_id, target))) {
+            throw new BusinessException(`${target} is not an active ${step.position_label}`);
+        }
+    }
+    const previous: string | null = step.assigned_email ? String(step.assigned_email).toLowerCase() : null;
+    if (previous === target) throw new ConflictException('This is already the selected manager');
+
+    await tx.execute('UPDATE memo_steps SET assigned_email = ? WHERE id = ?', [target, step.id]);
+    await tx.execute('UPDATE memos SET manager_email = ? WHERE id = ?', [target, memoId]);
+    await recordMemoEvent(tx, {
+        memo_id: memoId, revision_no: memo.revision_no, step_no: step.step_no, event_type: 'reassigned',
+        from_status: 'in_review', to_status: 'in_review', actor_email: actorEmail,
+        payload: { from: previous, to: target },
+    });
+    return { memo, step: { ...step, assigned_email: target }, previous, assignee: target };
+}
+
+/**
  * Qui voit un mémo : son auteur ; un admin (sauf les brouillons des autres) ;
  * tout titulaire actif d'un niveau du circuit ; toute personne ayant agi sur un pas.
  */
@@ -781,6 +847,7 @@ export type MemoCapabilities = {
     withdraw: boolean;
     decide: boolean;        // recommander / approuver / retourner / rejeter
     release: boolean;       // décaisser / refuser
+    reassign: boolean;      // changer le manager tant que la recommandation est en attente (auteur ou admin)
     reinstruct: boolean;    // ré-instruire la finance après un refus
     waiting_for: string | null;
 };
@@ -794,7 +861,7 @@ export type MemoCapabilities = {
 export function memoCapabilities(
     memo: any,
     steps: any[],
-    user: { email: string },
+    user: { email: string; role?: string },
     heldPositionIds: number[]
 ): MemoCapabilities {
     const isAuthor = sameEmail(memo.author_email, user.email);
@@ -809,9 +876,12 @@ export function memoCapabilities(
             !!ALLOWED_TRANSITIONS[memo.status as MemoStatus]?.includes('withdrawn') &&
             (isAuthor || (memo.status === 'release_refused' && !!approver && holds(approver.position_id))),
         decide: !isAuthor && memo.status === 'in_review' && !!active &&
-            (active.kind === 'recommend' || active.kind === 'approve') && holds(active.position_id),
+            (active.kind === 'recommend' || active.kind === 'approve') && holds(active.position_id) &&
+            (!active.assigned_email || sameEmail(active.assigned_email, user.email)),
+        reassign: (isAuthor || user.role === 'admin' || user.role === 'super_admin') &&
+            memo.status === 'in_review' && !!active && active.kind === 'recommend',
         release: !isAuthor && memo.status === 'approved' && !!active && active.kind === 'release' && holds(active.position_id),
         reinstruct: !isAuthor && memo.status === 'release_refused' && !!approver && holds(approver.position_id),
-        waiting_for: active ? active.position_label : null,
+        waiting_for: active ? (active.assigned_email ? `${active.position_label} (${active.assigned_email})` : active.position_label) : null,
     };
 }

@@ -20,7 +20,7 @@ import { recordMemoEvent } from './memoService';
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
 const memoUrl = (id: number) => `${FRONTEND_URL}/memos/${id}`;
 
-export type MemoMailEvent = 'submitted' | 'decided' | 'released' | 'refused' | 'reinstructed' | 'withdrawn';
+export type MemoMailEvent = 'submitted' | 'decided' | 'released' | 'refused' | 'reinstructed' | 'withdrawn' | 'reassigned';
 
 const esc = (v: unknown): string =>
     String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -77,6 +77,16 @@ async function holdersOf(positionId: number): Promise<string[]> {
     return ((rows as any[]) || []).map(r => String(r.user_email));
 }
 
+/** Destinataires d'un pas : le manager choisi s'il l'est encore, sinon tous les titulaires du niveau. */
+async function recipientsOfStep(step: any): Promise<string[]> {
+    const holders = await holdersOf(step.position_id);
+    if (step.assigned_email) {
+        const chosen = holders.find(h => h.toLowerCase() === String(step.assigned_email).toLowerCase());
+        if (chosen) return [chosen];
+    }
+    return holders;
+}
+
 async function loadContext(memoId: number) {
     const [mRows] = await db.query(
         `SELECT m.id, m.reference, m.subject, m.author_email, m.status, m.revision_no, m.current_step_no,
@@ -85,7 +95,7 @@ async function loadContext(memoId: number) {
     const memo = (mRows as any[])[0];
     if (!memo) return null;
     const [sRows] = await db.query(
-        `SELECT s.step_no, s.kind, s.position_id, s.status, s.acted_by_email, s.comment, p.label AS position_label
+        `SELECT s.step_no, s.kind, s.position_id, s.status, s.assigned_email, s.acted_by_email, s.comment, p.label AS position_label
          FROM memo_steps s JOIN memo_positions p ON p.id = s.position_id
          WHERE s.memo_id = ? AND s.revision_no = ? ORDER BY s.step_no`, [memoId, memo.revision_no]);
     return { memo, steps: (sRows as any[]) || [] };
@@ -120,7 +130,7 @@ export async function notifyMemoEvent(
         const comment: Array<[string, string]> = opts.comment ? [['Comment', opts.comment]] : [];
 
         const waitingMail = async (step: any, why: string) => {
-            const to = without((await holdersOf(step.position_id)).filter(e => !same(e, memo.author_email)));
+            const to = without((await recipientsOfStep(step)).filter(e => !same(e, memo.author_email)));
             if (!to.length) {
                 logger.warn(`Memo ${label}: no recipient for the ${step.position_label} level — nobody was notified`, 'MEMOS');
                 return;
@@ -171,6 +181,11 @@ export async function notifyMemoEvent(
         } else if (event === 'reinstructed') {
             const step = activeStep(ctx);
             if (step) await waitingMail(step, 'The approver asked finance to look at this memo again.');
+        } else if (event === 'reassigned') {
+            const step = activeStep(ctx);
+            if (step) await waitingMail(step, step.assigned_email
+                ? `${actorEmail} asked you to recommend this memo.`
+                : `This memo is now open to any ${step.position_label}.`);
         } else if (event === 'withdrawn') {
             await authorMail('🚫 Memo withdrawn', '#6b7280', '#f9fafb', 'This memo has been withdrawn.', [], signers(steps));
         }
@@ -208,7 +223,7 @@ export async function checkMemosWaiting(now: Date = new Date()): Promise<{ waiti
             && now.getTime() - new Date(m.last_reminder).getTime() < days * DAY) continue;
 
         const [sRows] = await db.query(
-            `SELECT s.step_no, s.kind, s.position_id, s.status, p.label AS position_label
+            `SELECT s.step_no, s.kind, s.position_id, s.status, s.assigned_email, p.label AS position_label
              FROM memo_steps s JOIN memo_positions p ON p.id = s.position_id
              WHERE s.memo_id = ? AND s.revision_no = ? ORDER BY s.step_no`, [m.id, m.revision_no]);
         const steps = (sRows as any[]) || [];
@@ -217,7 +232,7 @@ export async function checkMemosWaiting(now: Date = new Date()): Promise<{ waiti
             : steps.find(s => s.step_no === m.current_step_no && s.status === 'active');
         if (!step) continue;
 
-        const to = uniq((await holdersOf(step.position_id)).filter(e => !same(e, m.author_email)));
+        const to = uniq((await recipientsOfStep(step)).filter(e => !same(e, m.author_email)));
         if (!to.length) {
             logger.warn(`Memo ${m.reference || m.id}: waiting ${waitedDays}d at the ${step.position_label} level but nobody holds it`, 'MEMOS');
             continue;

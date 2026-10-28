@@ -2,21 +2,22 @@
 // Fiche d'un mémo : le texte, le circuit avec les signatures déjà apposées, la
 // barre de décision et le journal. Les boutons suivent `capabilities` (calculées
 // par le serveur) ; signer = cliquer sur l'action, avec sa signature enregistrée.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import Layout from '../Layout';
 import { SkeletonDetail } from '../components/Skeleton';
 import SignaturePad from '../components/SignaturePad';
 import { token } from '../lib/apiClient';
 import MemoAttachments from '../components/MemoAttachments';
+import { Spinner, MEMO_ANIMATIONS as ANIMATIONS } from '../components/MemoSpinner';
 import { MemoStatusBadge } from './MemosPage';
 import {
   memosApi, useProtectedImage, SIGNATURE_REQUIRED, STEP_STATUS_LABEL, STEP_KIND_VERB, fmtDate, fmtDateTime,
-  type MemoFull, type MemoStep,
+  type MemoFull, type MemoStep, type MemoMeta,
 } from '../hooks/useMemos';
 
 const EVENT_ICON: Record<string, string> = {
-  created: '📝', submitted: '📤', recommended: '👍', approved: '✅', returned: '↩️', rejected: '❌',
+  created: '📝', submitted: '📤', reassigned: '🔀', recommended: '👍', approved: '✅', returned: '↩️', rejected: '❌',
   released: '💸', release_refused: '⛔', release_reopened: '🔁', withdrawn: '🚫', resubmitted: '📤',
 };
 
@@ -32,7 +33,7 @@ function StepSignature({ memoId, step }: { memoId: number; step: MemoStep }) {
   return url ? <img src={url} alt="signature" style={{ height: 38, display: 'block', marginTop: 4 }} /> : null;
 }
 
-type Panel = null | 'return' | 'reject' | 'release' | 'refuse' | 'reinstruct' | 'withdraw';
+type Panel = null | 'return' | 'reject' | 'release' | 'refuse' | 'reinstruct' | 'withdraw' | 'reassign';
 
 export default function MemoDetailPage() {
   const { id } = useParams();
@@ -42,6 +43,13 @@ export default function MemoDetailPage() {
   const [memo, setMemo] = useState<MemoFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);        // quelle action tourne (spinner sur son bouton)
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);    // texte du bandeau « en cours »
+  const [changed, setChanged] = useState<number[]>([]);               // étapes dont le statut vient de changer
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [managers, setManagers] = useState<MemoMeta['managers']>([]);
+  const [newManager, setNewManager] = useState('');
+  const stepsRef = useRef<Map<number, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(location.state?.message || null);
   const [panel, setPanel] = useState<Panel>(null);
@@ -55,7 +63,16 @@ export default function MemoDetailPage() {
 
   const reload = useCallback(async () => {
     const { data, error: e } = await memosApi.get(memoId);
-    if (data) setMemo(data); else if (e) setError(e);
+    if (data) {
+      const prev = stepsRef.current;
+      stepsRef.current = new Map(data.steps.map(s => [s.id, s.status] as [number, string]));
+      if (prev.size) {
+        const ch = data.steps.filter(s => prev.get(s.id) !== s.status).map(s => s.id);
+        setChanged(ch);
+        if (ch.length) setTimeout(() => setChanged([]), 2500);
+      }
+      setMemo(data);
+    } else if (e) setError(e);
     setLoading(false);
   }, [memoId]);
 
@@ -67,28 +84,35 @@ export default function MemoDetailPage() {
   const mySigUrl = useProtectedImage(hasSig ? '/memos/signature/image' : null, sigKey);
 
   // Exécute une action ; si la signature manque, ouvre le pad puis rejoue l'action.
-  const run = async (fn: () => Promise<{ error: string | null; code?: string }>, ok: string) => {
-    setBusy(true); setError(null); setMessage(null);
+  // Le « busy » reste actif jusqu'à ce que le nouvel état soit rechargé : l'écran ne montre
+  // jamais l'ancien statut une fois l'action acceptée.
+  const run = async (fn: () => Promise<{ error: string | null; code?: string }>, ok: string, key = '', label = 'Saving…') => {
+    setBusy(true); setBusyKey(key); setBusyLabel(label); setError(null); setMessage(null);
     const res = await fn();
-    setBusy(false);
     if (res.code === SIGNATURE_REQUIRED) {
-      setPad(() => async () => { await run(fn, ok); });
+      setBusy(false); setBusyKey(null); setBusyLabel(null);
+      setPad(() => async () => { await run(fn, ok, key, label); });
       setPadOpen(true);
       return;
     }
-    if (res.error) { setError(res.error); return; }
+    if (res.error) { setBusy(false); setBusyKey(null); setBusyLabel(null); setError(res.error); return; }
+    setBusyLabel('Updating the memo…');
     setMessage(ok); setPanel(null); setComment(''); setPayRef('');
     await reload();
+    setBusy(false); setBusyKey(null); setBusyLabel(null);
   };
+  const spin = (k: string) => (busyKey === k ? <Spinner /> : null);
 
   const downloadPdf = async () => {
-    setError(null);
-    const res = await fetch(`/api/memos/${memoId}/pdf`, { headers: { Authorization: `Bearer ${token.get() || ''}` } });
-    if (!res.ok) { setError((await res.json().catch(() => null))?.error || `Error ${res.status}`); return; }
-    const url = URL.createObjectURL(await res.blob());
-    const a = document.createElement('a');
-    a.href = url; a.download = `${(memo?.reference || `memo-${memoId}`).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setError(null); setPdfBusy(true);
+    try {
+      const res = await fetch(`/api/memos/${memoId}/pdf`, { headers: { Authorization: `Bearer ${token.get() || ''}` } });
+      if (!res.ok) { setError((await res.json().catch(() => null))?.error || `Error ${res.status}`); return; }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = `${(memo?.reference || `memo-${memoId}`).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally { setPdfBusy(false); }
   };
 
   if (loading) return <Layout><SkeletonDetail /></Layout>;
@@ -100,7 +124,15 @@ export default function MemoDetailPage() {
   const active = current.find(s => s.step_no === memo.current_step_no && s.status === 'active') || null;
   const approveLabel = active?.kind === 'recommend' ? 'Recommend' : 'Approve';
   const needComment = (c: string) => c.trim().length === 0;
-  const toggle = (p: Panel) => { setPanel(panel === p ? null : p); setComment(''); };
+  const toggle = (p: Panel) => {
+    setPanel(panel === p ? null : p); setComment('');
+    if (p === 'reassign' && panel !== 'reassign') {
+      setNewManager(active?.assigned_email || '');
+      if (!managers.length) memosApi.meta().then(({ data }) => setManagers(data?.managers || []));
+    }
+  };
+  const eligibleManagers = managers.filter(m => active && m.position_code === active.position_code
+    && m.email.toLowerCase() !== memo.author_email.toLowerCase());
 
   const SigHint = () => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#666', margin: '8px 0' }}>
@@ -112,16 +144,23 @@ export default function MemoDetailPage() {
   return (
     <Layout>
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
+        <style>{ANIMATIONS}</style>
         <Link to="/memos" style={{ fontSize: 13, color: '#666' }}>← All memos</Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '10px 0 4px' }}>
           <h1 style={{ margin: 0 }}>{memo.subject || '(no subject)'}</h1>
-          <MemoStatusBadge status={memo.status} />
+          <span key={memo.status} className="memo-anim" style={{ borderRadius: 12, animation: changed.length ? 'memo-flash 1.6s ease-out' : undefined }}><MemoStatusBadge status={memo.status} /></span>
         </div>
         <p style={{ color: '#999', fontSize: 13, marginTop: 0 }}>
           {memo.reference || 'Draft'} · {memo.type_name} · revision {memo.revision_no} · by {memo.author_email}
           {cap.waiting_for && (memo.status === 'in_review' || memo.status === 'approved') ? ` · waiting for ${cap.waiting_for}` : ''}
         </p>
 
+        {busy && (
+          <div role="status" aria-live="polite" style={{ position: 'relative', overflow: 'hidden', padding: '12px 14px', margin: '12px 0', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: 4, fontSize: 14 }}>
+            <Spinner color="#1e40af" /> {busyLabel || 'Working…'} <span style={{ color: '#60a5fa' }}>Please wait, do not close this page.</span>
+            <span className="memo-anim" style={{ position: 'absolute', bottom: 0, width: '40%', height: 3, background: '#2563eb', animation: 'memo-bar 1.1s ease-in-out infinite' }} />
+          </div>
+        )}
         {error && <div style={{ padding: 12, margin: '12px 0', background: '#f8d7da', color: '#721c24', borderRadius: 4 }}>❌ {error}</div>}
         {message && <div style={{ padding: 12, margin: '12px 0', background: '#d4edda', color: '#155724', borderRadius: 4 }}>✅ {message}</div>}
         {memo.status === 'release_refused' && (
@@ -153,7 +192,11 @@ export default function MemoDetailPage() {
         <div style={{ ...box, padding: 0 }}>
           {current.length === 0 && <div style={{ padding: 16, color: '#999' }}>Not submitted yet.</div>}
           {current.map(s => (
-            <div key={s.id} style={{ display: 'flex', gap: 12, padding: '10px 14px', borderBottom: '1px solid #f3f3f3', fontSize: 14, background: s.status === 'active' ? '#fffbeb' : undefined }}>
+            <div key={s.id} className="memo-anim" style={{
+              display: 'flex', gap: 12, padding: '10px 14px', borderBottom: '1px solid #f3f3f3', fontSize: 14,
+              background: s.status === 'active' ? '#fffbeb' : undefined,
+              animation: busy && s.status === 'active' ? 'memo-pulse 1.2s ease-in-out infinite' : changed.includes(s.id) ? 'memo-flash 2.2s ease-out' : undefined,
+            }}>
               <div style={{ width: 26, textAlign: 'center', fontSize: 18 }}>
                 {s.status === 'done' ? '✅' : s.status === 'active' ? '⏳' : s.status === 'pending' ? '○' : s.status === 'skipped' ? '⤼' : '⛔'}
               </div>
@@ -162,6 +205,7 @@ export default function MemoDetailPage() {
                 <span style={{ color: '#999', fontSize: 12, marginLeft: 8 }}>
                   {s.status === 'done' ? `${STEP_KIND_VERB[s.kind] || 'Done'} by ${s.acted_by_email} · ${fmtDateTime(s.acted_at)}` : STEP_STATUS_LABEL[s.status] || s.status}
                 </span>
+                {s.assigned_email && s.status !== 'done' && <div style={{ color: '#555', fontSize: 13, marginTop: 2 }}>Assigned to {s.assigned_email}</div>}
                 {s.comment && <div style={{ color: '#555', fontSize: 13, marginTop: 2 }}>“{s.comment}”</div>}
                 <StepSignature memoId={memo.id} step={s} />
               </div>
@@ -183,11 +227,11 @@ export default function MemoDetailPage() {
 
         {/* ── Actions ─────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          <button disabled={busy} style={btn('#374151')} onClick={downloadPdf}>⬇ PDF</button>
+          <button disabled={busy || pdfBusy} style={btn('#374151')} onClick={downloadPdf}>{pdfBusy ? <><Spinner />Preparing PDF…</> : '⬇ PDF'}</button>
           {cap.edit && <Link to={`/memos/${memo.id}/edit`} style={{ ...btn('#2563eb'), textDecoration: 'none' }}>{memo.status === 'returned' ? 'Revise & resubmit' : 'Edit'}</Link>}
           {cap.decide && (
             <>
-              <button disabled={busy} style={btn('#16a34a')} onClick={() => run(() => memosApi.decide(memo.id, 'approve') as any, active?.kind === 'recommend' ? 'Recommended and signed.' : 'Approved and signed.')}>{approveLabel} &amp; sign</button>
+              <button disabled={busy} style={btn('#16a34a')} onClick={() => run(() => memosApi.decide(memo.id, 'approve') as any, active?.kind === 'recommend' ? 'Recommended and signed.' : 'Approved and signed.', 'approve', active?.kind === 'recommend' ? 'Signing and recommending…' : 'Signing and approving…')}>{spin('approve')}{approveLabel} &amp; sign</button>
               <button disabled={busy} style={btn('#d97706')} onClick={() => toggle('return')}>Return…</button>
               <button disabled={busy} style={btn('#b91c1c')} onClick={() => toggle('reject')}>Reject…</button>
             </>
@@ -199,6 +243,7 @@ export default function MemoDetailPage() {
             </>
           )}
           {cap.reinstruct && <button disabled={busy} style={btn('#2563eb')} onClick={() => toggle('reinstruct')}>Re-instruct finance…</button>}
+          {cap.reassign && <button disabled={busy} style={btn('#2563eb')} onClick={() => toggle('reassign')}>Change manager…</button>}
           {cap.withdraw && <button disabled={busy} style={btn('#6b7280')} onClick={() => toggle('withdraw')}>Withdraw…</button>}
         </div>
         {(cap.decide || cap.release) && <SigHint />}
@@ -209,9 +254,9 @@ export default function MemoDetailPage() {
             <textarea style={{ ...input, minHeight: 80 }} placeholder="Reason (required — the author will read it)" value={comment} onChange={e => setComment(e.target.value)} />
             <button disabled={busy || needComment(comment)} style={{ ...btn(panel === 'return' ? '#d97706' : '#b91c1c'), marginTop: 12 }}
               onClick={() => panel === 'refuse'
-                ? run(() => memosApi.release(memo.id, { decision: 'refuse', comment }) as any, 'Release refused.')
-                : run(() => memosApi.decide(memo.id, panel === 'return' ? 'return' : 'reject', comment) as any, panel === 'return' ? 'Memo returned to the author.' : 'Memo rejected.')}>
-              Confirm
+                ? run(() => memosApi.release(memo.id, { decision: 'refuse', comment }) as any, 'Release refused.', 'refuse', 'Refusing the release…')
+                : run(() => memosApi.decide(memo.id, panel === 'return' ? 'return' : 'reject', comment) as any, panel === 'return' ? 'Memo returned to the author.' : 'Memo rejected.', panel!, panel === 'return' ? 'Returning the memo to the author…' : 'Rejecting the memo…')}>
+              {spin(panel!)}Confirm
             </button>
           </div>
         )}
@@ -222,8 +267,8 @@ export default function MemoDetailPage() {
             <input style={input} placeholder="Comment (optional)" value={comment} onChange={e => setComment(e.target.value)} />
             <SigHint />
             <button disabled={busy || !payRef.trim()} style={{ ...btn('#16a34a'), marginTop: 4 }}
-              onClick={() => run(() => memosApi.release(memo.id, { decision: 'release', release_reference: payRef, comment: comment || undefined }) as any, 'Payment released and signed.')}>
-              Sign &amp; release
+              onClick={() => run(() => memosApi.release(memo.id, { decision: 'release', release_reference: payRef, comment: comment || undefined }) as any, 'Payment released and signed.', 'release', 'Signing and releasing the payment…')}>
+              {spin('release')}Sign &amp; release
             </button>
           </div>
         )}
@@ -232,7 +277,20 @@ export default function MemoDetailPage() {
             <strong>Ask finance to look at it again</strong>
             <textarea style={{ ...input, minHeight: 70 }} placeholder="What has changed or been clarified (required)" value={comment} onChange={e => setComment(e.target.value)} />
             <button disabled={busy || needComment(comment)} style={{ ...btn('#2563eb'), marginTop: 12 }}
-              onClick={() => run(() => memosApi.reinstruct(memo.id, comment) as any, 'Sent back to finance.')}>Confirm</button>
+              onClick={() => run(() => memosApi.reinstruct(memo.id, comment) as any, 'Sent back to finance.', 'reinstruct', 'Sending back to finance…')}>{spin('reinstruct')}Confirm</button>
+          </div>
+        )}
+        {panel === 'reassign' && (
+          <div style={box}>
+            <strong>Who should recommend this memo?</strong>
+            <select style={input} value={newManager} onChange={e => setNewManager(e.target.value)}>
+              <option value="">Any {active?.position_label || 'manager'} (all are notified)</option>
+              {eligibleManagers.map(m => <option key={m.email} value={m.email}>{m.email}{m.holder_role === 'deputy' ? ' (deputy)' : ''}</option>)}
+            </select>
+            <button disabled={busy || (newManager || '') === (active?.assigned_email || '')} style={{ ...btn('#2563eb'), marginTop: 12 }}
+              onClick={() => run(() => memosApi.reassign(memo.id, newManager || null) as any, 'Manager updated — the new recipient has been notified.', 'reassign', 'Updating the manager…')}>
+              {spin('reassign')}Confirm
+            </button>
           </div>
         )}
         {panel === 'withdraw' && (
@@ -240,7 +298,7 @@ export default function MemoDetailPage() {
             <strong>Withdraw this memo</strong>
             <input style={input} placeholder="Reason (optional)" value={comment} onChange={e => setComment(e.target.value)} />
             <button disabled={busy} style={{ ...btn('#6b7280'), marginTop: 12 }}
-              onClick={() => run(() => memosApi.withdraw(memo.id, comment || undefined) as any, 'Memo withdrawn.')}>Confirm withdrawal</button>
+              onClick={() => run(() => memosApi.withdraw(memo.id, comment || undefined) as any, 'Memo withdrawn.', 'withdraw', 'Withdrawing the memo…')}>{spin('withdraw')}Confirm withdrawal</button>
           </div>
         )}
 
